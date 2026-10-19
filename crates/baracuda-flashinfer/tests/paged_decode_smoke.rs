@@ -133,46 +133,24 @@ fn paged_decode_single_token_equals_v() {
         &stream,
         Workspace::Borrowed(ws_dev.as_slice_mut()),
         BatchPagedDecodeArgs {
-            q: TensorRef {
-                data: q_dev.as_slice(),
-                shape: q_shape,
-                stride: contiguous_stride(q_shape),
-            },
-            k_data: TensorRef {
-                data: k_dev.as_slice(),
-                shape: cache_shape,
-                stride: contiguous_stride(cache_shape),
-            },
-            v_data: TensorRef {
-                data: v_dev.as_slice(),
-                shape: cache_shape,
-                stride: contiguous_stride(cache_shape),
-            },
-            indices: TensorRef {
-                data: indices_dev.as_slice(),
-                shape: [1],
-                stride: [1],
-            },
-            indptr: TensorRef {
-                data: indptr_dev.as_slice(),
-                shape: [2],
-                stride: [1],
-            },
-            last_page_len: TensorRef {
-                data: last_page_len_dev.as_slice(),
-                shape: [1],
-                stride: [1],
-            },
-            o: TensorMut {
-                data: o_dev.as_slice_mut(),
-                shape: q_shape,
-                stride: contiguous_stride(q_shape),
-            },
-            lse: TensorMut {
-                data: lse_dev.as_slice_mut(),
-                shape: [1, 1],
-                stride: contiguous_stride([1, 1]),
-            },
+            q: TensorRef::new(q_dev.as_slice(), q_shape, contiguous_stride(q_shape)).unwrap(),
+            k_data: TensorRef::new(
+                k_dev.as_slice(),
+                cache_shape,
+                contiguous_stride(cache_shape),
+            )
+            .unwrap(),
+            v_data: TensorRef::new(
+                v_dev.as_slice(),
+                cache_shape,
+                contiguous_stride(cache_shape),
+            )
+            .unwrap(),
+            indices: TensorRef::new(indices_dev.as_slice(), [1], [1]).unwrap(),
+            indptr: TensorRef::new(indptr_dev.as_slice(), [2], [1]).unwrap(),
+            last_page_len: TensorRef::new(last_page_len_dev.as_slice(), [1], [1]).unwrap(),
+            o: TensorMut::new(o_dev.as_slice_mut(), q_shape, contiguous_stride(q_shape)).unwrap(),
+            lse: TensorMut::new(lse_dev.as_slice_mut(), [1, 1], contiguous_stride([1, 1])).unwrap(),
         },
     )
     .expect("paged decode run");

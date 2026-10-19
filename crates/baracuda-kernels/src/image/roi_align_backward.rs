@@ -139,7 +139,7 @@ impl<T: Element> RoiAlignBackwardPlan<T> {
         crate::view_check::check_fits(&args.dout)?;
         crate::view_check::check_fits(&args.rois)?;
         crate::view_check::check_fits(&args.dinput)?;
-        if args.dout.shape
+        if args.dout.shape()
             != [
                 self.desc.num_rois,
                 self.desc.c,
@@ -151,12 +151,12 @@ impl<T: Element> RoiAlignBackwardPlan<T> {
                 "baracuda-kernels::RoiAlignBackwardPlan: dout shape mismatch",
             ));
         }
-        if args.rois.shape != [self.desc.num_rois, 5] {
+        if args.rois.shape() != [self.desc.num_rois, 5] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::RoiAlignBackwardPlan: rois must be [num_rois, 5]",
             ));
         }
-        if args.dinput.shape != [self.desc.n, self.desc.c, self.desc.h, self.desc.w] {
+        if args.dinput.shape() != [self.desc.n, self.desc.c, self.desc.h, self.desc.w] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::RoiAlignBackwardPlan: dinput shape mismatch",
             ));
@@ -193,9 +193,9 @@ impl<T: Element> RoiAlignBackwardPlan<T> {
         if args.dout.numel() == 0 {
             return Ok(());
         }
-        let dout_ptr = args.dout.data.as_raw().0 as *const c_void;
-        let rois_ptr = args.rois.data.as_raw().0 as *const c_void;
-        let din_ptr = args.dinput.data.as_raw().0 as *mut c_void;
+        let dout_ptr = args.dout.data().as_raw().0 as *const c_void;
+        let rois_ptr = args.rois.data().as_raw().0 as *const c_void;
+        let din_ptr = args.dinput.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         let aligned = if self.desc.aligned { 1 } else { 0 };
         let status = match T::KIND {

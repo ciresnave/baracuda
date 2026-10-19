@@ -136,23 +136,23 @@ impl<T: Element> NllLossPlan<T> {
         if n_rows == 0 {
             return Ok(());
         }
-        if args.input.shape != [self.desc.n_rows, class_extent] {
+        if args.input.shape() != [self.desc.n_rows, class_extent] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::NllLossPlan: input shape must be [n_rows, class_extent]",
             ));
         }
-        if args.target.shape != [self.desc.n_rows] {
+        if args.target.shape() != [self.desc.n_rows] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::NllLossPlan: target shape must be [n_rows]",
             ));
         }
         // row_stride is the i64 stride of the leading (n_rows) axis.
-        let row_stride_input: i64 = args.input.stride[0];
+        let row_stride_input: i64 = args.input.stride()[0];
         let (ws_ptr, ws_bytes) = unpack_workspace(workspace, self.workspace_size())?;
         let stream_ptr = stream.as_raw();
-        let input_ptr = args.input.data.as_raw().0 as *const c_void;
-        let target_ptr = args.target.data.as_raw().0 as *const c_void;
-        let out_ptr = args.out.data.as_raw().0 as *mut c_void;
+        let input_ptr = args.input.data().as_raw().0 as *const c_void;
+        let target_ptr = args.target.data().as_raw().0 as *const c_void;
+        let out_ptr = args.out.data().as_raw().0 as *mut c_void;
         let mode = self.desc.reduction as i32;
 
         let status = match T::KIND {
@@ -335,18 +335,18 @@ impl<T: Element> NllLossBackwardPlan<T> {
         if n_rows == 0 {
             return Ok(());
         }
-        if args.target.shape != [self.desc.n_rows] {
+        if args.target.shape() != [self.desc.n_rows] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::NllLossBackwardPlan: target shape must be [n_rows]",
             ));
         }
-        if args.dinput.shape != [self.desc.n_rows, class_extent] {
+        if args.dinput.shape() != [self.desc.n_rows, class_extent] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::NllLossBackwardPlan: dinput shape must be [n_rows, \
                  class_extent]",
             ));
         }
-        let row_stride_input: i64 = args.dinput.stride[0];
+        let row_stride_input: i64 = args.dinput.stride()[0];
         let dinput_numel: i64 = (self.desc.n_rows as i64) * (class_extent as i64);
         let mode = self.desc.reduction as i32;
         let inv_n_or_one: f32 = match self.desc.reduction {
@@ -355,9 +355,9 @@ impl<T: Element> NllLossBackwardPlan<T> {
             LossReduction::Sum => 1.0,
         };
         let stream_ptr = stream.as_raw();
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let target_ptr = args.target.data.as_raw().0 as *const c_void;
-        let dinput_ptr = args.dinput.data.as_raw().0 as *mut c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let target_ptr = args.target.data().as_raw().0 as *const c_void;
+        let dinput_ptr = args.dinput.data().as_raw().0 as *mut c_void;
 
         let status = match T::KIND {
             ElementKind::F32 => unsafe {

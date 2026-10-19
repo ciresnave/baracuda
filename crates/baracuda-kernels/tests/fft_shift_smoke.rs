@@ -43,16 +43,8 @@ fn fftshift_even_n_f32() {
     let plan = FftShiftPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("select fftshift");
     let args = FftShiftArgs::<f32> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
+        x: TensorRef::new(dev_x.as_slice(), shape, stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run shift");
     stream.synchronize().expect("sync");
@@ -83,16 +75,8 @@ fn ifftshift_even_n_f32() {
     let plan = FftShiftPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("select ifftshift");
     let args = FftShiftArgs::<f32> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
+        x: TensorRef::new(dev_x.as_slice(), shape, stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run shift");
     stream.synchronize().expect("sync");
@@ -135,16 +119,8 @@ fn fftshift_odd_n_is_not_ifftshift() {
     let f_plan = FftShiftPlan::<f32>::select(&stream, &f_desc, PlanPreference::default())
         .expect("select fftshift");
     let args = FftShiftArgs::<f32> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
+        x: TensorRef::new(dev_x.as_slice(), shape, stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
     };
     f_plan
         .run(&stream, Workspace::None, args)
@@ -166,16 +142,8 @@ fn fftshift_odd_n_is_not_ifftshift() {
     let i_plan = FftShiftPlan::<f32>::select(&stream, &i_desc, PlanPreference::default())
         .expect("select ifftshift");
     let args2 = FftShiftArgs::<f32> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride,
-        },
-        y: TensorMut {
-            data: dev_y2.as_slice_mut(),
-            shape,
-            stride,
-        },
+        x: TensorRef::new(dev_x.as_slice(), shape, stride).unwrap(),
+        y: TensorMut::new(dev_y2.as_slice_mut(), shape, stride).unwrap(),
     };
     i_plan
         .run(&stream, Workspace::None, args2)
@@ -189,16 +157,8 @@ fn fftshift_odd_n_is_not_ifftshift() {
     // Round-trip: ifftshift(fftshift(x)) == x.
     let mut dev_rt: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 5).expect("alloc rt");
     let args_rt = FftShiftArgs::<f32> {
-        x: TensorRef {
-            data: dev_y.as_slice(),
-            shape,
-            stride,
-        },
-        y: TensorMut {
-            data: dev_rt.as_slice_mut(),
-            shape,
-            stride,
-        },
+        x: TensorRef::new(dev_y.as_slice(), shape, stride).unwrap(),
+        y: TensorMut::new(dev_rt.as_slice_mut(), shape, stride).unwrap(),
     };
     i_plan
         .run(&stream, Workspace::None, args_rt)
@@ -242,16 +202,8 @@ fn fftshift_batched_complex32() {
     let plan = FftShiftPlan::<Complex64>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = FftShiftArgs::<Complex64> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
+        x: TensorRef::new(dev_x.as_slice(), shape, stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

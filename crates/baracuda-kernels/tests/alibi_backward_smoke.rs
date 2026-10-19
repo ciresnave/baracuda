@@ -89,21 +89,11 @@ fn alibi_backward_f32_basic() {
         &stream,
         Workspace::None,
         AlibiBackwardArgs {
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            dscores: Some(TensorMut {
-                data: dev_da.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            }),
-            dslopes: Some(TensorMut {
-                data: dev_dslope.as_slice_mut(),
-                shape: [heads],
-                stride: [1],
-            }),
+            dy: TensorRef::new(dev_dy.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            dscores: Some(
+                TensorMut::new(dev_da.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
+            ),
+            dslopes: Some(TensorMut::new(dev_dslope.as_slice_mut(), [heads], [1]).unwrap()),
         },
     )
     .expect("run");
@@ -178,21 +168,11 @@ fn alibi_backward_f64_basic() {
         &stream,
         Workspace::None,
         AlibiBackwardArgs {
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            dscores: Some(TensorMut {
-                data: dev_da.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            }),
-            dslopes: Some(TensorMut {
-                data: dev_dslope.as_slice_mut(),
-                shape: [heads],
-                stride: [1],
-            }),
+            dy: TensorRef::new(dev_dy.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            dscores: Some(
+                TensorMut::new(dev_da.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
+            ),
+            dslopes: Some(TensorMut::new(dev_dslope.as_slice_mut(), [heads], [1]).unwrap()),
         },
     )
     .expect("run");
@@ -259,21 +239,11 @@ fn alibi_backward_f16_basic() {
         &stream,
         Workspace::None,
         AlibiBackwardArgs {
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            dscores: Some(TensorMut {
-                data: dev_da.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            }),
-            dslopes: Some(TensorMut {
-                data: dev_dslope.as_slice_mut(),
-                shape: [heads],
-                stride: [1],
-            }),
+            dy: TensorRef::new(dev_dy.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            dscores: Some(
+                TensorMut::new(dev_da.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
+            ),
+            dslopes: Some(TensorMut::new(dev_dslope.as_slice_mut(), [heads], [1]).unwrap()),
         },
     )
     .expect("run");
@@ -344,21 +314,11 @@ fn alibi_backward_bf16_basic() {
         &stream,
         Workspace::None,
         AlibiBackwardArgs {
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            dscores: Some(TensorMut {
-                data: dev_da.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            }),
-            dslopes: Some(TensorMut {
-                data: dev_dslope.as_slice_mut(),
-                shape: [heads],
-                stride: [1],
-            }),
+            dy: TensorRef::new(dev_dy.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            dscores: Some(
+                TensorMut::new(dev_da.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
+            ),
+            dslopes: Some(TensorMut::new(dev_dslope.as_slice_mut(), [heads], [1]).unwrap()),
         },
     )
     .expect("run");

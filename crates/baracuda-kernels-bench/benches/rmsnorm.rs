@@ -83,26 +83,10 @@ where
 
             warmup(&stream, || {
                 let args = RMSNormArgs::<T, 2> {
-                    x: TensorRef {
-                        data: dev_x.as_slice(),
-                        shape: xs,
-                        stride: stx,
-                    },
-                    gamma: Some(TensorRef {
-                        data: dev_g.as_slice(),
-                        shape: gs,
-                        stride: stg,
-                    }),
-                    y: TensorMut {
-                        data: dev_y.as_slice_mut(),
-                        shape: xs,
-                        stride: stx,
-                    },
-                    rms: TensorMut {
-                        data: dev_rms.as_slice_mut(),
-                        shape: rs,
-                        stride: st_rms,
-                    },
+                    x: TensorRef::new(dev_x.as_slice(), xs, stx).unwrap(),
+                    gamma: Some(TensorRef::new(dev_g.as_slice(), gs, stg).unwrap()),
+                    y: TensorMut::new(dev_y.as_slice_mut(), xs, stx).unwrap(),
+                    rms: TensorMut::new(dev_rms.as_slice_mut(), rs, st_rms).unwrap(),
                 };
                 plan.run(&stream, Workspace::None, args)
                     .expect("baracuda rmsnorm");
@@ -113,26 +97,10 @@ where
             assert_cell_live(&format!("rmsnorm/{dtype_label}/{shape}"), &dev_y, numel);
             let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 50, || {
                 let args = RMSNormArgs::<T, 2> {
-                    x: TensorRef {
-                        data: dev_x.as_slice(),
-                        shape: xs,
-                        stride: stx,
-                    },
-                    gamma: Some(TensorRef {
-                        data: dev_g.as_slice(),
-                        shape: gs,
-                        stride: stg,
-                    }),
-                    y: TensorMut {
-                        data: dev_y.as_slice_mut(),
-                        shape: xs,
-                        stride: stx,
-                    },
-                    rms: TensorMut {
-                        data: dev_rms.as_slice_mut(),
-                        shape: rs,
-                        stride: st_rms,
-                    },
+                    x: TensorRef::new(dev_x.as_slice(), xs, stx).unwrap(),
+                    gamma: Some(TensorRef::new(dev_g.as_slice(), gs, stg).unwrap()),
+                    y: TensorMut::new(dev_y.as_slice_mut(), xs, stx).unwrap(),
+                    rms: TensorMut::new(dev_rms.as_slice_mut(), rs, st_rms).unwrap(),
                 };
                 plan.run(&stream, Workspace::None, args)
                     .expect("baracuda rmsnorm");
@@ -153,26 +121,10 @@ where
                 bb.iter_custom(|iters| {
                     time_with_events(&ctx, &stream, iters, || {
                         let args = RMSNormArgs::<T, 2> {
-                            x: TensorRef {
-                                data: dev_x.as_slice(),
-                                shape: xs,
-                                stride: stx,
-                            },
-                            gamma: Some(TensorRef {
-                                data: dev_g.as_slice(),
-                                shape: gs,
-                                stride: stg,
-                            }),
-                            y: TensorMut {
-                                data: dev_y.as_slice_mut(),
-                                shape: xs,
-                                stride: stx,
-                            },
-                            rms: TensorMut {
-                                data: dev_rms.as_slice_mut(),
-                                shape: rs,
-                                stride: st_rms,
-                            },
+                            x: TensorRef::new(dev_x.as_slice(), xs, stx).unwrap(),
+                            gamma: Some(TensorRef::new(dev_g.as_slice(), gs, stg).unwrap()),
+                            y: TensorMut::new(dev_y.as_slice_mut(), xs, stx).unwrap(),
+                            rms: TensorMut::new(dev_rms.as_slice_mut(), rs, st_rms).unwrap(),
                         };
                         plan.run(&stream, Workspace::None, args)
                             .expect("baracuda rmsnorm");

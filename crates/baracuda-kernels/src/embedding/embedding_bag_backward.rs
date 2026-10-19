@@ -157,35 +157,36 @@ impl<T: Element> EmbeddingBagBackwardPlan<T> {
         &self,
         args: &EmbeddingBagBackwardArgs<'_, T, I>,
     ) -> Result<()> {
-        if args.dout.shape[0] != self.desc.num_bags || args.dout.shape[1] != self.desc.embedding_dim
+        if args.dout.shape()[0] != self.desc.num_bags
+            || args.dout.shape()[1] != self.desc.embedding_dim
         {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::EmbeddingBagBackwardPlan: dout shape must be \
                  [num_bags, embedding_dim]",
             ));
         }
-        if args.indices.shape[0] != self.desc.total_indices {
+        if args.indices.shape()[0] != self.desc.total_indices {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::EmbeddingBagBackwardPlan: indices.shape[0] != total_indices",
             ));
         }
-        if args.offsets.shape[0] != self.desc.num_bags {
+        if args.offsets.shape()[0] != self.desc.num_bags {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::EmbeddingBagBackwardPlan: offsets.shape[0] != num_bags",
             ));
         }
-        if args.dweight.shape[0] != self.desc.num_embeddings
-            || args.dweight.shape[1] != self.desc.embedding_dim
+        if args.dweight.shape()[0] != self.desc.num_embeddings
+            || args.dweight.shape()[1] != self.desc.embedding_dim
         {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::EmbeddingBagBackwardPlan: dweight shape must be \
                  [num_embeddings, embedding_dim]",
             ));
         }
-        let dout_len = args.dout.data.len() as i64;
-        let idx_len = args.indices.data.len() as i64;
-        let off_len = args.offsets.data.len() as i64;
-        let dw_len = args.dweight.data.len() as i64;
+        let dout_len = args.dout.data().len() as i64;
+        let idx_len = args.indices.data().len() as i64;
+        let off_len = args.offsets.data().len() as i64;
+        let dw_len = args.dweight.data().len() as i64;
         let dout_numel = args.dout.numel();
         let idx_numel = args.indices.numel();
         let off_numel = args.offsets.numel();
@@ -248,10 +249,10 @@ impl<T: Element> EmbeddingBagBackwardPlan<T> {
         if self.desc.num_bags == 0 || self.desc.embedding_dim == 0 {
             return Ok(());
         }
-        let dout_ptr = args.dout.data.as_raw().0 as *const c_void;
-        let idx_ptr = args.indices.data.as_raw().0 as *const c_void;
-        let off_ptr = args.offsets.data.as_raw().0 as *const c_void;
-        let dw_ptr = args.dweight.data.as_raw().0 as *mut c_void;
+        let dout_ptr = args.dout.data().as_raw().0 as *const c_void;
+        let idx_ptr = args.indices.data().as_raw().0 as *const c_void;
+        let off_ptr = args.offsets.data().as_raw().0 as *const c_void;
+        let dw_ptr = args.dweight.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         // Phase 11.5: padding_idx widens to i64 across FFI.
         let padding_idx: i64 = self.desc.padding_idx.unwrap_or(PADDING_DISABLED) as i64;

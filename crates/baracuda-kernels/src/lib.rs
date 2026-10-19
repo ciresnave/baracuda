@@ -74,7 +74,7 @@ pub use baracuda_kernels_types::{
     MatrixMut, MatrixRef, MoeKind, NormalizationKind, OpCategory, PadMode, PlanPreference,
     PoolKind, PrecisionGuarantee, QuantizeKind, RandomKind, ReduceKind, ReduceToOp, S4, S8,
     ScalarType, ScanKind, SegmentKind, ShapeLayoutKind, SoftmaxKind, SortKind, TensorMut,
-    TensorRef, TernaryKind, U4, U8, UnaryKind, VectorRef, Workspace, contiguous_stride,
+    TensorRef, TernaryKind, U4, U8, UnaryKind, VectorRef, ViewError, Workspace, contiguous_stride,
 };
 
 // Re-export the float-GEMM plan types from baracuda-cutlass unchanged —

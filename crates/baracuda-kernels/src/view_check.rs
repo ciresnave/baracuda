@@ -1,14 +1,15 @@
 //! Bounds validation for caller-built tensor views.
 //!
-//! `TensorRef` / `TensorMut` expose `shape` and `stride` as public fields, and
-//! many kernels forward both straight to FFI (`base + Σ coord·stride`). A plan's
+//! `TensorRef` / `TensorMut` can only be built through their validating
+//! constructors, but the plans re-check every view anyway (defence in depth,
+//! and `new_unchecked` / offset views exist). Many kernels forward both straight to FFI (`base + Σ coord·stride`). A plan's
 //! `can_implement` therefore has to prove every view stays inside its
 //! `DeviceSlice` before anything is launched; comparing `data.len()` with
 //! `numel()` is not enough (`shape = [n]`, `stride = [2]` touches `2n - 1`
 //! elements).
 
 use baracuda_cutlass::{Error, Result};
-use baracuda_kernels_types::{Bin, S4, TensorMut, TensorRef, U4};
+use baracuda_kernels_types::{Bin, S4, TensorMut, TensorRef, U4, ViewError};
 
 /// Logical elements stored per slot of the backing slice: S4 / U4 pack two
 /// nibbles into a slot, `Bin` packs eight bits; everything else is one.
@@ -48,10 +49,10 @@ impl<T: baracuda_types::DeviceRepr + Copy + 'static, const N: usize> View for Te
         self.required_len().map(|n| n.div_ceil(pack_factor::<T>()))
     }
     fn backing_len(&self) -> usize {
-        self.data.len()
+        self.data().len()
     }
     fn dense_len(&self) -> Option<usize> {
-        dense_len_of(&self.shape).map(|n| n.div_ceil(pack_factor::<T>()))
+        dense_len_of(&self.shape()).map(|n| n.div_ceil(pack_factor::<T>()))
     }
 }
 
@@ -60,10 +61,10 @@ impl<T: baracuda_types::DeviceRepr + Copy + 'static, const N: usize> View for Te
         self.required_len().map(|n| n.div_ceil(pack_factor::<T>()))
     }
     fn backing_len(&self) -> usize {
-        self.data.len()
+        self.data().len()
     }
     fn dense_len(&self) -> Option<usize> {
-        dense_len_of(&self.shape).map(|n| n.div_ceil(pack_factor::<T>()))
+        dense_len_of(&self.shape()).map(|n| n.div_ceil(pack_factor::<T>()))
     }
 }
 
@@ -143,16 +144,16 @@ pub(crate) fn check_fits_at<T: baracuda_types::DeviceRepr + Copy + 'static, cons
     view: &TensorRef<'_, T, N>,
     offset: i64,
 ) -> Result<()> {
-    if view.shape.iter().any(|&d| d < 0) {
+    if view.shape().iter().any(|&d| d < 0) {
         return Err(Error::InvalidProblem(
             "tensor view is not addressable (negative extent)",
         ));
     }
-    if view.shape.iter().any(|&d| d == 0) {
+    if view.shape().iter().any(|&d| d == 0) {
         return Ok(());
     }
     let (mut lo, mut hi) = (offset as i128, offset as i128);
-    for (&d, &s) in view.shape.iter().zip(view.stride.iter()) {
+    for (&d, &s) in view.shape().iter().zip(view.stride().iter()) {
         let reach = (d as i128 - 1) * s as i128;
         if reach < 0 {
             lo += reach;
@@ -166,11 +167,19 @@ pub(crate) fn check_fits_at<T: baracuda_types::DeviceRepr + Copy + 'static, cons
         ));
     }
     let needed = usize::try_from(hi / pack_factor::<T>() as i128 + 1).unwrap_or(usize::MAX);
-    if needed > view.data.len() {
+    if needed > view.data().len() {
         return Err(Error::BufferTooSmall {
             needed,
-            got: view.data.len(),
+            got: view.data().len(),
         });
     }
     Ok(())
+}
+
+/// Map a failed view construction inside a plan to the kernels error type.
+pub(crate) fn valid<V>(built: core::result::Result<V, ViewError>) -> Result<V> {
+    built.map_err(|e| match e {
+        ViewError::TooSmall { needed, got } => Error::BufferTooSmall { needed, got },
+        _ => Error::InvalidProblem("tensor view is not addressable"),
+    })
 }

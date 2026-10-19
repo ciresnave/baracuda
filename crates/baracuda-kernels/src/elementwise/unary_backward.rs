@@ -268,12 +268,12 @@ impl<T: Element, const N: usize> UnaryBackwardPlan<T, N> {
             crate::view_check::check_fits(t)?;
         }
         crate::view_check::check_fits(&args.dx)?;
-        if args.dy.shape != self.desc.shape {
+        if args.dy.shape() != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::UnaryBackwardPlan: dy shape mismatch",
             ));
         }
-        if args.dx.shape != self.desc.shape {
+        if args.dx.shape() != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::UnaryBackwardPlan: dx shape mismatch",
             ));
@@ -294,7 +294,7 @@ impl<T: Element, const N: usize> UnaryBackwardPlan<T, N> {
                  (a saved-y backward); pass it in `args.y`",
             ))?,
         };
-        if saved.shape != self.desc.shape {
+        if saved.shape() != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::UnaryBackwardPlan: saved tensor shape mismatch",
             ));
@@ -306,9 +306,9 @@ impl<T: Element, const N: usize> UnaryBackwardPlan<T, N> {
             ));
         }
         let numel = args.dy.numel();
-        let dy_len = args.dy.data.len() as i64;
-        let dx_len = args.dx.data.len() as i64;
-        let saved_len = saved.data.len() as i64;
+        let dy_len = args.dy.data().len() as i64;
+        let dx_len = args.dx.data().len() as i64;
+        let saved_len = saved.data().len() as i64;
         if dy_len < numel || dx_len < numel || saved_len < numel {
             return Err(Error::BufferTooSmall {
                 needed: numel as usize,
@@ -348,14 +348,14 @@ impl<T: Element, const N: usize> UnaryBackwardPlan<T, N> {
         if numel == 0 {
             return Ok(());
         }
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let dx_ptr = args.dx.data().as_raw().0 as *mut c_void;
         let saved_ptr = match self.save_shape {
             SaveShape::X => {
                 args.x
                     .as_ref()
                     .expect("can_implement guarantees x is present for saved-x ops")
-                    .data
+                    .data()
                     .as_raw()
                     .0 as *const c_void
             }
@@ -363,7 +363,7 @@ impl<T: Element, const N: usize> UnaryBackwardPlan<T, N> {
                 args.y
                     .as_ref()
                     .expect("can_implement guarantees y is present for saved-y ops")
-                    .data
+                    .data()
                     .as_raw()
                     .0 as *const c_void
             }

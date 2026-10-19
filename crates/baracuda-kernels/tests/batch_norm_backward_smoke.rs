@@ -170,46 +170,14 @@ fn batch_norm_bw_f32_with_affine() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         BatchNormBackwardArgs {
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            gamma: Some(TensorRef {
-                data: dev_g.as_slice(),
-                shape: [c],
-                stride: [1],
-            }),
-            saved_mean: TensorRef {
-                data: dev_sm.as_slice(),
-                shape: [c],
-                stride: [1],
-            },
-            saved_rstd: TensorRef {
-                data: dev_sr.as_slice(),
-                shape: [c],
-                stride: [1],
-            },
-            dx: TensorMut {
-                data: dev_dx.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            dgamma: Some(TensorMut {
-                data: dev_dg.as_slice_mut(),
-                shape: [c],
-                stride: [1],
-            }),
-            dbeta: Some(TensorMut {
-                data: dev_db.as_slice_mut(),
-                shape: [c],
-                stride: [1],
-            }),
+            dy: TensorRef::new(dev_dy.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            gamma: Some(TensorRef::new(dev_g.as_slice(), [c], [1]).unwrap()),
+            saved_mean: TensorRef::new(dev_sm.as_slice(), [c], [1]).unwrap(),
+            saved_rstd: TensorRef::new(dev_sr.as_slice(), [c], [1]).unwrap(),
+            dx: TensorMut::new(dev_dx.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
+            dgamma: Some(TensorMut::new(dev_dg.as_slice_mut(), [c], [1]).unwrap()),
+            dbeta: Some(TensorMut::new(dev_db.as_slice_mut(), [c], [1]).unwrap()),
         },
     )
     .expect("run");
@@ -310,46 +278,14 @@ fn batch_norm_bw_f64_with_affine() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         BatchNormBackwardArgs {
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            gamma: Some(TensorRef {
-                data: dev_g.as_slice(),
-                shape: [c],
-                stride: [1],
-            }),
-            saved_mean: TensorRef {
-                data: dev_sm.as_slice(),
-                shape: [c],
-                stride: [1],
-            },
-            saved_rstd: TensorRef {
-                data: dev_sr.as_slice(),
-                shape: [c],
-                stride: [1],
-            },
-            dx: TensorMut {
-                data: dev_dx.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            dgamma: Some(TensorMut {
-                data: dev_dg.as_slice_mut(),
-                shape: [c],
-                stride: [1],
-            }),
-            dbeta: Some(TensorMut {
-                data: dev_db.as_slice_mut(),
-                shape: [c],
-                stride: [1],
-            }),
+            dy: TensorRef::new(dev_dy.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            gamma: Some(TensorRef::new(dev_g.as_slice(), [c], [1]).unwrap()),
+            saved_mean: TensorRef::new(dev_sm.as_slice(), [c], [1]).unwrap(),
+            saved_rstd: TensorRef::new(dev_sr.as_slice(), [c], [1]).unwrap(),
+            dx: TensorMut::new(dev_dx.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
+            dgamma: Some(TensorMut::new(dev_dg.as_slice_mut(), [c], [1]).unwrap()),
+            dbeta: Some(TensorMut::new(dev_db.as_slice_mut(), [c], [1]).unwrap()),
         },
     )
     .expect("run");
@@ -444,46 +380,14 @@ fn batch_norm_bw_f16_with_affine() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         BatchNormBackwardArgs {
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            gamma: Some(TensorRef {
-                data: dev_g.as_slice(),
-                shape: [c],
-                stride: [1],
-            }),
-            saved_mean: TensorRef {
-                data: dev_sm.as_slice(),
-                shape: [c],
-                stride: [1],
-            },
-            saved_rstd: TensorRef {
-                data: dev_sr.as_slice(),
-                shape: [c],
-                stride: [1],
-            },
-            dx: TensorMut {
-                data: dev_dx.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            dgamma: Some(TensorMut {
-                data: dev_dg.as_slice_mut(),
-                shape: [c],
-                stride: [1],
-            }),
-            dbeta: Some(TensorMut {
-                data: dev_db.as_slice_mut(),
-                shape: [c],
-                stride: [1],
-            }),
+            dy: TensorRef::new(dev_dy.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            gamma: Some(TensorRef::new(dev_g.as_slice(), [c], [1]).unwrap()),
+            saved_mean: TensorRef::new(dev_sm.as_slice(), [c], [1]).unwrap(),
+            saved_rstd: TensorRef::new(dev_sr.as_slice(), [c], [1]).unwrap(),
+            dx: TensorMut::new(dev_dx.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
+            dgamma: Some(TensorMut::new(dev_dg.as_slice_mut(), [c], [1]).unwrap()),
+            dbeta: Some(TensorMut::new(dev_db.as_slice_mut(), [c], [1]).unwrap()),
         },
     )
     .expect("run");
@@ -578,46 +482,14 @@ fn batch_norm_bw_bf16_with_affine() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         BatchNormBackwardArgs {
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            gamma: Some(TensorRef {
-                data: dev_g.as_slice(),
-                shape: [c],
-                stride: [1],
-            }),
-            saved_mean: TensorRef {
-                data: dev_sm.as_slice(),
-                shape: [c],
-                stride: [1],
-            },
-            saved_rstd: TensorRef {
-                data: dev_sr.as_slice(),
-                shape: [c],
-                stride: [1],
-            },
-            dx: TensorMut {
-                data: dev_dx.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            dgamma: Some(TensorMut {
-                data: dev_dg.as_slice_mut(),
-                shape: [c],
-                stride: [1],
-            }),
-            dbeta: Some(TensorMut {
-                data: dev_db.as_slice_mut(),
-                shape: [c],
-                stride: [1],
-            }),
+            dy: TensorRef::new(dev_dy.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            gamma: Some(TensorRef::new(dev_g.as_slice(), [c], [1]).unwrap()),
+            saved_mean: TensorRef::new(dev_sm.as_slice(), [c], [1]).unwrap(),
+            saved_rstd: TensorRef::new(dev_sr.as_slice(), [c], [1]).unwrap(),
+            dx: TensorMut::new(dev_dx.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
+            dgamma: Some(TensorMut::new(dev_dg.as_slice_mut(), [c], [1]).unwrap()),
+            dbeta: Some(TensorMut::new(dev_db.as_slice_mut(), [c], [1]).unwrap()),
         },
     )
     .expect("run");

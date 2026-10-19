@@ -92,26 +92,10 @@ fn quantize_per_token_f32_s8_basic() {
     let plan = QuantizePerTokenPlan::<f32, S8>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = QuantizePerTokenArgs::<f32, S8> {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape: [n, d],
-            stride: contiguous_stride([n, d]),
-        },
-        scale: TensorRef {
-            data: dev_scale.as_slice(),
-            shape: [n],
-            stride: contiguous_stride([n]),
-        },
-        zero_point: TensorRef {
-            data: dev_zp.as_slice(),
-            shape: [n],
-            stride: contiguous_stride([n]),
-        },
-        output: TensorMut {
-            data: dev_q.as_slice_mut(),
-            shape: [n, d],
-            stride: contiguous_stride([n, d]),
-        },
+        input: TensorRef::new(dev_x.as_slice(), [n, d], contiguous_stride([n, d])).unwrap(),
+        scale: TensorRef::new(dev_scale.as_slice(), [n], contiguous_stride([n])).unwrap(),
+        zero_point: TensorRef::new(dev_zp.as_slice(), [n], contiguous_stride([n])).unwrap(),
+        output: TensorMut::new(dev_q.as_slice_mut(), [n, d], contiguous_stride([n, d])).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

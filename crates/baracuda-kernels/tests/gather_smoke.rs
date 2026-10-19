@@ -53,21 +53,14 @@ fn gather_f32_2d_dim1() {
     let plan =
         GatherPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = GatherArgs::<f32, 2> {
-        src: TensorRef {
-            data: dev_src.as_slice(),
-            shape: src_shape,
-            stride: contiguous_stride(src_shape),
-        },
-        index: TensorRef {
-            data: dev_idx.as_slice(),
-            shape: out_shape,
-            stride: contiguous_stride(out_shape),
-        },
-        out: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: out_shape,
-            stride: contiguous_stride(out_shape),
-        },
+        src: TensorRef::new(dev_src.as_slice(), src_shape, contiguous_stride(src_shape)).unwrap(),
+        index: TensorRef::new(dev_idx.as_slice(), out_shape, contiguous_stride(out_shape)).unwrap(),
+        out: TensorMut::new(
+            dev_out.as_slice_mut(),
+            out_shape,
+            contiguous_stride(out_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -116,21 +109,14 @@ fn gather_f64_3d_dim0() {
     let plan =
         GatherPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = GatherArgs::<f64, 3> {
-        src: TensorRef {
-            data: dev_src.as_slice(),
-            shape: src_shape,
-            stride: contiguous_stride(src_shape),
-        },
-        index: TensorRef {
-            data: dev_idx.as_slice(),
-            shape: out_shape,
-            stride: contiguous_stride(out_shape),
-        },
-        out: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: out_shape,
-            stride: contiguous_stride(out_shape),
-        },
+        src: TensorRef::new(dev_src.as_slice(), src_shape, contiguous_stride(src_shape)).unwrap(),
+        index: TensorRef::new(dev_idx.as_slice(), out_shape, contiguous_stride(out_shape)).unwrap(),
+        out: TensorMut::new(
+            dev_out.as_slice_mut(),
+            out_shape,
+            contiguous_stride(out_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -177,21 +163,14 @@ fn gather_i32_2d_dim1() {
     let plan =
         GatherPlan::<i32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = GatherArgs::<i32, 2> {
-        src: TensorRef {
-            data: dev_src.as_slice(),
-            shape: src_shape,
-            stride: contiguous_stride(src_shape),
-        },
-        index: TensorRef {
-            data: dev_idx.as_slice(),
-            shape: out_shape,
-            stride: contiguous_stride(out_shape),
-        },
-        out: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: out_shape,
-            stride: contiguous_stride(out_shape),
-        },
+        src: TensorRef::new(dev_src.as_slice(), src_shape, contiguous_stride(src_shape)).unwrap(),
+        index: TensorRef::new(dev_idx.as_slice(), out_shape, contiguous_stride(out_shape)).unwrap(),
+        out: TensorMut::new(
+            dev_out.as_slice_mut(),
+            out_shape,
+            contiguous_stride(out_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

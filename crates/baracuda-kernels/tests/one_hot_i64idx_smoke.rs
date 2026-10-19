@@ -49,16 +49,13 @@ fn one_hot_f32_i64idx_2d() {
         OneHotPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     // Explicit `I = i64` opts into the new path.
     let args = OneHotArgs::<f32, 2, i64> {
-        src: TensorRef {
-            data: dev_src.as_slice(),
-            shape: [4i32],
-            stride: contiguous_stride([4i32]),
-        },
-        out: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: out_shape,
-            stride: contiguous_stride(out_shape),
-        },
+        src: TensorRef::new(dev_src.as_slice(), [4i32], contiguous_stride([4i32])).unwrap(),
+        out: TensorMut::new(
+            dev_out.as_slice_mut(),
+            out_shape,
+            contiguous_stride(out_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -100,16 +97,13 @@ fn one_hot_i32_i64idx_2d_with_oob() {
     let plan =
         OneHotPlan::<i32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = OneHotArgs::<i32, 2, i64> {
-        src: TensorRef {
-            data: dev_src.as_slice(),
-            shape: [5i32],
-            stride: contiguous_stride([5i32]),
-        },
-        out: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: out_shape,
-            stride: contiguous_stride(out_shape),
-        },
+        src: TensorRef::new(dev_src.as_slice(), [5i32], contiguous_stride([5i32])).unwrap(),
+        out: TensorMut::new(
+            dev_out.as_slice_mut(),
+            out_shape,
+            contiguous_stride(out_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -148,16 +142,13 @@ fn one_hot_f32_i32idx_default_path() {
     // No explicit `I` — relies on the `I = i32` default. This is what
     // every pre-Phase-15.2 caller looks like.
     let args = OneHotArgs::<f32, 2> {
-        src: TensorRef {
-            data: dev_src.as_slice(),
-            shape: [3i32],
-            stride: contiguous_stride([3i32]),
-        },
-        out: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: out_shape,
-            stride: contiguous_stride(out_shape),
-        },
+        src: TensorRef::new(dev_src.as_slice(), [3i32], contiguous_stride([3i32])).unwrap(),
+        out: TensorMut::new(
+            dev_out.as_slice_mut(),
+            out_shape,
+            contiguous_stride(out_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

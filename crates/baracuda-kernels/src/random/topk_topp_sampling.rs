@@ -202,18 +202,18 @@ impl TopKTopPSamplingPlan {
         if let Some(t) = &args.valid {
             crate::view_check::check_fits(t)?;
         }
-        if args.probs.shape != [self.desc.batch_size, self.desc.vocab_size] {
+        if args.probs.shape() != [self.desc.batch_size, self.desc.vocab_size] {
             return Err(Error::InvalidProblem(
                 "TopKTopPSamplingPlan: probs shape must be [batch_size, vocab_size]",
             ));
         }
-        if args.output.shape != [self.desc.batch_size] {
+        if args.output.shape() != [self.desc.batch_size] {
             return Err(Error::InvalidProblem(
                 "TopKTopPSamplingPlan: output shape must be [batch_size]",
             ));
         }
         if let Some(v) = &args.valid {
-            if v.shape != [self.desc.batch_size] {
+            if v.shape() != [self.desc.batch_size] {
                 return Err(Error::InvalidProblem(
                     "TopKTopPSamplingPlan: valid shape must be [batch_size]",
                 ));
@@ -263,10 +263,10 @@ impl TopKTopPSamplingPlan {
         #[cfg(feature = "flashinfer")]
         {
             let stream_ptr = stream.as_raw() as *mut c_void;
-            let probs_ptr = args.probs.data.as_raw().0 as *const c_void;
-            let output_ptr = args.output.data.as_raw().0 as *mut c_void;
+            let probs_ptr = args.probs.data().as_raw().0 as *const c_void;
+            let output_ptr = args.output.data().as_raw().0 as *mut c_void;
             let valid_ptr = match &args.valid {
-                Some(v) => v.data.as_raw().0 as *mut c_void,
+                Some(v) => v.data().as_raw().0 as *mut c_void,
                 None => core::ptr::null_mut::<c_void>(),
             };
             let det_flag = if self.desc.deterministic { 1 } else { 0 };

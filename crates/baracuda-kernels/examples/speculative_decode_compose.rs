@@ -168,16 +168,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &stream,
         Workspace::None,
         WriteSliceArgs {
-            dest: TensorMut {
-                data: k_cache.as_slice_mut(),
-                shape: kv_dest_shape,
-                stride: contiguous_stride(kv_dest_shape),
-            },
-            source: TensorRef {
-                data: d_k.as_slice(),
-                shape: kv_source_shape,
-                stride: contiguous_stride(kv_source_shape),
-            },
+            dest: TensorMut::new(
+                k_cache.as_slice_mut(),
+                kv_dest_shape,
+                contiguous_stride(kv_dest_shape),
+            )
+            .unwrap(),
+            source: TensorRef::new(
+                d_k.as_slice(),
+                kv_source_shape,
+                contiguous_stride(kv_source_shape),
+            )
+            .unwrap(),
         },
     )?;
     // V append.
@@ -185,16 +187,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &stream,
         Workspace::None,
         WriteSliceArgs {
-            dest: TensorMut {
-                data: v_cache.as_slice_mut(),
-                shape: kv_dest_shape,
-                stride: contiguous_stride(kv_dest_shape),
-            },
-            source: TensorRef {
-                data: d_v.as_slice(),
-                shape: kv_source_shape,
-                stride: contiguous_stride(kv_source_shape),
-            },
+            dest: TensorMut::new(
+                v_cache.as_slice_mut(),
+                kv_dest_shape,
+                contiguous_stride(kv_dest_shape),
+            )
+            .unwrap(),
+            source: TensorRef::new(
+                d_v.as_slice(),
+                kv_source_shape,
+                contiguous_stride(kv_source_shape),
+            )
+            .unwrap(),
         },
     )?;
 
@@ -270,36 +274,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &stream,
         Workspace::None,
         FlashSdpaArgs {
-            q: TensorRef {
-                data: d_q.as_slice(),
-                shape: q_shape,
-                stride: contiguous_stride(q_shape),
-            },
-            k: TensorRef {
-                data: d_k_packed.as_slice(),
-                shape: k_shape,
-                stride: contiguous_stride(k_shape),
-            },
-            v: TensorRef {
-                data: d_v_packed.as_slice(),
-                shape: v_shape,
-                stride: contiguous_stride(v_shape),
-            },
-            y: TensorMut {
-                data: y_out.as_slice_mut(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
-            lse: TensorMut {
-                data: lse_out.as_slice_mut(),
-                shape: lse_shape,
-                stride: contiguous_stride(lse_shape),
-            },
-            mask: Some(TensorRef {
-                data: d_mask.as_slice(),
-                shape: mask_shape,
-                stride: contiguous_stride(mask_shape),
-            }),
+            q: TensorRef::new(d_q.as_slice(), q_shape, contiguous_stride(q_shape)).unwrap(),
+            k: TensorRef::new(d_k_packed.as_slice(), k_shape, contiguous_stride(k_shape)).unwrap(),
+            v: TensorRef::new(d_v_packed.as_slice(), v_shape, contiguous_stride(v_shape)).unwrap(),
+            y: TensorMut::new(y_out.as_slice_mut(), y_shape, contiguous_stride(y_shape)).unwrap(),
+            lse: TensorMut::new(
+                lse_out.as_slice_mut(),
+                lse_shape,
+                contiguous_stride(lse_shape),
+            )
+            .unwrap(),
+            mask: Some(
+                TensorRef::new(d_mask.as_slice(), mask_shape, contiguous_stride(mask_shape))
+                    .unwrap(),
+            ),
             alibi_slopes: None,
         },
     )?;

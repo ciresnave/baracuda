@@ -80,26 +80,20 @@ fn lstsq_f32_overdetermined() {
     let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_bytes).expect("alloc ws");
 
     let args = LstSqArgs::<f32> {
-        a: TensorMut {
-            data: dev_a.as_slice_mut(),
-            shape: [m, n],
-            stride: contiguous_stride([m, n]),
-        },
-        b: TensorMut {
-            data: dev_b.as_slice_mut(),
-            shape: [m, nrhs],
-            stride: contiguous_stride([m, nrhs]),
-        },
-        x: TensorMut {
-            data: dev_x.as_slice_mut(),
-            shape: [n, nrhs],
-            stride: contiguous_stride([n, nrhs]),
-        },
-        info: TensorMut {
-            data: dev_info.as_slice_mut(),
-            shape: [1],
-            stride: [1],
-        },
+        a: TensorMut::new(dev_a.as_slice_mut(), [m, n], contiguous_stride([m, n])).unwrap(),
+        b: TensorMut::new(
+            dev_b.as_slice_mut(),
+            [m, nrhs],
+            contiguous_stride([m, nrhs]),
+        )
+        .unwrap(),
+        x: TensorMut::new(
+            dev_x.as_slice_mut(),
+            [n, nrhs],
+            contiguous_stride([n, nrhs]),
+        )
+        .unwrap(),
+        info: TensorMut::new(dev_info.as_slice_mut(), [1], [1]).unwrap(),
         a_backup: None,
     };
     plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
@@ -152,26 +146,20 @@ fn lstsq_f64_overdetermined() {
     let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_bytes).expect("alloc ws");
 
     let args = LstSqArgs::<f64> {
-        a: TensorMut {
-            data: dev_a.as_slice_mut(),
-            shape: [m, n],
-            stride: contiguous_stride([m, n]),
-        },
-        b: TensorMut {
-            data: dev_b.as_slice_mut(),
-            shape: [m, nrhs],
-            stride: contiguous_stride([m, nrhs]),
-        },
-        x: TensorMut {
-            data: dev_x.as_slice_mut(),
-            shape: [n, nrhs],
-            stride: contiguous_stride([n, nrhs]),
-        },
-        info: TensorMut {
-            data: dev_info.as_slice_mut(),
-            shape: [1],
-            stride: [1],
-        },
+        a: TensorMut::new(dev_a.as_slice_mut(), [m, n], contiguous_stride([m, n])).unwrap(),
+        b: TensorMut::new(
+            dev_b.as_slice_mut(),
+            [m, nrhs],
+            contiguous_stride([m, nrhs]),
+        )
+        .unwrap(),
+        x: TensorMut::new(
+            dev_x.as_slice_mut(),
+            [n, nrhs],
+            contiguous_stride([n, nrhs]),
+        )
+        .unwrap(),
+        info: TensorMut::new(dev_info.as_slice_mut(), [1], [1]).unwrap(),
         a_backup: None,
     };
     plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
@@ -335,31 +323,23 @@ fn lstsq_f32_qr_fallback_succeeds_with_backup() {
     let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_bytes).expect("alloc ws");
 
     let args = LstSqArgs::<f32> {
-        a: TensorMut {
-            data: dev_a.as_slice_mut(),
-            shape: [m, n],
-            stride: contiguous_stride([m, n]),
-        },
-        b: TensorMut {
-            data: dev_b.as_slice_mut(),
-            shape: [m, nrhs],
-            stride: contiguous_stride([m, nrhs]),
-        },
-        x: TensorMut {
-            data: dev_x.as_slice_mut(),
-            shape: [n, nrhs],
-            stride: contiguous_stride([n, nrhs]),
-        },
-        info: TensorMut {
-            data: dev_info.as_slice_mut(),
-            shape: [1],
-            stride: [1],
-        },
-        a_backup: Some(TensorRef {
-            data: dev_a_backup.as_slice(),
-            shape: [m, n],
-            stride: contiguous_stride([m, n]),
-        }),
+        a: TensorMut::new(dev_a.as_slice_mut(), [m, n], contiguous_stride([m, n])).unwrap(),
+        b: TensorMut::new(
+            dev_b.as_slice_mut(),
+            [m, nrhs],
+            contiguous_stride([m, nrhs]),
+        )
+        .unwrap(),
+        x: TensorMut::new(
+            dev_x.as_slice_mut(),
+            [n, nrhs],
+            contiguous_stride([n, nrhs]),
+        )
+        .unwrap(),
+        info: TensorMut::new(dev_info.as_slice_mut(), [1], [1]).unwrap(),
+        a_backup: Some(
+            TensorRef::new(dev_a_backup.as_slice(), [m, n], contiguous_stride([m, n])).unwrap(),
+        ),
     };
     plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
         .expect("run LstSq f32 QR fallback");
@@ -445,31 +425,23 @@ fn lstsq_f64_qr_fallback_succeeds_with_backup() {
     let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_bytes).expect("alloc ws");
 
     let args = LstSqArgs::<f64> {
-        a: TensorMut {
-            data: dev_a.as_slice_mut(),
-            shape: [m, n],
-            stride: contiguous_stride([m, n]),
-        },
-        b: TensorMut {
-            data: dev_b.as_slice_mut(),
-            shape: [m, nrhs],
-            stride: contiguous_stride([m, nrhs]),
-        },
-        x: TensorMut {
-            data: dev_x.as_slice_mut(),
-            shape: [n, nrhs],
-            stride: contiguous_stride([n, nrhs]),
-        },
-        info: TensorMut {
-            data: dev_info.as_slice_mut(),
-            shape: [1],
-            stride: [1],
-        },
-        a_backup: Some(TensorRef {
-            data: dev_a_backup.as_slice(),
-            shape: [m, n],
-            stride: contiguous_stride([m, n]),
-        }),
+        a: TensorMut::new(dev_a.as_slice_mut(), [m, n], contiguous_stride([m, n])).unwrap(),
+        b: TensorMut::new(
+            dev_b.as_slice_mut(),
+            [m, nrhs],
+            contiguous_stride([m, nrhs]),
+        )
+        .unwrap(),
+        x: TensorMut::new(
+            dev_x.as_slice_mut(),
+            [n, nrhs],
+            contiguous_stride([n, nrhs]),
+        )
+        .unwrap(),
+        info: TensorMut::new(dev_info.as_slice_mut(), [1], [1]).unwrap(),
+        a_backup: Some(
+            TensorRef::new(dev_a_backup.as_slice(), [m, n], contiguous_stride([m, n])).unwrap(),
+        ),
     };
     plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
         .expect("run LstSq f64 with backup");

@@ -195,11 +195,7 @@ fn curand_uniform(
     let plan = RandomPlan::<f32, 1>::select(stream, &desc, PlanPreference::default())
         .expect("RandomPlan select");
     let args = RandomArgs::<f32, 1> {
-        y: TensorMut {
-            data: dev.as_slice_mut(),
-            shape,
-            stride,
-        },
+        y: TensorMut::new(dev.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(stream, Workspace::None, args)
         .expect("uniform run");
@@ -259,26 +255,20 @@ fn fmp2d_f32_4x4_to_3x3() {
         &stream,
         Workspace::None,
         FractionalMaxPool2dFwArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape: x_shape,
-                stride: contiguous_stride(x_shape),
-            },
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
-            indices: TensorMut {
-                data: dev_indices.as_slice_mut(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
-            random_samples: TensorRef {
-                data: dev_samples.as_slice(),
-                shape: s_shape,
-                stride: contiguous_stride(s_shape),
-            },
+            x: TensorRef::new(dev_x.as_slice(), x_shape, contiguous_stride(x_shape)).unwrap(),
+            y: TensorMut::new(dev_y.as_slice_mut(), y_shape, contiguous_stride(y_shape)).unwrap(),
+            indices: TensorMut::new(
+                dev_indices.as_slice_mut(),
+                y_shape,
+                contiguous_stride(y_shape),
+            )
+            .unwrap(),
+            random_samples: TensorRef::new(
+                dev_samples.as_slice(),
+                s_shape,
+                contiguous_stride(s_shape),
+            )
+            .unwrap(),
         },
     )
     .expect("fw");
@@ -351,26 +341,20 @@ fn fmp2d_f32_8x8_to_5x5_random_samples() {
         &stream,
         Workspace::None,
         FractionalMaxPool2dFwArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape: x_shape,
-                stride: contiguous_stride(x_shape),
-            },
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
-            indices: TensorMut {
-                data: dev_indices.as_slice_mut(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
-            random_samples: TensorRef {
-                data: dev_samples.as_slice(),
-                shape: s_shape,
-                stride: contiguous_stride(s_shape),
-            },
+            x: TensorRef::new(dev_x.as_slice(), x_shape, contiguous_stride(x_shape)).unwrap(),
+            y: TensorMut::new(dev_y.as_slice_mut(), y_shape, contiguous_stride(y_shape)).unwrap(),
+            indices: TensorMut::new(
+                dev_indices.as_slice_mut(),
+                y_shape,
+                contiguous_stride(y_shape),
+            )
+            .unwrap(),
+            random_samples: TensorRef::new(
+                dev_samples.as_slice(),
+                s_shape,
+                contiguous_stride(s_shape),
+            )
+            .unwrap(),
         },
     )
     .expect("fw");
@@ -464,26 +448,20 @@ fn fmp3d_f32_4x4x4_to_3x3x3() {
         &stream,
         Workspace::None,
         FractionalMaxPool3dFwArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape: x_shape,
-                stride: contiguous_stride(x_shape),
-            },
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
-            indices: TensorMut {
-                data: dev_indices.as_slice_mut(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
-            random_samples: TensorRef {
-                data: dev_samples.as_slice(),
-                shape: s_shape,
-                stride: contiguous_stride(s_shape),
-            },
+            x: TensorRef::new(dev_x.as_slice(), x_shape, contiguous_stride(x_shape)).unwrap(),
+            y: TensorMut::new(dev_y.as_slice_mut(), y_shape, contiguous_stride(y_shape)).unwrap(),
+            indices: TensorMut::new(
+                dev_indices.as_slice_mut(),
+                y_shape,
+                contiguous_stride(y_shape),
+            )
+            .unwrap(),
+            random_samples: TensorRef::new(
+                dev_samples.as_slice(),
+                s_shape,
+                contiguous_stride(s_shape),
+            )
+            .unwrap(),
         },
     )
     .expect("fw");
@@ -562,26 +540,20 @@ fn fmp2d_bw_f32_4x4_to_3x3() {
         &stream,
         Workspace::None,
         FractionalMaxPool2dFwArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape: x_shape,
-                stride: contiguous_stride(x_shape),
-            },
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
-            indices: TensorMut {
-                data: dev_indices.as_slice_mut(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
-            random_samples: TensorRef {
-                data: dev_samples.as_slice(),
-                shape: s_shape,
-                stride: contiguous_stride(s_shape),
-            },
+            x: TensorRef::new(dev_x.as_slice(), x_shape, contiguous_stride(x_shape)).unwrap(),
+            y: TensorMut::new(dev_y.as_slice_mut(), y_shape, contiguous_stride(y_shape)).unwrap(),
+            indices: TensorMut::new(
+                dev_indices.as_slice_mut(),
+                y_shape,
+                contiguous_stride(y_shape),
+            )
+            .unwrap(),
+            random_samples: TensorRef::new(
+                dev_samples.as_slice(),
+                s_shape,
+                contiguous_stride(s_shape),
+            )
+            .unwrap(),
         },
     )
     .expect("fw");
@@ -601,21 +573,10 @@ fn fmp2d_bw_f32_4x4_to_3x3() {
         &stream,
         Workspace::None,
         FractionalMaxPool2dBwArgs {
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
-            indices: TensorRef {
-                data: dev_indices.as_slice(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
-            dx: TensorMut {
-                data: dev_dx.as_slice_mut(),
-                shape: x_shape,
-                stride: contiguous_stride(x_shape),
-            },
+            dy: TensorRef::new(dev_dy.as_slice(), y_shape, contiguous_stride(y_shape)).unwrap(),
+            indices: TensorRef::new(dev_indices.as_slice(), y_shape, contiguous_stride(y_shape))
+                .unwrap(),
+            dx: TensorMut::new(dev_dx.as_slice_mut(), x_shape, contiguous_stride(x_shape)).unwrap(),
         },
     )
     .expect("bw");

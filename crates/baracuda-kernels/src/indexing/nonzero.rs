@@ -179,7 +179,7 @@ impl<T: Element, const N: usize> NonzeroPlan<T, N> {
     /// Phase 15.2: generic over `I: IndexElement` so both i32 (legacy)
     /// and i64 (PyTorch default) output-coord buffers are accepted.
     pub fn can_implement<I: IndexElement>(&self, args: &NonzeroArgs<'_, T, N, I>) -> Result<()> {
-        if args.x.shape != self.desc.shape {
+        if args.x.shape() != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::NonzeroPlan: x shape mismatch with descriptor",
             ));
@@ -192,8 +192,8 @@ impl<T: Element, const N: usize> NonzeroPlan<T, N> {
         let max_nz = self.desc.max_nz as i64;
         let rank = N as i64;
         let needed_coords = max_nz.saturating_mul(rank);
-        let coords_len = args.out_coords.data.len() as i64;
-        let counter_len = args.counter.data.len() as i64;
+        let coords_len = args.out_coords.data().len() as i64;
+        let counter_len = args.counter.data().len() as i64;
         if coords_len < needed_coords {
             return Err(Error::BufferTooSmall {
                 needed: needed_coords as usize,
@@ -207,7 +207,7 @@ impl<T: Element, const N: usize> NonzeroPlan<T, N> {
             });
         }
         let x_numel = args.x.numel();
-        let x_len = args.x.data.len() as i64;
+        let x_len = args.x.data().len() as i64;
         if x_len < x_numel {
             return Err(Error::BufferTooSmall {
                 needed: x_numel as usize,
@@ -249,13 +249,13 @@ impl<T: Element, const N: usize> NonzeroPlan<T, N> {
     ) -> Result<()> {
         self.can_implement(&args)?;
         let numel = args.x.numel();
-        let x_ptr = args.x.data.as_raw().0 as *const c_void;
-        let coords_ptr = args.out_coords.data.as_raw().0 as *mut c_void;
-        let counter_ptr = args.counter.data.as_raw().0 as *mut c_void;
+        let x_ptr = args.x.data().as_raw().0 as *const c_void;
+        let coords_ptr = args.out_coords.data().as_raw().0 as *mut c_void;
+        let counter_ptr = args.counter.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
         let shape = self.desc.shape;
-        let stride_x = args.x.stride;
+        let stride_x = args.x.stride();
         let rank = N as i32;
 
         let status = match (T::KIND, I::KIND) {

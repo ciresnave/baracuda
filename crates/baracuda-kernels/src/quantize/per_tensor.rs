@@ -144,12 +144,12 @@ impl<TIn: Element, TOut: IntElement> QuantizePerTensorPlan<TIn, TOut> {
     pub fn can_implement(&self, args: &QuantizePerTensorArgs<'_, TIn, TOut>) -> Result<()> {
         crate::view_check::check_fits(&args.input)?;
         crate::view_check::check_fits(&args.output)?;
-        if args.input.shape != [self.desc.numel] {
+        if args.input.shape() != [self.desc.numel] {
             return Err(Error::InvalidProblem(
                 "QuantizePerTensorPlan: input shape != [numel]",
             ));
         }
-        if args.output.shape != [self.desc.numel] {
+        if args.output.shape() != [self.desc.numel] {
             return Err(Error::InvalidProblem(
                 "QuantizePerTensorPlan: output shape != [numel]",
             ));
@@ -187,8 +187,8 @@ impl<TIn: Element, TOut: IntElement> QuantizePerTensorPlan<TIn, TOut> {
         if numel == 0 {
             return Ok(());
         }
-        let x_ptr = args.input.data.as_raw().0 as *const c_void;
-        let q_ptr = args.output.data.as_raw().0 as *mut c_void;
+        let x_ptr = args.input.data().as_raw().0 as *const c_void;
+        let q_ptr = args.output.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         let zp = args.zero_point;
         let qmin = self.desc.q_min;

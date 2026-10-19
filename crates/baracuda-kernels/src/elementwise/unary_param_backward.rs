@@ -125,17 +125,17 @@ impl<T: Element, const N: usize> UnaryParamBackwardPlan<T, N> {
         crate::view_check::check_fits(&args.dy)?;
         crate::view_check::check_fits(&args.x)?;
         crate::view_check::check_fits(&args.dx)?;
-        if args.dy.shape != self.desc.shape {
+        if args.dy.shape() != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::UnaryParamBackwardPlan: dy shape mismatch",
             ));
         }
-        if args.x.shape != self.desc.shape {
+        if args.x.shape() != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::UnaryParamBackwardPlan: x shape mismatch",
             ));
         }
-        if args.dx.shape != self.desc.shape {
+        if args.dx.shape() != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::UnaryParamBackwardPlan: dx shape mismatch",
             ));
@@ -151,9 +151,9 @@ impl<T: Element, const N: usize> UnaryParamBackwardPlan<T, N> {
             ));
         }
         let numel = args.dy.numel();
-        let dy_len = args.dy.data.len() as i64;
-        let x_len = args.x.data.len() as i64;
-        let dx_len = args.dx.data.len() as i64;
+        let dy_len = args.dy.data().len() as i64;
+        let x_len = args.x.data().len() as i64;
+        let dx_len = args.dx.data().len() as i64;
         if dy_len < numel || x_len < numel || dx_len < numel {
             return Err(Error::BufferTooSmall {
                 needed: numel as usize,
@@ -191,9 +191,9 @@ impl<T: Element, const N: usize> UnaryParamBackwardPlan<T, N> {
         if numel == 0 {
             return Ok(());
         }
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let x_ptr = args.x.data.as_raw().0 as *const c_void;
-        let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let x_ptr = args.x.data().as_raw().0 as *const c_void;
+        let dx_ptr = args.dx.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         let p0 = self.desc.params[0];
         let p1 = self.desc.params[1];
@@ -337,10 +337,10 @@ impl<T: Element, const N: usize> UnaryParamBackwardPlan<T, N> {
         p0: f32,
         p1: f32,
     ) -> Result<()> {
-        let shape = args.dx.shape;
-        let stride_x = args.x.stride;
-        let stride_dy = args.dy.stride;
-        let stride_dx = args.dx.stride;
+        let shape = args.dx.shape();
+        let stride_x = args.x.stride();
+        let stride_dy = args.dy.stride();
+        let stride_dx = args.dx.stride();
         let rank = N as i32;
 
         let status = match (self.desc.kind, T::KIND) {

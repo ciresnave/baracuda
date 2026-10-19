@@ -98,16 +98,13 @@ fn run_batched_qr_f32(
     let a_shape = [b, m, n];
     let tau_shape = [b, k];
     let args = BatchedQrArgs::<f32> {
-        a: TensorMut {
-            data: dev_a.as_slice_mut(),
-            shape: a_shape,
-            stride: contiguous_stride(a_shape),
-        },
-        tau: TensorMut {
-            data: dev_tau.as_slice_mut(),
-            shape: tau_shape,
-            stride: contiguous_stride(tau_shape),
-        },
+        a: TensorMut::new(dev_a.as_slice_mut(), a_shape, contiguous_stride(a_shape)).unwrap(),
+        tau: TensorMut::new(
+            dev_tau.as_slice_mut(),
+            tau_shape,
+            contiguous_stride(tau_shape),
+        )
+        .unwrap(),
     };
     plan.run(stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
         .expect("run batched QR f32");
@@ -142,16 +139,13 @@ fn run_batched_qr_f64(
     let ws_bytes = plan.query_workspace_size(stream).expect("ws query");
     let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(ctx, ws_bytes).expect("alloc ws");
     let args = BatchedQrArgs::<f64> {
-        a: TensorMut {
-            data: dev_a.as_slice_mut(),
-            shape: [b, m, n],
-            stride: contiguous_stride([b, m, n]),
-        },
-        tau: TensorMut {
-            data: dev_tau.as_slice_mut(),
-            shape: [b, k],
-            stride: contiguous_stride([b, k]),
-        },
+        a: TensorMut::new(
+            dev_a.as_slice_mut(),
+            [b, m, n],
+            contiguous_stride([b, m, n]),
+        )
+        .unwrap(),
+        tau: TensorMut::new(dev_tau.as_slice_mut(), [b, k], contiguous_stride([b, k])).unwrap(),
     };
     plan.run(stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
         .expect("run batched QR f64");
@@ -410,21 +404,9 @@ fn bespoke_ormqr_f32(
     let tau_shape = [b, k];
     let c_shape = [b, m, n];
     let args = BatchedOrmqrArgs::<f32> {
-        a_packed: TensorRef {
-            data: dev_a.as_slice(),
-            shape: a_shape,
-            stride: contiguous_stride(a_shape),
-        },
-        tau: TensorRef {
-            data: dev_tau.as_slice(),
-            shape: tau_shape,
-            stride: contiguous_stride(tau_shape),
-        },
-        c: TensorMut {
-            data: dev_c.as_slice_mut(),
-            shape: c_shape,
-            stride: contiguous_stride(c_shape),
-        },
+        a_packed: TensorRef::new(dev_a.as_slice(), a_shape, contiguous_stride(a_shape)).unwrap(),
+        tau: TensorRef::new(dev_tau.as_slice(), tau_shape, contiguous_stride(tau_shape)).unwrap(),
+        c: TensorMut::new(dev_c.as_slice_mut(), c_shape, contiguous_stride(c_shape)).unwrap(),
     };
     plan.run(stream, Workspace::None, args)
         .expect("run bespoke batched ormqr f32");
@@ -470,21 +452,9 @@ fn bespoke_ormqr_f64(
     let tau_shape = [b, k];
     let c_shape = [b, m, n];
     let args = BatchedOrmqrArgs::<f64> {
-        a_packed: TensorRef {
-            data: dev_a.as_slice(),
-            shape: a_shape,
-            stride: contiguous_stride(a_shape),
-        },
-        tau: TensorRef {
-            data: dev_tau.as_slice(),
-            shape: tau_shape,
-            stride: contiguous_stride(tau_shape),
-        },
-        c: TensorMut {
-            data: dev_c.as_slice_mut(),
-            shape: c_shape,
-            stride: contiguous_stride(c_shape),
-        },
+        a_packed: TensorRef::new(dev_a.as_slice(), a_shape, contiguous_stride(a_shape)).unwrap(),
+        tau: TensorRef::new(dev_tau.as_slice(), tau_shape, contiguous_stride(tau_shape)).unwrap(),
+        c: TensorMut::new(dev_c.as_slice_mut(), c_shape, contiguous_stride(c_shape)).unwrap(),
     };
     plan.run(stream, Workspace::None, args)
         .expect("run bespoke batched ormqr f64");
@@ -1033,21 +1003,14 @@ fn bespoke_ormqr_complex32(
         BatchedOrmqrSide::Right => [b, n, n],
     };
     let args = BatchedOrmqrArgs::<Complex64> {
-        a_packed: TensorRef {
-            data: dev_a.as_slice(),
-            shape: a_shape,
-            stride: contiguous_stride(a_shape),
-        },
-        tau: TensorRef {
-            data: dev_tau.as_slice(),
-            shape: [b, k],
-            stride: contiguous_stride([b, k]),
-        },
-        c: TensorMut {
-            data: dev_c.as_slice_mut(),
-            shape: [b, m, n],
-            stride: contiguous_stride([b, m, n]),
-        },
+        a_packed: TensorRef::new(dev_a.as_slice(), a_shape, contiguous_stride(a_shape)).unwrap(),
+        tau: TensorRef::new(dev_tau.as_slice(), [b, k], contiguous_stride([b, k])).unwrap(),
+        c: TensorMut::new(
+            dev_c.as_slice_mut(),
+            [b, m, n],
+            contiguous_stride([b, m, n]),
+        )
+        .unwrap(),
     };
     plan.run(stream, Workspace::None, args)
         .expect("run bespoke batched unmqr complex32");
@@ -1090,21 +1053,14 @@ fn bespoke_ormqr_complex64(
         BatchedOrmqrSide::Right => [b, n, n],
     };
     let args = BatchedOrmqrArgs::<Complex128> {
-        a_packed: TensorRef {
-            data: dev_a.as_slice(),
-            shape: a_shape,
-            stride: contiguous_stride(a_shape),
-        },
-        tau: TensorRef {
-            data: dev_tau.as_slice(),
-            shape: [b, k],
-            stride: contiguous_stride([b, k]),
-        },
-        c: TensorMut {
-            data: dev_c.as_slice_mut(),
-            shape: [b, m, n],
-            stride: contiguous_stride([b, m, n]),
-        },
+        a_packed: TensorRef::new(dev_a.as_slice(), a_shape, contiguous_stride(a_shape)).unwrap(),
+        tau: TensorRef::new(dev_tau.as_slice(), [b, k], contiguous_stride([b, k])).unwrap(),
+        c: TensorMut::new(
+            dev_c.as_slice_mut(),
+            [b, m, n],
+            contiguous_stride([b, m, n]),
+        )
+        .unwrap(),
     };
     plan.run(stream, Workspace::None, args)
         .expect("run bespoke batched unmqr complex64");

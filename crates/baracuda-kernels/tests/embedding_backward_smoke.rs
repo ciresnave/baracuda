@@ -52,21 +52,24 @@ fn embedding_backward_f32_duplicate_indices() {
     let plan = EmbeddingBackwardPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = EmbeddingBackwardArgs::<f32> {
-        dout: TensorRef {
-            data: dev_dout.as_slice(),
-            shape: [n as i32, d as i32],
-            stride: contiguous_stride([n as i32, d as i32]),
-        },
-        indices: TensorRef {
-            data: dev_idx.as_slice(),
-            shape: [n as i32],
-            stride: contiguous_stride([n as i32]),
-        },
-        dweight: TensorMut {
-            data: dev_dw.as_slice_mut(),
-            shape: [v as i32, d as i32],
-            stride: contiguous_stride([v as i32, d as i32]),
-        },
+        dout: TensorRef::new(
+            dev_dout.as_slice(),
+            [n as i32, d as i32],
+            contiguous_stride([n as i32, d as i32]),
+        )
+        .unwrap(),
+        indices: TensorRef::new(
+            dev_idx.as_slice(),
+            [n as i32],
+            contiguous_stride([n as i32]),
+        )
+        .unwrap(),
+        dweight: TensorMut::new(
+            dev_dw.as_slice_mut(),
+            [v as i32, d as i32],
+            contiguous_stride([v as i32, d as i32]),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -116,21 +119,24 @@ fn embedding_backward_f32_padding_idx_skipped() {
     let plan = EmbeddingBackwardPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = EmbeddingBackwardArgs::<f32> {
-        dout: TensorRef {
-            data: dev_dout.as_slice(),
-            shape: [n as i32, d as i32],
-            stride: contiguous_stride([n as i32, d as i32]),
-        },
-        indices: TensorRef {
-            data: dev_idx.as_slice(),
-            shape: [n as i32],
-            stride: contiguous_stride([n as i32]),
-        },
-        dweight: TensorMut {
-            data: dev_dw.as_slice_mut(),
-            shape: [v as i32, d as i32],
-            stride: contiguous_stride([v as i32, d as i32]),
-        },
+        dout: TensorRef::new(
+            dev_dout.as_slice(),
+            [n as i32, d as i32],
+            contiguous_stride([n as i32, d as i32]),
+        )
+        .unwrap(),
+        indices: TensorRef::new(
+            dev_idx.as_slice(),
+            [n as i32],
+            contiguous_stride([n as i32]),
+        )
+        .unwrap(),
+        dweight: TensorMut::new(
+            dev_dw.as_slice_mut(),
+            [v as i32, d as i32],
+            contiguous_stride([v as i32, d as i32]),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -186,21 +192,24 @@ fn embedding_backward_f64_basic() {
     let plan = EmbeddingBackwardPlan::<f64>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = EmbeddingBackwardArgs::<f64> {
-        dout: TensorRef {
-            data: dev_dout.as_slice(),
-            shape: [n as i32, d as i32],
-            stride: contiguous_stride([n as i32, d as i32]),
-        },
-        indices: TensorRef {
-            data: dev_idx.as_slice(),
-            shape: [n as i32],
-            stride: contiguous_stride([n as i32]),
-        },
-        dweight: TensorMut {
-            data: dev_dw.as_slice_mut(),
-            shape: [v as i32, d as i32],
-            stride: contiguous_stride([v as i32, d as i32]),
-        },
+        dout: TensorRef::new(
+            dev_dout.as_slice(),
+            [n as i32, d as i32],
+            contiguous_stride([n as i32, d as i32]),
+        )
+        .unwrap(),
+        indices: TensorRef::new(
+            dev_idx.as_slice(),
+            [n as i32],
+            contiguous_stride([n as i32]),
+        )
+        .unwrap(),
+        dweight: TensorMut::new(
+            dev_dw.as_slice_mut(),
+            [v as i32, d as i32],
+            contiguous_stride([v as i32, d as i32]),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

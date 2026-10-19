@@ -143,25 +143,25 @@ impl<T: Element, const N: usize> GumbelSoftmaxBackwardPlan<T, N> {
         crate::view_check::check_fits(&args.dy)?;
         crate::view_check::check_fits(&args.y)?;
         crate::view_check::check_fits(&args.dx)?;
-        if args.dy.shape != self.desc.input_shape {
+        if args.dy.shape() != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::GumbelSoftmaxBackwardPlan: dy shape mismatch",
             ));
         }
-        if args.y.shape != self.desc.input_shape {
+        if args.y.shape() != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::GumbelSoftmaxBackwardPlan: y shape mismatch",
             ));
         }
-        if args.dx.shape != self.desc.input_shape {
+        if args.dx.shape() != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::GumbelSoftmaxBackwardPlan: dx shape mismatch",
             ));
         }
         let numel = args.dx.numel();
-        let dy_len = args.dy.data.len() as i64;
-        let y_len = args.y.data.len() as i64;
-        let dx_len = args.dx.data.len() as i64;
+        let dy_len = args.dy.data().len() as i64;
+        let y_len = args.y.data().len() as i64;
+        let dx_len = args.dx.data().len() as i64;
         if dy_len < numel || y_len < numel || dx_len < numel {
             return Err(Error::BufferTooSmall {
                 needed: numel as usize,
@@ -217,16 +217,16 @@ impl<T: Element, const N: usize> GumbelSoftmaxBackwardPlan<T, N> {
         if numel == 0 {
             return Ok(());
         }
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let y_ptr = args.y.data.as_raw().0 as *const c_void;
-        let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let y_ptr = args.y.data().as_raw().0 as *const c_void;
+        let dx_ptr = args.dx.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
         let axis = self.desc.softmax_axis as usize;
         let shape = self.desc.input_shape;
-        let stride_dy = args.dy.stride;
-        let stride_y = args.y.stride;
-        let stride_dx = args.dx.stride;
+        let stride_dy = args.dy.stride();
+        let stride_y = args.y.stride();
+        let stride_dx = args.dx.stride();
         let rank = N as i32;
         let extent = shape[axis];
         let stride_dy_axis = stride_dy[axis];

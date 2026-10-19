@@ -51,31 +51,11 @@ fn hypot_backward_f32() {
         &stream,
         Workspace::None,
         BinaryBackwardArgs {
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape,
-                stride,
-            },
-            a: Some(TensorRef {
-                data: dev_a.as_slice(),
-                shape,
-                stride,
-            }),
-            b: Some(TensorRef {
-                data: dev_b.as_slice(),
-                shape,
-                stride,
-            }),
-            da: TensorMut {
-                data: dev_da.as_slice_mut(),
-                shape,
-                stride,
-            },
-            db: TensorMut {
-                data: dev_db.as_slice_mut(),
-                shape,
-                stride,
-            },
+            dy: TensorRef::new(dev_dy.as_slice(), shape, stride).unwrap(),
+            a: Some(TensorRef::new(dev_a.as_slice(), shape, stride).unwrap()),
+            b: Some(TensorRef::new(dev_b.as_slice(), shape, stride).unwrap()),
+            da: TensorMut::new(dev_da.as_slice_mut(), shape, stride).unwrap(),
+            db: TensorMut::new(dev_db.as_slice_mut(), shape, stride).unwrap(),
         },
     )
     .expect("run");
@@ -135,31 +115,11 @@ fn hypot_backward_f64() {
         &stream,
         Workspace::None,
         BinaryBackwardArgs {
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape,
-                stride,
-            },
-            a: Some(TensorRef {
-                data: dev_a.as_slice(),
-                shape,
-                stride,
-            }),
-            b: Some(TensorRef {
-                data: dev_b.as_slice(),
-                shape,
-                stride,
-            }),
-            da: TensorMut {
-                data: dev_da.as_slice_mut(),
-                shape,
-                stride,
-            },
-            db: TensorMut {
-                data: dev_db.as_slice_mut(),
-                shape,
-                stride,
-            },
+            dy: TensorRef::new(dev_dy.as_slice(), shape, stride).unwrap(),
+            a: Some(TensorRef::new(dev_a.as_slice(), shape, stride).unwrap()),
+            b: Some(TensorRef::new(dev_b.as_slice(), shape, stride).unwrap()),
+            da: TensorMut::new(dev_da.as_slice_mut(), shape, stride).unwrap(),
+            db: TensorMut::new(dev_db.as_slice_mut(), shape, stride).unwrap(),
         },
     )
     .expect("run");
@@ -221,31 +181,11 @@ fn hypot_backward_f16() {
         &stream,
         Workspace::None,
         BinaryBackwardArgs {
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape,
-                stride,
-            },
-            a: Some(TensorRef {
-                data: dev_a.as_slice(),
-                shape,
-                stride,
-            }),
-            b: Some(TensorRef {
-                data: dev_b.as_slice(),
-                shape,
-                stride,
-            }),
-            da: TensorMut {
-                data: dev_da.as_slice_mut(),
-                shape,
-                stride,
-            },
-            db: TensorMut {
-                data: dev_db.as_slice_mut(),
-                shape,
-                stride,
-            },
+            dy: TensorRef::new(dev_dy.as_slice(), shape, stride).unwrap(),
+            a: Some(TensorRef::new(dev_a.as_slice(), shape, stride).unwrap()),
+            b: Some(TensorRef::new(dev_b.as_slice(), shape, stride).unwrap()),
+            da: TensorMut::new(dev_da.as_slice_mut(), shape, stride).unwrap(),
+            db: TensorMut::new(dev_db.as_slice_mut(), shape, stride).unwrap(),
         },
     )
     .expect("run");
@@ -315,31 +255,11 @@ fn hypot_backward_bf16() {
         &stream,
         Workspace::None,
         BinaryBackwardArgs {
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape,
-                stride,
-            },
-            a: Some(TensorRef {
-                data: dev_a.as_slice(),
-                shape,
-                stride,
-            }),
-            b: Some(TensorRef {
-                data: dev_b.as_slice(),
-                shape,
-                stride,
-            }),
-            da: TensorMut {
-                data: dev_da.as_slice_mut(),
-                shape,
-                stride,
-            },
-            db: TensorMut {
-                data: dev_db.as_slice_mut(),
-                shape,
-                stride,
-            },
+            dy: TensorRef::new(dev_dy.as_slice(), shape, stride).unwrap(),
+            a: Some(TensorRef::new(dev_a.as_slice(), shape, stride).unwrap()),
+            b: Some(TensorRef::new(dev_b.as_slice(), shape, stride).unwrap()),
+            da: TensorMut::new(dev_da.as_slice_mut(), shape, stride).unwrap(),
+            db: TensorMut::new(dev_db.as_slice_mut(), shape, stride).unwrap(),
         },
     )
     .expect("run");

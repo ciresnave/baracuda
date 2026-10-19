@@ -143,9 +143,9 @@ impl<TIn: Element, TOut: IntElement> QuantizePerTensorBackwardPlan<TIn, TOut> {
         crate::view_check::check_fits(&args.d_output)?;
         crate::view_check::check_fits(&args.d_input)?;
         let expected = [self.desc.numel];
-        if args.input.shape != expected
-            || args.d_output.shape != expected
-            || args.d_input.shape != expected
+        if args.input.shape() != expected
+            || args.d_output.shape() != expected
+            || args.d_input.shape() != expected
         {
             return Err(Error::InvalidProblem(
                 "QuantizePerTensorBackwardPlan: tensor shape != [numel]",
@@ -184,9 +184,9 @@ impl<TIn: Element, TOut: IntElement> QuantizePerTensorBackwardPlan<TIn, TOut> {
         if numel == 0 {
             return Ok(());
         }
-        let x_ptr = args.input.data.as_raw().0 as *const c_void;
-        let dy_ptr = args.d_output.data.as_raw().0 as *const c_void;
-        let dx_ptr = args.d_input.data.as_raw().0 as *mut c_void;
+        let x_ptr = args.input.data().as_raw().0 as *const c_void;
+        let dy_ptr = args.d_output.data().as_raw().0 as *const c_void;
+        let dx_ptr = args.d_input.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         let zp = args.zero_point;
         let qmin = self.desc.q_min;

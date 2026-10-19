@@ -127,31 +127,35 @@ fn svda_batched_f32_full_rank_reconstruct() {
 
     let mut residuals = vec![0f64; b as usize];
     let args = BatchedSvdaArgs::<f32> {
-        a: TensorMut {
-            data: dev_a.as_slice_mut(),
-            shape: [b, m, n],
-            stride: contiguous_stride([b, m, n]),
-        },
-        s: TensorMut {
-            data: dev_s.as_slice_mut(),
-            shape: [b, rank],
-            stride: contiguous_stride([b, rank]),
-        },
-        u: Some(TensorMut {
-            data: dev_u.as_slice_mut(),
-            shape: [b, m, rank],
-            stride: contiguous_stride([b, m, rank]),
-        }),
-        v: Some(TensorMut {
-            data: dev_v.as_slice_mut(),
-            shape: [b, n, rank],
-            stride: contiguous_stride([b, n, rank]),
-        }),
-        info: TensorMut {
-            data: dev_info.as_slice_mut(),
-            shape: [b],
-            stride: [1],
-        },
+        a: TensorMut::new(
+            dev_a.as_slice_mut(),
+            [b, m, n],
+            contiguous_stride([b, m, n]),
+        )
+        .unwrap(),
+        s: TensorMut::new(
+            dev_s.as_slice_mut(),
+            [b, rank],
+            contiguous_stride([b, rank]),
+        )
+        .unwrap(),
+        u: Some(
+            TensorMut::new(
+                dev_u.as_slice_mut(),
+                [b, m, rank],
+                contiguous_stride([b, m, rank]),
+            )
+            .unwrap(),
+        ),
+        v: Some(
+            TensorMut::new(
+                dev_v.as_slice_mut(),
+                [b, n, rank],
+                contiguous_stride([b, n, rank]),
+            )
+            .unwrap(),
+        ),
+        info: TensorMut::new(dev_info.as_slice_mut(), [b], [1]).unwrap(),
         residuals: Some(&mut residuals),
     };
     plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
@@ -262,31 +266,35 @@ fn svda_batched_f64_full_rank_reconstruct() {
     let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_bytes).expect("alloc ws");
 
     let args = BatchedSvdaArgs::<f64> {
-        a: TensorMut {
-            data: dev_a.as_slice_mut(),
-            shape: [b, m, n],
-            stride: contiguous_stride([b, m, n]),
-        },
-        s: TensorMut {
-            data: dev_s.as_slice_mut(),
-            shape: [b, rank],
-            stride: contiguous_stride([b, rank]),
-        },
-        u: Some(TensorMut {
-            data: dev_u.as_slice_mut(),
-            shape: [b, m, rank],
-            stride: contiguous_stride([b, m, rank]),
-        }),
-        v: Some(TensorMut {
-            data: dev_v.as_slice_mut(),
-            shape: [b, n, rank],
-            stride: contiguous_stride([b, n, rank]),
-        }),
-        info: TensorMut {
-            data: dev_info.as_slice_mut(),
-            shape: [b],
-            stride: [1],
-        },
+        a: TensorMut::new(
+            dev_a.as_slice_mut(),
+            [b, m, n],
+            contiguous_stride([b, m, n]),
+        )
+        .unwrap(),
+        s: TensorMut::new(
+            dev_s.as_slice_mut(),
+            [b, rank],
+            contiguous_stride([b, rank]),
+        )
+        .unwrap(),
+        u: Some(
+            TensorMut::new(
+                dev_u.as_slice_mut(),
+                [b, m, rank],
+                contiguous_stride([b, m, rank]),
+            )
+            .unwrap(),
+        ),
+        v: Some(
+            TensorMut::new(
+                dev_v.as_slice_mut(),
+                [b, n, rank],
+                contiguous_stride([b, n, rank]),
+            )
+            .unwrap(),
+        ),
+        info: TensorMut::new(dev_info.as_slice_mut(), [b], [1]).unwrap(),
         // Exercise the residuals=None scratch-alloc path.
         residuals: None,
     };
@@ -390,31 +398,35 @@ fn svda_batched_f32_truncated_rank_singular_values() {
     let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_bytes).expect("alloc ws");
 
     let args = BatchedSvdaArgs::<f32> {
-        a: TensorMut {
-            data: dev_a.as_slice_mut(),
-            shape: [b, m, n],
-            stride: contiguous_stride([b, m, n]),
-        },
-        s: TensorMut {
-            data: dev_s.as_slice_mut(),
-            shape: [b, rank],
-            stride: contiguous_stride([b, rank]),
-        },
-        u: Some(TensorMut {
-            data: dev_u.as_slice_mut(),
-            shape: [b, m, rank],
-            stride: contiguous_stride([b, m, rank]),
-        }),
-        v: Some(TensorMut {
-            data: dev_v.as_slice_mut(),
-            shape: [b, n, rank],
-            stride: contiguous_stride([b, n, rank]),
-        }),
-        info: TensorMut {
-            data: dev_info.as_slice_mut(),
-            shape: [b],
-            stride: [1],
-        },
+        a: TensorMut::new(
+            dev_a.as_slice_mut(),
+            [b, m, n],
+            contiguous_stride([b, m, n]),
+        )
+        .unwrap(),
+        s: TensorMut::new(
+            dev_s.as_slice_mut(),
+            [b, rank],
+            contiguous_stride([b, rank]),
+        )
+        .unwrap(),
+        u: Some(
+            TensorMut::new(
+                dev_u.as_slice_mut(),
+                [b, m, rank],
+                contiguous_stride([b, m, rank]),
+            )
+            .unwrap(),
+        ),
+        v: Some(
+            TensorMut::new(
+                dev_v.as_slice_mut(),
+                [b, n, rank],
+                contiguous_stride([b, n, rank]),
+            )
+            .unwrap(),
+        ),
+        info: TensorMut::new(dev_info.as_slice_mut(), [b], [1]).unwrap(),
         residuals: None,
     };
     plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)

@@ -91,32 +91,16 @@ mod cudnn_impl {
 
             warmup(&stream, || {
                 let args = Pool2dFwArgs::<T> {
-                    x: TensorRef {
-                        data: dev_x.as_slice(),
-                        shape: x_shape,
-                        stride: stx,
-                    },
-                    y: TensorMut {
-                        data: dev_y.as_slice_mut(),
-                        shape: y_shape,
-                        stride: sty,
-                    },
+                    x: TensorRef::new(dev_x.as_slice(), x_shape, stx).unwrap(),
+                    y: TensorMut::new(dev_y.as_slice_mut(), y_shape, sty).unwrap(),
                 };
                 plan.run_fw(&stream, Workspace::None, args)
                     .expect("baracuda maxpool");
             });
             let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 50, || {
                 let args = Pool2dFwArgs::<T> {
-                    x: TensorRef {
-                        data: dev_x.as_slice(),
-                        shape: x_shape,
-                        stride: stx,
-                    },
-                    y: TensorMut {
-                        data: dev_y.as_slice_mut(),
-                        shape: y_shape,
-                        stride: sty,
-                    },
+                    x: TensorRef::new(dev_x.as_slice(), x_shape, stx).unwrap(),
+                    y: TensorMut::new(dev_y.as_slice_mut(), y_shape, sty).unwrap(),
                 };
                 plan.run_fw(&stream, Workspace::None, args)
                     .expect("baracuda maxpool");
@@ -137,16 +121,8 @@ mod cudnn_impl {
                 bb.iter_custom(|iters| {
                     time_with_events(&ctx, &stream, iters, || {
                         let args = Pool2dFwArgs::<T> {
-                            x: TensorRef {
-                                data: dev_x.as_slice(),
-                                shape: x_shape,
-                                stride: stx,
-                            },
-                            y: TensorMut {
-                                data: dev_y.as_slice_mut(),
-                                shape: y_shape,
-                                stride: sty,
-                            },
+                            x: TensorRef::new(dev_x.as_slice(), x_shape, stx).unwrap(),
+                            y: TensorMut::new(dev_y.as_slice_mut(), y_shape, sty).unwrap(),
                         };
                         plan.run_fw(&stream, Workspace::None, args)
                             .expect("baracuda maxpool");
@@ -304,32 +280,16 @@ mod cudnn_impl {
 
             warmup(&stream, || {
                 let args = Pool2dFwArgs::<T> {
-                    x: TensorRef {
-                        data: dev_x.as_slice(),
-                        shape: x_shape,
-                        stride: stx,
-                    },
-                    y: TensorMut {
-                        data: dev_y.as_slice_mut(),
-                        shape: y_shape,
-                        stride: sty,
-                    },
+                    x: TensorRef::new(dev_x.as_slice(), x_shape, stx).unwrap(),
+                    y: TensorMut::new(dev_y.as_slice_mut(), y_shape, sty).unwrap(),
                 };
                 plan.run_fw(&stream, Workspace::None, args)
                     .expect("baracuda avgpool");
             });
             let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 50, || {
                 let args = Pool2dFwArgs::<T> {
-                    x: TensorRef {
-                        data: dev_x.as_slice(),
-                        shape: x_shape,
-                        stride: stx,
-                    },
-                    y: TensorMut {
-                        data: dev_y.as_slice_mut(),
-                        shape: y_shape,
-                        stride: sty,
-                    },
+                    x: TensorRef::new(dev_x.as_slice(), x_shape, stx).unwrap(),
+                    y: TensorMut::new(dev_y.as_slice_mut(), y_shape, sty).unwrap(),
                 };
                 plan.run_fw(&stream, Workspace::None, args)
                     .expect("baracuda avgpool");
@@ -350,16 +310,8 @@ mod cudnn_impl {
                 bb.iter_custom(|iters| {
                     time_with_events(&ctx, &stream, iters, || {
                         let args = Pool2dFwArgs::<T> {
-                            x: TensorRef {
-                                data: dev_x.as_slice(),
-                                shape: x_shape,
-                                stride: stx,
-                            },
-                            y: TensorMut {
-                                data: dev_y.as_slice_mut(),
-                                shape: y_shape,
-                                stride: sty,
-                            },
+                            x: TensorRef::new(dev_x.as_slice(), x_shape, stx).unwrap(),
+                            y: TensorMut::new(dev_y.as_slice_mut(), y_shape, sty).unwrap(),
                         };
                         plan.run_fw(&stream, Workspace::None, args)
                             .expect("baracuda avgpool");

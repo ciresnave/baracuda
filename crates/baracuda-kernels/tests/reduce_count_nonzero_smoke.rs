@@ -63,16 +63,18 @@ where
     let plan = CountReducePlan::<T, 2>::select(stream, &desc, PlanPreference::default())
         .expect("select CountNonzero");
     let args = CountReduceArgs::<T, 2> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: output_shape,
-            stride: contiguous_stride(output_shape),
-        },
+        x: TensorRef::new(
+            dev_x.as_slice(),
+            input_shape,
+            contiguous_stride(input_shape),
+        )
+        .unwrap(),
+        y: TensorMut::new(
+            dev_y.as_slice_mut(),
+            output_shape,
+            contiguous_stride(output_shape),
+        )
+        .unwrap(),
     };
     plan.run(stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

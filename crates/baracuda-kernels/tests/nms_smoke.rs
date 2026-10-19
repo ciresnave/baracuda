@@ -41,21 +41,19 @@ fn nms_basic_overlap_f32() {
         &stream,
         Workspace::None,
         NmsArgs {
-            boxes: TensorRef {
-                data: dev_boxes.as_slice(),
-                shape: [num_boxes, 4],
-                stride: contiguous_stride([num_boxes, 4]),
-            },
-            keep_mask: TensorMut {
-                data: dev_mask.as_slice_mut(),
-                shape: [num_boxes],
-                stride: contiguous_stride([num_boxes]),
-            },
-            count: TensorMut {
-                data: dev_count.as_slice_mut(),
-                shape: [1],
-                stride: contiguous_stride([1]),
-            },
+            boxes: TensorRef::new(
+                dev_boxes.as_slice(),
+                [num_boxes, 4],
+                contiguous_stride([num_boxes, 4]),
+            )
+            .unwrap(),
+            keep_mask: TensorMut::new(
+                dev_mask.as_slice_mut(),
+                [num_boxes],
+                contiguous_stride([num_boxes]),
+            )
+            .unwrap(),
+            count: TensorMut::new(dev_count.as_slice_mut(), [1], contiguous_stride([1])).unwrap(),
         },
     )
     .expect("");
@@ -88,21 +86,19 @@ fn nms_all_disjoint_f64() {
         &stream,
         Workspace::None,
         NmsArgs {
-            boxes: TensorRef {
-                data: dev_boxes.as_slice(),
-                shape: [num_boxes, 4],
-                stride: contiguous_stride([num_boxes, 4]),
-            },
-            keep_mask: TensorMut {
-                data: dev_mask.as_slice_mut(),
-                shape: [num_boxes],
-                stride: contiguous_stride([num_boxes]),
-            },
-            count: TensorMut {
-                data: dev_count.as_slice_mut(),
-                shape: [1],
-                stride: contiguous_stride([1]),
-            },
+            boxes: TensorRef::new(
+                dev_boxes.as_slice(),
+                [num_boxes, 4],
+                contiguous_stride([num_boxes, 4]),
+            )
+            .unwrap(),
+            keep_mask: TensorMut::new(
+                dev_mask.as_slice_mut(),
+                [num_boxes],
+                contiguous_stride([num_boxes]),
+            )
+            .unwrap(),
+            count: TensorMut::new(dev_count.as_slice_mut(), [1], contiguous_stride([1])).unwrap(),
         },
     )
     .expect("");

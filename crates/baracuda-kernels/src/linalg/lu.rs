@@ -223,27 +223,27 @@ impl<T: Element> LuPlan<T> {
 
     fn check_args(&self, args: &LuArgs<'_, T>) -> Result<()> {
         let exp_a = [self.desc.batch_size, self.desc.m, self.desc.n];
-        if args.a.shape != exp_a {
+        if args.a.shape() != exp_a {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::LuPlan: A shape != [batch, M, N]",
             ));
         }
         let k = self.desc.m.min(self.desc.n);
-        if args.pivot.shape != [self.desc.batch_size, k] {
+        if args.pivot.shape() != [self.desc.batch_size, k] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::LuPlan: pivot shape != [batch, min(M, N)]",
             ));
         }
-        if args.info.shape != [self.desc.batch_size] {
+        if args.info.shape() != [self.desc.batch_size] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::LuPlan: info shape != [batch]",
             ));
         }
         let needed_a = (self.desc.batch_size as i64) * (self.desc.m as i64) * (self.desc.n as i64);
-        if (args.a.data.len() as i64) < needed_a {
+        if (args.a.data().len() as i64) < needed_a {
             return Err(Error::BufferTooSmall {
                 needed: needed_a as usize,
-                got: args.a.data.len(),
+                got: args.a.data().len(),
             });
         }
         Ok(())
@@ -266,9 +266,9 @@ impl LuPlan<f32> {
         self.check_args(&args)?;
         let h = self.ensure_handle()?;
         self.bind_stream(h, stream)?;
-        let a_ptr = args.a.data.as_raw().0 as *mut f32;
-        let pivot_ptr = args.pivot.data.as_raw().0 as *mut i32;
-        let info_ptr = args.info.data.as_raw().0 as *mut i32;
+        let a_ptr = args.a.data().as_raw().0 as *mut f32;
+        let pivot_ptr = args.pivot.data().as_raw().0 as *mut i32;
+        let info_ptr = args.info.data().as_raw().0 as *mut i32;
         let m = self.desc.m;
         let n = self.desc.n;
 
@@ -303,9 +303,9 @@ impl LuPlan<f64> {
         self.check_args(&args)?;
         let h = self.ensure_handle()?;
         self.bind_stream(h, stream)?;
-        let a_ptr = args.a.data.as_raw().0 as *mut f64;
-        let pivot_ptr = args.pivot.data.as_raw().0 as *mut i32;
-        let info_ptr = args.info.data.as_raw().0 as *mut i32;
+        let a_ptr = args.a.data().as_raw().0 as *mut f64;
+        let pivot_ptr = args.pivot.data().as_raw().0 as *mut i32;
+        let info_ptr = args.info.data().as_raw().0 as *mut i32;
         let m = self.desc.m;
         let n = self.desc.n;
 

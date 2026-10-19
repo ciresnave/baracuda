@@ -100,16 +100,13 @@ fn repeat_backward_f32_2d() {
     let plan = RepeatBackwardPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let args = RepeatBackwardArgs::<f32, 2> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape: dy_shape,
-            stride: contiguous_stride(dy_shape),
-        },
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), dy_shape, contiguous_stride(dy_shape)).unwrap(),
+        dx: TensorMut::new(
+            dev_dx.as_slice_mut(),
+            input_shape,
+            contiguous_stride(input_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -162,16 +159,13 @@ fn repeat_backward_f16_3d() {
     let plan = RepeatBackwardPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let args = RepeatBackwardArgs::<f16, 3> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape: dy_shape,
-            stride: contiguous_stride(dy_shape),
-        },
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), dy_shape, contiguous_stride(dy_shape)).unwrap(),
+        dx: TensorMut::new(
+            dev_dx.as_slice_mut(),
+            input_shape,
+            contiguous_stride(input_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -225,16 +219,13 @@ fn repeat_backward_bf16_2d() {
     let plan = RepeatBackwardPlan::<bf16, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let args = RepeatBackwardArgs::<bf16, 2> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape: dy_shape,
-            stride: contiguous_stride(dy_shape),
-        },
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), dy_shape, contiguous_stride(dy_shape)).unwrap(),
+        dx: TensorMut::new(
+            dev_dx.as_slice_mut(),
+            input_shape,
+            contiguous_stride(input_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -286,16 +277,13 @@ fn repeat_backward_f64_3d() {
     let plan = RepeatBackwardPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let args = RepeatBackwardArgs::<f64, 3> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape: dy_shape,
-            stride: contiguous_stride(dy_shape),
-        },
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), dy_shape, contiguous_stride(dy_shape)).unwrap(),
+        dx: TensorMut::new(
+            dev_dx.as_slice_mut(),
+            input_shape,
+            contiguous_stride(input_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

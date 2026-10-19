@@ -281,28 +281,28 @@ impl<T: Element> InterpolatePlan<T> {
     pub fn can_implement(&self, args: &InterpolateArgs<'_, T>) -> Result<()> {
         crate::view_check::check_fits(&args.input)?;
         crate::view_check::check_fits(&args.output)?;
-        if args.input.shape != [self.desc.n, self.desc.c, self.desc.ih, self.desc.iw] {
+        if args.input.shape() != [self.desc.n, self.desc.c, self.desc.ih, self.desc.iw] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::InterpolatePlan: input shape mismatch",
             ));
         }
-        if args.output.shape != [self.desc.n, self.desc.c, self.desc.oh, self.desc.ow] {
+        if args.output.shape() != [self.desc.n, self.desc.c, self.desc.oh, self.desc.ow] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::InterpolatePlan: output shape mismatch",
             ));
         }
         let in_numel = args.input.numel();
         let out_numel = args.output.numel();
-        if (args.input.data.len() as i64) < in_numel {
+        if (args.input.data().len() as i64) < in_numel {
             return Err(Error::BufferTooSmall {
                 needed: in_numel as usize,
-                got: args.input.data.len(),
+                got: args.input.data().len(),
             });
         }
-        if (args.output.data.len() as i64) < out_numel {
+        if (args.output.data().len() as i64) < out_numel {
             return Err(Error::BufferTooSmall {
                 needed: out_numel as usize,
-                got: args.output.data.len(),
+                got: args.output.data().len(),
             });
         }
         Ok(())
@@ -337,8 +337,8 @@ impl<T: Element> InterpolatePlan<T> {
         if args.output.numel() == 0 {
             return Ok(());
         }
-        let input_ptr = args.input.data.as_raw().0 as *const c_void;
-        let output_ptr = args.output.data.as_raw().0 as *mut c_void;
+        let input_ptr = args.input.data().as_raw().0 as *const c_void;
+        let output_ptr = args.output.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         let ac: i32 = if self.desc.align_corners { 1 } else { 0 };
         // Sentinel: 0.0 = "derive from sizes" on the C side.

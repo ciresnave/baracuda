@@ -105,21 +105,9 @@ where
 
             warmup(&stream, || {
                 let args = GgufMmvqArgs::<T> {
-                    weight: TensorRef {
-                        data: dev_w.as_slice(),
-                        shape: w_shape,
-                        stride: stw,
-                    },
-                    activation: TensorRef {
-                        data: dev_act.as_slice(),
-                        shape: act_shape,
-                        stride: sta,
-                    },
-                    output: TensorMut {
-                        data: dev_out.as_slice_mut(),
-                        shape: out_shape,
-                        stride: sto,
-                    },
+                    weight: TensorRef::new(dev_w.as_slice(), w_shape, stw).unwrap(),
+                    activation: TensorRef::new(dev_act.as_slice(), act_shape, sta).unwrap(),
+                    output: TensorMut::new(dev_out.as_slice_mut(), out_shape, sto).unwrap(),
                 };
                 plan.run(&stream, Workspace::None, args)
                     .expect("mmvq warmup");
@@ -134,21 +122,9 @@ where
             );
             let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 100, || {
                 let args = GgufMmvqArgs::<T> {
-                    weight: TensorRef {
-                        data: dev_w.as_slice(),
-                        shape: w_shape,
-                        stride: stw,
-                    },
-                    activation: TensorRef {
-                        data: dev_act.as_slice(),
-                        shape: act_shape,
-                        stride: sta,
-                    },
-                    output: TensorMut {
-                        data: dev_out.as_slice_mut(),
-                        shape: out_shape,
-                        stride: sto,
-                    },
+                    weight: TensorRef::new(dev_w.as_slice(), w_shape, stw).unwrap(),
+                    activation: TensorRef::new(dev_act.as_slice(), act_shape, sta).unwrap(),
+                    output: TensorMut::new(dev_out.as_slice_mut(), out_shape, sto).unwrap(),
                 };
                 plan.run(&stream, Workspace::None, args).expect("mmvq run");
             });
@@ -169,21 +145,9 @@ where
                 bb.iter_custom(|iters| {
                     time_with_events(&ctx, &stream, iters, || {
                         let args = GgufMmvqArgs::<T> {
-                            weight: TensorRef {
-                                data: dev_w.as_slice(),
-                                shape: w_shape,
-                                stride: stw,
-                            },
-                            activation: TensorRef {
-                                data: dev_act.as_slice(),
-                                shape: act_shape,
-                                stride: sta,
-                            },
-                            output: TensorMut {
-                                data: dev_out.as_slice_mut(),
-                                shape: out_shape,
-                                stride: sto,
-                            },
+                            weight: TensorRef::new(dev_w.as_slice(), w_shape, stw).unwrap(),
+                            activation: TensorRef::new(dev_act.as_slice(), act_shape, sta).unwrap(),
+                            output: TensorMut::new(dev_out.as_slice_mut(), out_shape, sto).unwrap(),
                         };
                         plan.run(&stream, Workspace::None, args).expect("mmvq run");
                     })
@@ -293,21 +257,9 @@ fn bench_mmvq_multim_for(c: &mut Criterion, fmt: GgufBlockFormat) {
 
             warmup(&stream, || {
                 let args = GgufMmvqMultiMArgs::<f32> {
-                    weight: TensorRef {
-                        data: dev_w.as_slice(),
-                        shape: w_shape,
-                        stride: stw,
-                    },
-                    activations: TensorRef {
-                        data: dev_act.as_slice(),
-                        shape: act_shape,
-                        stride: sta,
-                    },
-                    output: TensorMut {
-                        data: dev_out.as_slice_mut(),
-                        shape: out_shape,
-                        stride: sto,
-                    },
+                    weight: TensorRef::new(dev_w.as_slice(), w_shape, stw).unwrap(),
+                    activations: TensorRef::new(dev_act.as_slice(), act_shape, sta).unwrap(),
+                    output: TensorMut::new(dev_out.as_slice_mut(), out_shape, sto).unwrap(),
                 };
                 plan_multim
                     .run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
@@ -323,21 +275,9 @@ fn bench_mmvq_multim_for(c: &mut Criterion, fmt: GgufBlockFormat) {
             );
             let multim_ns = measure_median_ns(&ctx, &stream, 11, 100, || {
                 let args = GgufMmvqMultiMArgs::<f32> {
-                    weight: TensorRef {
-                        data: dev_w.as_slice(),
-                        shape: w_shape,
-                        stride: stw,
-                    },
-                    activations: TensorRef {
-                        data: dev_act.as_slice(),
-                        shape: act_shape,
-                        stride: sta,
-                    },
-                    output: TensorMut {
-                        data: dev_out.as_slice_mut(),
-                        shape: out_shape,
-                        stride: sto,
-                    },
+                    weight: TensorRef::new(dev_w.as_slice(), w_shape, stw).unwrap(),
+                    activations: TensorRef::new(dev_act.as_slice(), act_shape, sta).unwrap(),
+                    output: TensorMut::new(dev_out.as_slice_mut(), out_shape, sto).unwrap(),
                 };
                 plan_multim
                     .run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
@@ -384,21 +324,9 @@ fn bench_mmvq_multim_for(c: &mut Criterion, fmt: GgufBlockFormat) {
                 // cost the multi-M path amortizes away.
                 for _mi in 0..(m as usize) {
                     let args = GgufMmvqArgs::<f32> {
-                        weight: TensorRef {
-                            data: dev_w.as_slice(),
-                            shape: w_shape,
-                            stride: stw,
-                        },
-                        activation: TensorRef {
-                            data: dev_act_1.as_slice(),
-                            shape: act1_shape,
-                            stride: sta1,
-                        },
-                        output: TensorMut {
-                            data: dev_out_1.as_slice_mut(),
-                            shape: out1_shape,
-                            stride: sto1,
-                        },
+                        weight: TensorRef::new(dev_w.as_slice(), w_shape, stw).unwrap(),
+                        activation: TensorRef::new(dev_act_1.as_slice(), act1_shape, sta1).unwrap(),
+                        output: TensorMut::new(dev_out_1.as_slice_mut(), out1_shape, sto1).unwrap(),
                     };
                     plan_baseline
                         .run(&stream, Workspace::None, args)
@@ -429,21 +357,10 @@ fn bench_mmvq_multim_for(c: &mut Criterion, fmt: GgufBlockFormat) {
                 bb.iter_custom(|iters| {
                     time_with_events(&ctx, &stream, iters, || {
                         let args = GgufMmvqMultiMArgs::<f32> {
-                            weight: TensorRef {
-                                data: dev_w.as_slice(),
-                                shape: w_shape,
-                                stride: stw,
-                            },
-                            activations: TensorRef {
-                                data: dev_act.as_slice(),
-                                shape: act_shape,
-                                stride: sta,
-                            },
-                            output: TensorMut {
-                                data: dev_out.as_slice_mut(),
-                                shape: out_shape,
-                                stride: sto,
-                            },
+                            weight: TensorRef::new(dev_w.as_slice(), w_shape, stw).unwrap(),
+                            activations: TensorRef::new(dev_act.as_slice(), act_shape, sta)
+                                .unwrap(),
+                            output: TensorMut::new(dev_out.as_slice_mut(), out_shape, sto).unwrap(),
                         };
                         plan_multim
                             .run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)

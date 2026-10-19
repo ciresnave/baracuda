@@ -178,17 +178,17 @@ impl<T: Element, const N: usize> MaskedFillPlan<T, N> {
         crate::view_check::check_fits(&args.src)?;
         crate::view_check::check_fits(&args.mask)?;
         crate::view_check::check_fits(&args.out)?;
-        if args.src.shape != self.desc.shape {
+        if args.src.shape() != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::MaskedFillPlan: src shape mismatch with descriptor",
             ));
         }
-        if args.mask.shape != self.desc.shape {
+        if args.mask.shape() != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::MaskedFillPlan: mask shape mismatch with descriptor",
             ));
         }
-        if args.out.shape != self.desc.shape {
+        if args.out.shape() != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::MaskedFillPlan: out shape mismatch with descriptor",
             ));
@@ -199,9 +199,9 @@ impl<T: Element, const N: usize> MaskedFillPlan<T, N> {
             ));
         }
         let numel = args.out.numel();
-        let src_len = args.src.data.len() as i64;
-        let mask_len = args.mask.data.len() as i64;
-        let out_len = args.out.data.len() as i64;
+        let src_len = args.src.data().len() as i64;
+        let mask_len = args.mask.data().len() as i64;
+        let out_len = args.out.data().len() as i64;
         if src_len < numel {
             return Err(Error::BufferTooSmall {
                 needed: numel as usize,
@@ -253,9 +253,9 @@ impl<T: Element, const N: usize> MaskedFillPlan<T, N> {
         if numel == 0 {
             return Ok(());
         }
-        let src_ptr = args.src.data.as_raw().0 as *const c_void;
-        let mask_ptr = args.mask.data.as_raw().0 as *const c_void;
-        let out_ptr = args.out.data.as_raw().0 as *mut c_void;
+        let src_ptr = args.src.data().as_raw().0 as *const c_void;
+        let mask_ptr = args.mask.data().as_raw().0 as *const c_void;
+        let out_ptr = args.out.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
         let status = match T::KIND {

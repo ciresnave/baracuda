@@ -87,31 +87,11 @@ fn minimum_backward_f32_3d() {
     let plan = BinaryBackwardPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = BinaryBackwardArgs::<f32, 3> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape,
-            stride,
-        },
-        a: Some(TensorRef {
-            data: dev_a.as_slice(),
-            shape,
-            stride,
-        }),
-        b: Some(TensorRef {
-            data: dev_b.as_slice(),
-            shape,
-            stride,
-        }),
-        da: TensorMut {
-            data: dev_da.as_slice_mut(),
-            shape,
-            stride,
-        },
-        db: TensorMut {
-            data: dev_db.as_slice_mut(),
-            shape,
-            stride,
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), shape, stride).unwrap(),
+        a: Some(TensorRef::new(dev_a.as_slice(), shape, stride).unwrap()),
+        b: Some(TensorRef::new(dev_b.as_slice(), shape, stride).unwrap()),
+        da: TensorMut::new(dev_da.as_slice_mut(), shape, stride).unwrap(),
+        db: TensorMut::new(dev_db.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -163,31 +143,11 @@ fn minimum_backward_f64_3d() {
     let plan = BinaryBackwardPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = BinaryBackwardArgs::<f64, 3> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape,
-            stride,
-        },
-        a: Some(TensorRef {
-            data: dev_a.as_slice(),
-            shape,
-            stride,
-        }),
-        b: Some(TensorRef {
-            data: dev_b.as_slice(),
-            shape,
-            stride,
-        }),
-        da: TensorMut {
-            data: dev_da.as_slice_mut(),
-            shape,
-            stride,
-        },
-        db: TensorMut {
-            data: dev_db.as_slice_mut(),
-            shape,
-            stride,
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), shape, stride).unwrap(),
+        a: Some(TensorRef::new(dev_a.as_slice(), shape, stride).unwrap()),
+        b: Some(TensorRef::new(dev_b.as_slice(), shape, stride).unwrap()),
+        da: TensorMut::new(dev_da.as_slice_mut(), shape, stride).unwrap(),
+        db: TensorMut::new(dev_db.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -251,31 +211,11 @@ fn minimum_backward_f16_3d() {
     let plan = BinaryBackwardPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = BinaryBackwardArgs::<f16, 3> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape,
-            stride,
-        },
-        a: Some(TensorRef {
-            data: dev_a.as_slice(),
-            shape,
-            stride,
-        }),
-        b: Some(TensorRef {
-            data: dev_b.as_slice(),
-            shape,
-            stride,
-        }),
-        da: TensorMut {
-            data: dev_da.as_slice_mut(),
-            shape,
-            stride,
-        },
-        db: TensorMut {
-            data: dev_db.as_slice_mut(),
-            shape,
-            stride,
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), shape, stride).unwrap(),
+        a: Some(TensorRef::new(dev_a.as_slice(), shape, stride).unwrap()),
+        b: Some(TensorRef::new(dev_b.as_slice(), shape, stride).unwrap()),
+        da: TensorMut::new(dev_da.as_slice_mut(), shape, stride).unwrap(),
+        db: TensorMut::new(dev_db.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -335,31 +275,11 @@ fn minimum_backward_bf16_3d() {
     let plan = BinaryBackwardPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = BinaryBackwardArgs::<bf16, 3> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape,
-            stride,
-        },
-        a: Some(TensorRef {
-            data: dev_a.as_slice(),
-            shape,
-            stride,
-        }),
-        b: Some(TensorRef {
-            data: dev_b.as_slice(),
-            shape,
-            stride,
-        }),
-        da: TensorMut {
-            data: dev_da.as_slice_mut(),
-            shape,
-            stride,
-        },
-        db: TensorMut {
-            data: dev_db.as_slice_mut(),
-            shape,
-            stride,
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), shape, stride).unwrap(),
+        a: Some(TensorRef::new(dev_a.as_slice(), shape, stride).unwrap()),
+        b: Some(TensorRef::new(dev_b.as_slice(), shape, stride).unwrap()),
+        da: TensorMut::new(dev_da.as_slice_mut(), shape, stride).unwrap(),
+        db: TensorMut::new(dev_db.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

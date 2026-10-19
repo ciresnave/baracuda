@@ -212,22 +212,22 @@ impl<T: Element> GemmSparse24Plan<T> {
         crate::view_check::check_fits(&args.w_metadata)?;
         crate::view_check::check_fits(&args.x)?;
         crate::view_check::check_fits(&args.y)?;
-        if args.w_compressed.shape != [self.desc.m, self.desc.k / 2] {
+        if args.w_compressed.shape() != [self.desc.m, self.desc.k / 2] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::GemmSparse24Plan: w_compressed shape must be [M, K/2]",
             ));
         }
-        if args.w_metadata.shape != [self.desc.m, self.desc.k / 8] {
+        if args.w_metadata.shape() != [self.desc.m, self.desc.k / 8] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::GemmSparse24Plan: w_metadata shape must be [M, K/8]",
             ));
         }
-        if args.x.shape != [self.desc.n, self.desc.k] {
+        if args.x.shape() != [self.desc.n, self.desc.k] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::GemmSparse24Plan: x shape must be [N, K]",
             ));
         }
-        if args.y.shape != [self.desc.n, self.desc.m] {
+        if args.y.shape() != [self.desc.n, self.desc.m] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::GemmSparse24Plan: y shape must be [N, M]",
             ));
@@ -290,10 +290,10 @@ impl<T: Element> GemmSparse24Plan<T> {
                 }
             };
             let stream_ptr = stream.as_raw() as *mut c_void;
-            let x_ptr = args.x.data.as_raw().0 as *const c_void;
-            let wc_ptr = args.w_compressed.data.as_raw().0 as *const c_void;
-            let wm_ptr = args.w_metadata.data.as_raw().0 as *const c_void;
-            let y_ptr = args.y.data.as_raw().0 as *mut c_void;
+            let x_ptr = args.x.data().as_raw().0 as *const c_void;
+            let wc_ptr = args.w_compressed.data().as_raw().0 as *const c_void;
+            let wm_ptr = args.w_metadata.data().as_raw().0 as *const c_void;
+            let y_ptr = args.y.data().as_raw().0 as *mut c_void;
             let status = unsafe {
                 match T::KIND {
                     ElementKind::F32 => {

@@ -131,31 +131,11 @@ fn marlin_gemm_minimal_smoke() {
         .expect("plan select");
 
     let args = Int4MarlinGemmArgs::<f16> {
-        activation: TensorRef {
-            data: dev_a.as_slice(),
-            shape: [m, k],
-            stride: contiguous_stride([m, k]),
-        },
-        weight_packed: TensorRef {
-            data: dev_b.as_slice(),
-            shape: [packed_len as i32],
-            stride: [1],
-        },
-        scales: TensorRef {
-            data: dev_s.as_slice(),
-            shape: [1, n],
-            stride: contiguous_stride([1, n]),
-        },
-        workspace: TensorMut {
-            data: dev_ws.as_slice_mut(),
-            shape: [ws_len as i32],
-            stride: [1],
-        },
-        output: TensorMut {
-            data: dev_c.as_slice_mut(),
-            shape: [m, n],
-            stride: contiguous_stride([m, n]),
-        },
+        activation: TensorRef::new(dev_a.as_slice(), [m, k], contiguous_stride([m, k])).unwrap(),
+        weight_packed: TensorRef::new(dev_b.as_slice(), [packed_len as i32], [1]).unwrap(),
+        scales: TensorRef::new(dev_s.as_slice(), [1, n], contiguous_stride([1, n])).unwrap(),
+        workspace: TensorMut::new(dev_ws.as_slice_mut(), [ws_len as i32], [1]).unwrap(),
+        output: TensorMut::new(dev_c.as_slice_mut(), [m, n], contiguous_stride([m, n])).unwrap(),
     };
 
     plan.run(&stream, Workspace::None, args)

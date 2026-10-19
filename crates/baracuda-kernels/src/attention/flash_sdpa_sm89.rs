@@ -210,27 +210,27 @@ impl<T: Element> FlashSdpaSm89Plan<T> {
             self.desc.num_heads,
             self.desc.query_len,
         ];
-        if args.q.shape != shape_q {
+        if args.q.shape() != shape_q {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FlashSdpaSm89Plan: Q shape mismatch",
             ));
         }
-        if args.k.shape != shape_k {
+        if args.k.shape() != shape_k {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FlashSdpaSm89Plan: K shape mismatch",
             ));
         }
-        if args.v.shape != shape_v {
+        if args.v.shape() != shape_v {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FlashSdpaSm89Plan: V shape mismatch",
             ));
         }
-        if args.y.shape != shape_y {
+        if args.y.shape() != shape_y {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FlashSdpaSm89Plan: y shape mismatch",
             ));
         }
-        if args.lse.shape != shape_lse {
+        if args.lse.shape() != shape_lse {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FlashSdpaSm89Plan: lse shape must be [B, H, Q]",
             ));
@@ -247,22 +247,22 @@ impl<T: Element> FlashSdpaSm89Plan<T> {
                  (BW path routes through sm_80 baseline)",
             ));
         }
-        if args.q.stride[3] != 1 {
+        if args.q.stride()[3] != 1 {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FlashSdpaSm89Plan: Q head_dim axis (stride[3]) must be 1",
             ));
         }
-        if args.k.stride[3] != 1 {
+        if args.k.stride()[3] != 1 {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FlashSdpaSm89Plan: K head_dim axis (stride[3]) must be 1",
             ));
         }
-        if args.v.stride[3] != 1 {
+        if args.v.stride()[3] != 1 {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FlashSdpaSm89Plan: V head_dim axis (stride[3]) must be 1",
             ));
         }
-        if args.y.stride[3] != 1 {
+        if args.y.stride()[3] != 1 {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FlashSdpaSm89Plan: y head_dim axis (stride[3]) must be 1",
             ));
@@ -270,34 +270,34 @@ impl<T: Element> FlashSdpaSm89Plan<T> {
         // Buffer-size check: only meaningful for contig tensors (strided
         // views may legitimately point into a larger backing buffer).
         let l_n = args.lse.numel();
-        if (args.lse.data.len() as i64) < l_n {
+        if (args.lse.data().len() as i64) < l_n {
             return Err(Error::BufferTooSmall {
                 needed: l_n as usize,
-                got: args.lse.data.len(),
+                got: args.lse.data().len(),
             });
         }
-        if args.q.is_contiguous() && (args.q.data.len() as i64) < args.q.numel() {
+        if args.q.is_contiguous() && (args.q.data().len() as i64) < args.q.numel() {
             return Err(Error::BufferTooSmall {
                 needed: args.q.numel() as usize,
-                got: args.q.data.len(),
+                got: args.q.data().len(),
             });
         }
-        if args.k.is_contiguous() && (args.k.data.len() as i64) < args.k.numel() {
+        if args.k.is_contiguous() && (args.k.data().len() as i64) < args.k.numel() {
             return Err(Error::BufferTooSmall {
                 needed: args.k.numel() as usize,
-                got: args.k.data.len(),
+                got: args.k.data().len(),
             });
         }
-        if args.v.is_contiguous() && (args.v.data.len() as i64) < args.v.numel() {
+        if args.v.is_contiguous() && (args.v.data().len() as i64) < args.v.numel() {
             return Err(Error::BufferTooSmall {
                 needed: args.v.numel() as usize,
-                got: args.v.data.len(),
+                got: args.v.data().len(),
             });
         }
-        if args.y.is_contiguous() && (args.y.data.len() as i64) < args.y.numel() {
+        if args.y.is_contiguous() && (args.y.data().len() as i64) < args.y.numel() {
             return Err(Error::BufferTooSmall {
                 needed: args.y.numel() as usize,
-                got: args.y.data.len(),
+                got: args.y.data().len(),
             });
         }
         Ok(())
@@ -339,11 +339,11 @@ impl<T: Element> FlashSdpaSm89Plan<T> {
             return Ok(());
         }
         let stream_ptr = stream.as_raw() as *mut c_void;
-        let q_ptr = args.q.data.as_raw().0 as *const c_void;
-        let k_ptr = args.k.data.as_raw().0 as *const c_void;
-        let v_ptr = args.v.data.as_raw().0 as *const c_void;
-        let y_ptr = args.y.data.as_raw().0 as *mut c_void;
-        let lse_ptr = args.lse.data.as_raw().0 as *mut c_void;
+        let q_ptr = args.q.data().as_raw().0 as *const c_void;
+        let k_ptr = args.k.data().as_raw().0 as *const c_void;
+        let v_ptr = args.v.data().as_raw().0 as *const c_void;
+        let y_ptr = args.y.data().as_raw().0 as *mut c_void;
+        let lse_ptr = args.lse.data().as_raw().0 as *mut c_void;
         let is_causal_flag = if self.desc.is_causal { 1 } else { 0 };
 
         let contig = args.q.is_contiguous()
@@ -405,10 +405,14 @@ impl<T: Element> FlashSdpaSm89Plan<T> {
                 // Strided sibling. Per-tensor outer-dim stride arrays
                 // (length 3, one per outer dim: batch, heads, seq).
                 // The head_dim axis is implicitly stride=1.
-                let stride_q: [i64; 3] = [args.q.stride[0], args.q.stride[1], args.q.stride[2]];
-                let stride_k: [i64; 3] = [args.k.stride[0], args.k.stride[1], args.k.stride[2]];
-                let stride_v: [i64; 3] = [args.v.stride[0], args.v.stride[1], args.v.stride[2]];
-                let stride_y: [i64; 3] = [args.y.stride[0], args.y.stride[1], args.y.stride[2]];
+                let stride_q: [i64; 3] =
+                    [args.q.stride()[0], args.q.stride()[1], args.q.stride()[2]];
+                let stride_k: [i64; 3] =
+                    [args.k.stride()[0], args.k.stride()[1], args.k.stride()[2]];
+                let stride_v: [i64; 3] =
+                    [args.v.stride()[0], args.v.stride()[1], args.v.stride()[2]];
+                let stride_y: [i64; 3] =
+                    [args.y.stride()[0], args.y.stride()[1], args.y.stride()[2]];
                 match T::KIND {
                     ElementKind::F16 => {
                         baracuda_kernels_sys::baracuda_kernels_flash_sdpa_sm89_f16_strided_run(

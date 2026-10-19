@@ -418,16 +418,16 @@ impl<T: Element> ConvTranspose1dPlan<T> {
                     h,
                     &alpha as *const f64 as *const c_void,
                     self.synth_w_desc.get(),
-                    args.w.data.as_raw().0 as *const c_void,
+                    args.w.data().as_raw().0 as *const c_void,
                     self.synth_y_desc.get(),
-                    args.x.data.as_raw().0 as *const c_void,
+                    args.x.data().as_raw().0 as *const c_void,
                     self.conv_desc.get(),
                     CUDNN_CONVOLUTION_BWD_DATA_ALGO_1,
                     ws_ptr,
                     needed,
                     &beta as *const f64 as *const c_void,
                     self.synth_x_desc.get(),
-                    args.y.data.as_raw().0 as *mut c_void,
+                    args.y.data().as_raw().0 as *mut c_void,
                 )
             }
         } else {
@@ -438,16 +438,16 @@ impl<T: Element> ConvTranspose1dPlan<T> {
                     h,
                     &alpha as *const f32 as *const c_void,
                     self.synth_w_desc.get(),
-                    args.w.data.as_raw().0 as *const c_void,
+                    args.w.data().as_raw().0 as *const c_void,
                     self.synth_y_desc.get(),
-                    args.x.data.as_raw().0 as *const c_void,
+                    args.x.data().as_raw().0 as *const c_void,
                     self.conv_desc.get(),
                     CUDNN_CONVOLUTION_BWD_DATA_ALGO_1,
                     ws_ptr,
                     needed,
                     &beta as *const f32 as *const c_void,
                     self.synth_x_desc.get(),
-                    args.y.data.as_raw().0 as *mut c_void,
+                    args.y.data().as_raw().0 as *mut c_void,
                 )
             }
         };
@@ -485,16 +485,16 @@ impl<T: Element> ConvTranspose1dPlan<T> {
                     h,
                     &alpha as *const f64 as *const c_void,
                     self.synth_x_desc.get(),
-                    args.dy.data.as_raw().0 as *const c_void,
+                    args.dy.data().as_raw().0 as *const c_void,
                     self.synth_w_desc.get(),
-                    args.w.data.as_raw().0 as *const c_void,
+                    args.w.data().as_raw().0 as *const c_void,
                     self.conv_desc.get(),
                     CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM,
                     ws_ptr,
                     needed,
                     &beta as *const f64 as *const c_void,
                     self.synth_y_desc.get(),
-                    args.dx.data.as_raw().0 as *mut c_void,
+                    args.dx.data().as_raw().0 as *mut c_void,
                 )
             }
         } else {
@@ -505,16 +505,16 @@ impl<T: Element> ConvTranspose1dPlan<T> {
                     h,
                     &alpha as *const f32 as *const c_void,
                     self.synth_x_desc.get(),
-                    args.dy.data.as_raw().0 as *const c_void,
+                    args.dy.data().as_raw().0 as *const c_void,
                     self.synth_w_desc.get(),
-                    args.w.data.as_raw().0 as *const c_void,
+                    args.w.data().as_raw().0 as *const c_void,
                     self.conv_desc.get(),
                     CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM,
                     ws_ptr,
                     needed,
                     &beta as *const f32 as *const c_void,
                     self.synth_y_desc.get(),
-                    args.dx.data.as_raw().0 as *mut c_void,
+                    args.dx.data().as_raw().0 as *mut c_void,
                 )
             }
         };
@@ -551,16 +551,16 @@ impl<T: Element> ConvTranspose1dPlan<T> {
                     h,
                     &alpha as *const f64 as *const c_void,
                     self.synth_x_desc.get(),
-                    args.dy.data.as_raw().0 as *const c_void,
+                    args.dy.data().as_raw().0 as *const c_void,
                     self.synth_y_desc.get(),
-                    args.x.data.as_raw().0 as *const c_void,
+                    args.x.data().as_raw().0 as *const c_void,
                     self.conv_desc.get(),
                     CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1,
                     ws_ptr,
                     needed,
                     &beta as *const f64 as *const c_void,
                     self.synth_w_desc.get(),
-                    args.dw.data.as_raw().0 as *mut c_void,
+                    args.dw.data().as_raw().0 as *mut c_void,
                 )
             }
         } else {
@@ -571,16 +571,16 @@ impl<T: Element> ConvTranspose1dPlan<T> {
                     h,
                     &alpha as *const f32 as *const c_void,
                     self.synth_x_desc.get(),
-                    args.dy.data.as_raw().0 as *const c_void,
+                    args.dy.data().as_raw().0 as *const c_void,
                     self.synth_y_desc.get(),
-                    args.x.data.as_raw().0 as *const c_void,
+                    args.x.data().as_raw().0 as *const c_void,
                     self.conv_desc.get(),
                     CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1,
                     ws_ptr,
                     needed,
                     &beta as *const f32 as *const c_void,
                     self.synth_w_desc.get(),
-                    args.dw.data.as_raw().0 as *mut c_void,
+                    args.dw.data().as_raw().0 as *mut c_void,
                 )
             }
         };
@@ -736,17 +736,17 @@ impl<T: Element> ConvTranspose1dPlan<T> {
         let x_shape = [self.desc.batch, self.desc.c_in, self.desc.l_in];
         let w_shape = [self.desc.c_in, c_out_per_group, self.desc.l_filt];
         let y_shape = [self.desc.batch, self.desc.c_out, l_out];
-        if args.x.shape != x_shape {
+        if args.x.shape() != x_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::ConvTranspose1dPlan: x shape != [N, C_in, L_in]",
             ));
         }
-        if args.w.shape != w_shape {
+        if args.w.shape() != w_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::ConvTranspose1dPlan: w shape != [C_in, C_out/groups, L_filt]",
             ));
         }
-        if args.y.shape != y_shape {
+        if args.y.shape() != y_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::ConvTranspose1dPlan: y shape != [N, C_out, L_out]",
             ));
@@ -760,17 +760,17 @@ impl<T: Element> ConvTranspose1dPlan<T> {
         let w_shape = [self.desc.c_in, c_out_per_group, self.desc.l_filt];
         let dy_shape = [self.desc.batch, self.desc.c_out, l_out];
         let dx_shape = [self.desc.batch, self.desc.c_in, self.desc.l_in];
-        if args.w.shape != w_shape {
+        if args.w.shape() != w_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::ConvTranspose1dPlan: w shape != [C_in, C_out/groups, L_filt]",
             ));
         }
-        if args.dy.shape != dy_shape {
+        if args.dy.shape() != dy_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::ConvTranspose1dPlan: dy shape != [N, C_out, L_out]",
             ));
         }
-        if args.dx.shape != dx_shape {
+        if args.dx.shape() != dx_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::ConvTranspose1dPlan: dx shape != [N, C_in, L_in]",
             ));
@@ -784,17 +784,17 @@ impl<T: Element> ConvTranspose1dPlan<T> {
         let x_shape = [self.desc.batch, self.desc.c_in, self.desc.l_in];
         let dy_shape = [self.desc.batch, self.desc.c_out, l_out];
         let dw_shape = [self.desc.c_in, c_out_per_group, self.desc.l_filt];
-        if args.x.shape != x_shape {
+        if args.x.shape() != x_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::ConvTranspose1dPlan: x shape != [N, C_in, L_in]",
             ));
         }
-        if args.dy.shape != dy_shape {
+        if args.dy.shape() != dy_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::ConvTranspose1dPlan: dy shape != [N, C_out, L_out]",
             ));
         }
-        if args.dw.shape != dw_shape {
+        if args.dw.shape() != dw_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::ConvTranspose1dPlan: dw shape != [C_in, C_out/groups, L_filt]",
             ));

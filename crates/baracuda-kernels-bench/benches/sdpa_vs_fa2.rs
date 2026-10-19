@@ -138,31 +138,11 @@ mod fa2_bench {
         // Warm bespoke.
         warmup(&stream, || {
             let args = FlashSdpaArgs::<T> {
-                q: TensorRef {
-                    data: dq.as_slice(),
-                    shape: sq_shape,
-                    stride: st_q,
-                },
-                k: TensorRef {
-                    data: dk.as_slice(),
-                    shape: sk_shape,
-                    stride: st_k,
-                },
-                v: TensorRef {
-                    data: dv.as_slice(),
-                    shape: sv_shape,
-                    stride: st_v,
-                },
-                y: TensorMut {
-                    data: dy.as_slice_mut(),
-                    shape: sy_shape,
-                    stride: st_y,
-                },
-                lse: TensorMut {
-                    data: dlse.as_slice_mut(),
-                    shape: sl_shape,
-                    stride: st_l,
-                },
+                q: TensorRef::new(dq.as_slice(), sq_shape, st_q).unwrap(),
+                k: TensorRef::new(dk.as_slice(), sk_shape, st_k).unwrap(),
+                v: TensorRef::new(dv.as_slice(), sv_shape, st_v).unwrap(),
+                y: TensorMut::new(dy.as_slice_mut(), sy_shape, st_y).unwrap(),
+                lse: TensorMut::new(dlse.as_slice_mut(), sl_shape, st_l).unwrap(),
                 mask: None,
                 alibi_slopes: None,
             };
@@ -174,31 +154,11 @@ mod fa2_bench {
         if matches!(backend_f, BackendKind::FlashAttentionV2) {
             warmup(&stream, || {
                 let args = FlashSdpaArgs::<T> {
-                    q: TensorRef {
-                        data: dq.as_slice(),
-                        shape: sq_shape,
-                        stride: st_q,
-                    },
-                    k: TensorRef {
-                        data: dk.as_slice(),
-                        shape: sk_shape,
-                        stride: st_k,
-                    },
-                    v: TensorRef {
-                        data: dv.as_slice(),
-                        shape: sv_shape,
-                        stride: st_v,
-                    },
-                    y: TensorMut {
-                        data: dy.as_slice_mut(),
-                        shape: sy_shape,
-                        stride: st_y,
-                    },
-                    lse: TensorMut {
-                        data: dlse.as_slice_mut(),
-                        shape: sl_shape,
-                        stride: st_l,
-                    },
+                    q: TensorRef::new(dq.as_slice(), sq_shape, st_q).unwrap(),
+                    k: TensorRef::new(dk.as_slice(), sk_shape, st_k).unwrap(),
+                    v: TensorRef::new(dv.as_slice(), sv_shape, st_v).unwrap(),
+                    y: TensorMut::new(dy.as_slice_mut(), sy_shape, st_y).unwrap(),
+                    lse: TensorMut::new(dlse.as_slice_mut(), sl_shape, st_l).unwrap(),
                     mask: None,
                     alibi_slopes: None,
                 };
@@ -211,31 +171,11 @@ mod fa2_bench {
         // Measure bespoke.
         let bespoke_ns = measure_median_ns(&ctx, &stream, 9, 20, || {
             let args = FlashSdpaArgs::<T> {
-                q: TensorRef {
-                    data: dq.as_slice(),
-                    shape: sq_shape,
-                    stride: st_q,
-                },
-                k: TensorRef {
-                    data: dk.as_slice(),
-                    shape: sk_shape,
-                    stride: st_k,
-                },
-                v: TensorRef {
-                    data: dv.as_slice(),
-                    shape: sv_shape,
-                    stride: st_v,
-                },
-                y: TensorMut {
-                    data: dy.as_slice_mut(),
-                    shape: sy_shape,
-                    stride: st_y,
-                },
-                lse: TensorMut {
-                    data: dlse.as_slice_mut(),
-                    shape: sl_shape,
-                    stride: st_l,
-                },
+                q: TensorRef::new(dq.as_slice(), sq_shape, st_q).unwrap(),
+                k: TensorRef::new(dk.as_slice(), sk_shape, st_k).unwrap(),
+                v: TensorRef::new(dv.as_slice(), sv_shape, st_v).unwrap(),
+                y: TensorMut::new(dy.as_slice_mut(), sy_shape, st_y).unwrap(),
+                lse: TensorMut::new(dlse.as_slice_mut(), sl_shape, st_l).unwrap(),
                 mask: None,
                 alibi_slopes: None,
             };
@@ -245,31 +185,11 @@ mod fa2_bench {
         let fa2_ns = if matches!(backend_f, BackendKind::FlashAttentionV2) {
             measure_median_ns(&ctx, &stream, 9, 20, || {
                 let args = FlashSdpaArgs::<T> {
-                    q: TensorRef {
-                        data: dq.as_slice(),
-                        shape: sq_shape,
-                        stride: st_q,
-                    },
-                    k: TensorRef {
-                        data: dk.as_slice(),
-                        shape: sk_shape,
-                        stride: st_k,
-                    },
-                    v: TensorRef {
-                        data: dv.as_slice(),
-                        shape: sv_shape,
-                        stride: st_v,
-                    },
-                    y: TensorMut {
-                        data: dy.as_slice_mut(),
-                        shape: sy_shape,
-                        stride: st_y,
-                    },
-                    lse: TensorMut {
-                        data: dlse.as_slice_mut(),
-                        shape: sl_shape,
-                        stride: st_l,
-                    },
+                    q: TensorRef::new(dq.as_slice(), sq_shape, st_q).unwrap(),
+                    k: TensorRef::new(dk.as_slice(), sk_shape, st_k).unwrap(),
+                    v: TensorRef::new(dv.as_slice(), sv_shape, st_v).unwrap(),
+                    y: TensorMut::new(dy.as_slice_mut(), sy_shape, st_y).unwrap(),
+                    lse: TensorMut::new(dlse.as_slice_mut(), sl_shape, st_l).unwrap(),
                     mask: None,
                     alibi_slopes: None,
                 };

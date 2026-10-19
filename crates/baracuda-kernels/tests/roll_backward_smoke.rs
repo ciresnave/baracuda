@@ -70,16 +70,8 @@ fn roll_backward_f32_1d() {
     let plan =
         RollBackwardPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = RollBackwardArgs::<f32, 1> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        dx: TensorMut::new(dev_dx.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -109,16 +101,8 @@ fn roll_backward_f32_2d_negative_shift() {
     let plan =
         RollBackwardPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = RollBackwardArgs::<f32, 2> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        dx: TensorMut::new(dev_dx.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -150,16 +134,8 @@ fn roll_backward_f16_2d() {
     let plan =
         RollBackwardPlan::<f16, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = RollBackwardArgs::<f16, 2> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        dx: TensorMut::new(dev_dx.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -191,16 +167,8 @@ fn roll_backward_bf16_2d() {
     let plan = RollBackwardPlan::<bf16, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let args = RollBackwardArgs::<bf16, 2> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        dx: TensorMut::new(dev_dx.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -230,16 +198,8 @@ fn roll_backward_f64_3d() {
     let plan =
         RollBackwardPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = RollBackwardArgs::<f64, 3> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        dx: TensorMut::new(dev_dx.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

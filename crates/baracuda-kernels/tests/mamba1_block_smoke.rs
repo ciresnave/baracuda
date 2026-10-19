@@ -86,26 +86,20 @@ fn mamba1_block_tiny_end_to_end() {
             &stream,
             Workspace::None,
             CausalConv1dArgs {
-                x: TensorRef {
-                    data: x_conv_dev.as_slice(),
-                    shape: s_x_conv,
-                    stride: contiguous_stride(s_x_conv),
-                },
-                weight: TensorRef {
-                    data: w_conv_dev.as_slice(),
-                    shape: s_w_conv,
-                    stride: contiguous_stride(s_w_conv),
-                },
-                bias: Some(TensorRef {
-                    data: b_conv_dev.as_slice(),
-                    shape: s_b_conv,
-                    stride: contiguous_stride(s_b_conv),
-                }),
-                y: TensorMut {
-                    data: u_dev.as_slice_mut(),
-                    shape: s_x_conv,
-                    stride: contiguous_stride(s_x_conv),
-                },
+                x: TensorRef::new(x_conv_dev.as_slice(), s_x_conv, contiguous_stride(s_x_conv))
+                    .unwrap(),
+                weight: TensorRef::new(
+                    w_conv_dev.as_slice(),
+                    s_w_conv,
+                    contiguous_stride(s_w_conv),
+                )
+                .unwrap(),
+                bias: Some(
+                    TensorRef::new(b_conv_dev.as_slice(), s_b_conv, contiguous_stride(s_b_conv))
+                        .unwrap(),
+                ),
+                y: TensorMut::new(u_dev.as_slice_mut(), s_x_conv, contiguous_stride(s_x_conv))
+                    .unwrap(),
             },
         )
         .expect("conv run");
@@ -174,51 +168,19 @@ fn mamba1_block_tiny_end_to_end() {
             &stream,
             Workspace::None,
             SelectiveScanArgs {
-                u: TensorRef {
-                    data: u_ssm_dev.as_slice(),
-                    shape: s_ud,
-                    stride: contiguous_stride(s_ud),
-                },
-                delta: TensorRef {
-                    data: delta_dev.as_slice(),
-                    shape: s_ud,
-                    stride: contiguous_stride(s_ud),
-                },
-                a: TensorRef {
-                    data: a_dev.as_slice(),
-                    shape: s_a,
-                    stride: contiguous_stride(s_a),
-                },
-                b: TensorRef {
-                    data: b_dev.as_slice(),
-                    shape: s_bc,
-                    stride: contiguous_stride(s_bc),
-                },
-                c: TensorRef {
-                    data: c_dev.as_slice(),
-                    shape: s_bc,
-                    stride: contiguous_stride(s_bc),
-                },
-                d_skip: Some(TensorRef {
-                    data: d_dev.as_slice(),
-                    shape: s_d,
-                    stride: contiguous_stride(s_d),
-                }),
-                z: Some(TensorRef {
-                    data: z_dev.as_slice(),
-                    shape: s_ud,
-                    stride: contiguous_stride(s_ud),
-                }),
-                delta_bias: Some(TensorRef {
-                    data: db_dev.as_slice(),
-                    shape: s_d,
-                    stride: contiguous_stride(s_d),
-                }),
-                y: TensorMut {
-                    data: y_ssm_dev.as_slice_mut(),
-                    shape: s_ud,
-                    stride: contiguous_stride(s_ud),
-                },
+                u: TensorRef::new(u_ssm_dev.as_slice(), s_ud, contiguous_stride(s_ud)).unwrap(),
+                delta: TensorRef::new(delta_dev.as_slice(), s_ud, contiguous_stride(s_ud)).unwrap(),
+                a: TensorRef::new(a_dev.as_slice(), s_a, contiguous_stride(s_a)).unwrap(),
+                b: TensorRef::new(b_dev.as_slice(), s_bc, contiguous_stride(s_bc)).unwrap(),
+                c: TensorRef::new(c_dev.as_slice(), s_bc, contiguous_stride(s_bc)).unwrap(),
+                d_skip: Some(
+                    TensorRef::new(d_dev.as_slice(), s_d, contiguous_stride(s_d)).unwrap(),
+                ),
+                z: Some(TensorRef::new(z_dev.as_slice(), s_ud, contiguous_stride(s_ud)).unwrap()),
+                delta_bias: Some(
+                    TensorRef::new(db_dev.as_slice(), s_d, contiguous_stride(s_d)).unwrap(),
+                ),
+                y: TensorMut::new(y_ssm_dev.as_slice_mut(), s_ud, contiguous_stride(s_ud)).unwrap(),
                 last_state: None,
             },
         )

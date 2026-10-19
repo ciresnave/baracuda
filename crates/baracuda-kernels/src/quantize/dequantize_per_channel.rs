@@ -112,13 +112,13 @@ impl<TIn: Element, TOut: IntElement> DequantizePerChannelPlan<TIn, TOut> {
         crate::view_check::check_fits(&args.scale)?;
         crate::view_check::check_fits(&args.zero_point)?;
         crate::view_check::check_fits(&args.output)?;
-        if args.input.shape != self.desc.shape || args.output.shape != self.desc.shape {
+        if args.input.shape() != self.desc.shape || args.output.shape() != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "DequantizePerChannelPlan: tensor shape mismatch",
             ));
         }
         let c = self.desc.shape[self.desc.axis as usize];
-        if args.scale.shape != [c] || args.zero_point.shape != [c] {
+        if args.scale.shape() != [c] || args.zero_point.shape() != [c] {
             return Err(Error::InvalidProblem(
                 "DequantizePerChannelPlan: scale / zero_point shape != [C]",
             ));
@@ -156,10 +156,10 @@ impl<TIn: Element, TOut: IntElement> DequantizePerChannelPlan<TIn, TOut> {
         if numel == 0 {
             return Ok(());
         }
-        let q_ptr = args.input.data.as_raw().0 as *const c_void;
-        let sc_ptr = args.scale.data.as_raw().0 as *const c_void;
-        let zp_ptr = args.zero_point.data.as_raw().0 as *const c_void;
-        let x_ptr = args.output.data.as_raw().0 as *mut c_void;
+        let q_ptr = args.input.data().as_raw().0 as *const c_void;
+        let sc_ptr = args.scale.data().as_raw().0 as *const c_void;
+        let zp_ptr = args.zero_point.data().as_raw().0 as *const c_void;
+        let x_ptr = args.output.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         let shape4 = self.desc.shape.as_ptr();
         let axis = self.desc.axis as i32;

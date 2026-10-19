@@ -123,22 +123,22 @@ impl<T: Element> SegmentMaxBackwardPlan<T> {
         crate::view_check::check_fits(&args.input)?;
         crate::view_check::check_fits(&args.segment_ids)?;
         crate::view_check::check_fits(&args.d_input)?;
-        if args.d_output.shape != [self.desc.num_segments, self.desc.embedding_dim] {
+        if args.d_output.shape() != [self.desc.num_segments, self.desc.embedding_dim] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SegmentMaxBackwardPlan: d_output shape != [num_segments, D]",
             ));
         }
-        if args.input.shape != [self.desc.num_inputs, self.desc.embedding_dim] {
+        if args.input.shape() != [self.desc.num_inputs, self.desc.embedding_dim] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SegmentMaxBackwardPlan: input shape != [num_inputs, D]",
             ));
         }
-        if args.segment_ids.shape != [self.desc.num_inputs] {
+        if args.segment_ids.shape() != [self.desc.num_inputs] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SegmentMaxBackwardPlan: segment_ids shape != [num_inputs]",
             ));
         }
-        if args.d_input.shape != [self.desc.num_inputs, self.desc.embedding_dim] {
+        if args.d_input.shape() != [self.desc.num_inputs, self.desc.embedding_dim] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SegmentMaxBackwardPlan: d_input shape != [num_inputs, D]",
             ));
@@ -176,10 +176,10 @@ impl<T: Element> SegmentMaxBackwardPlan<T> {
         if total == 0 {
             return Ok(());
         }
-        let do_ptr = args.d_output.data.as_raw().0 as *const c_void;
-        let in_ptr = args.input.data.as_raw().0 as *const c_void;
-        let id_ptr = args.segment_ids.data.as_raw().0 as *const c_void;
-        let di_ptr = args.d_input.data.as_raw().0 as *mut c_void;
+        let do_ptr = args.d_output.data().as_raw().0 as *const c_void;
+        let in_ptr = args.input.data().as_raw().0 as *const c_void;
+        let id_ptr = args.segment_ids.data().as_raw().0 as *const c_void;
+        let di_ptr = args.d_input.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         let status = match T::KIND {
             ElementKind::F32 => unsafe {

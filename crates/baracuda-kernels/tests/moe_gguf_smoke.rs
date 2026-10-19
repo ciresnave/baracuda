@@ -155,46 +155,39 @@ fn moe_scalar_gguf_q8_0_small_fixture() {
         DeviceBuffer::zeros(&ctx, (T * K) as usize).expect("ew");
 
     let args = MoeArgs::<f32> {
-        activations: TensorRef {
-            data: acts_dev.as_slice(),
-            shape: [T, DM],
-            stride: contiguous_stride([T, DM]),
-        },
-        expert_indices: TensorRef {
-            data: eids_dev.as_slice(),
-            shape: [T, K],
-            stride: contiguous_stride([T, K]),
-        },
-        expert_weights: TensorRef {
-            data: expert_weights_dev.as_slice(),
-            shape: [T, K],
-            stride: contiguous_stride([T, K]),
-        },
-        sorted_token_ids: TensorRef {
-            data: sorted_dev.as_slice(),
-            shape: [m_total],
-            stride: contiguous_stride([m_total]),
-        },
-        flat_expert_ids: TensorRef {
-            data: eids_dev.as_slice(),
-            shape: [m_total],
-            stride: contiguous_stride([m_total]),
-        },
-        topk_weight_flat: Some(TensorRef {
-            data: tk_dev.as_slice(),
-            shape: [T],
-            stride: contiguous_stride([T]),
-        }),
-        expert_matrices: TensorRef {
-            data: weights_dev.as_slice(),
-            shape: [weights_bytes_len],
-            stride: contiguous_stride([weights_bytes_len]),
-        },
-        output: TensorMut {
-            data: out_dev.as_slice_mut(),
-            shape: [T, DE],
-            stride: contiguous_stride([T, DE]),
-        },
+        activations: TensorRef::new(acts_dev.as_slice(), [T, DM], contiguous_stride([T, DM]))
+            .unwrap(),
+        expert_indices: TensorRef::new(eids_dev.as_slice(), [T, K], contiguous_stride([T, K]))
+            .unwrap(),
+        expert_weights: TensorRef::new(
+            expert_weights_dev.as_slice(),
+            [T, K],
+            contiguous_stride([T, K]),
+        )
+        .unwrap(),
+        sorted_token_ids: TensorRef::new(
+            sorted_dev.as_slice(),
+            [m_total],
+            contiguous_stride([m_total]),
+        )
+        .unwrap(),
+        flat_expert_ids: TensorRef::new(
+            eids_dev.as_slice(),
+            [m_total],
+            contiguous_stride([m_total]),
+        )
+        .unwrap(),
+        topk_weight_flat: Some(
+            TensorRef::new(tk_dev.as_slice(), [T], contiguous_stride([T])).unwrap(),
+        ),
+        expert_matrices: TensorRef::new(
+            weights_dev.as_slice(),
+            [weights_bytes_len],
+            contiguous_stride([weights_bytes_len]),
+        )
+        .unwrap(),
+        output: TensorMut::new(out_dev.as_slice_mut(), [T, DE], contiguous_stride([T, DE]))
+            .unwrap(),
         expert_counts_scratch: None,
         expert_offsets_scratch: None,
     };

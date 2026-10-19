@@ -41,21 +41,9 @@ fn masked_fill_f32_2d() {
     let plan = MaskedFillPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = MaskedFillArgs::<f32, 2> {
-        src: TensorRef {
-            data: dev_src.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        mask: TensorRef {
-            data: dev_mask.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        out: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        src: TensorRef::new(dev_src.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        mask: TensorRef::new(dev_mask.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        out: TensorMut::new(dev_out.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -88,21 +76,9 @@ fn masked_fill_f64_2d() {
     let plan = MaskedFillPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = MaskedFillArgs::<f64, 2> {
-        src: TensorRef {
-            data: dev_src.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        mask: TensorRef {
-            data: dev_mask.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        out: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        src: TensorRef::new(dev_src.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        mask: TensorRef::new(dev_mask.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        out: TensorMut::new(dev_out.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -135,21 +111,9 @@ fn masked_fill_i32_2d() {
     let plan = MaskedFillPlan::<i32, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = MaskedFillArgs::<i32, 2> {
-        src: TensorRef {
-            data: dev_src.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        mask: TensorRef {
-            data: dev_mask.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        out: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        src: TensorRef::new(dev_src.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        mask: TensorRef::new(dev_mask.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        out: TensorMut::new(dev_out.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -180,21 +144,9 @@ fn masked_fill_bool_1d() {
     let plan = MaskedFillPlan::<Bool, 1>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = MaskedFillArgs::<Bool, 1> {
-        src: TensorRef {
-            data: dev_src.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        mask: TensorRef {
-            data: dev_mask.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        out: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        src: TensorRef::new(dev_src.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        mask: TensorRef::new(dev_mask.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        out: TensorMut::new(dev_out.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

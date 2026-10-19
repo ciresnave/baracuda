@@ -121,17 +121,17 @@ impl<T: Element> NmsPlan<T> {
         crate::view_check::check_fits(&args.boxes)?;
         crate::view_check::check_fits(&args.keep_mask)?;
         crate::view_check::check_fits(&args.count)?;
-        if args.boxes.shape != [self.desc.num_boxes, 4] {
+        if args.boxes.shape() != [self.desc.num_boxes, 4] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::NmsPlan: boxes must be [num_boxes, 4]",
             ));
         }
-        if args.keep_mask.shape != [self.desc.num_boxes] {
+        if args.keep_mask.shape() != [self.desc.num_boxes] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::NmsPlan: keep_mask must be [num_boxes]",
             ));
         }
-        if args.count.shape != [1] {
+        if args.count.shape() != [1] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::NmsPlan: count must be [1]",
             ));
@@ -166,9 +166,9 @@ impl<T: Element> NmsPlan<T> {
         args: NmsArgs<'_, T>,
     ) -> Result<()> {
         self.can_implement(&args)?;
-        let boxes_ptr = args.boxes.data.as_raw().0 as *const c_void;
-        let mask_ptr = args.keep_mask.data.as_raw().0 as *mut c_void;
-        let count_ptr = args.count.data.as_raw().0 as *mut c_void;
+        let boxes_ptr = args.boxes.data().as_raw().0 as *const c_void;
+        let mask_ptr = args.keep_mask.data().as_raw().0 as *mut c_void;
+        let count_ptr = args.count.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         let status = match T::KIND {
             ElementKind::F32 => unsafe {

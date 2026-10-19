@@ -138,19 +138,19 @@ impl<T: Element, const N: usize> SoftmaxPlan<T, N> {
     pub fn can_implement(&self, args: &SoftmaxArgs<'_, T, N>) -> Result<()> {
         crate::view_check::check_fits(&args.x)?;
         crate::view_check::check_fits(&args.y)?;
-        if args.x.shape != self.desc.input_shape {
+        if args.x.shape() != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SoftmaxPlan: x shape mismatch",
             ));
         }
-        if args.y.shape != self.desc.input_shape {
+        if args.y.shape() != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SoftmaxPlan: y shape mismatch",
             ));
         }
         let numel = args.x.numel();
-        let x_len = args.x.data.len() as i64;
-        let y_len = args.y.data.len() as i64;
+        let x_len = args.x.data().len() as i64;
+        let y_len = args.y.data().len() as i64;
         if x_len < numel || y_len < numel {
             return Err(Error::BufferTooSmall {
                 needed: numel as usize,
@@ -193,14 +193,14 @@ impl<T: Element, const N: usize> SoftmaxPlan<T, N> {
         if numel == 0 {
             return Ok(());
         }
-        let x_ptr = args.x.data.as_raw().0 as *const c_void;
-        let y_ptr = args.y.data.as_raw().0 as *mut c_void;
+        let x_ptr = args.x.data().as_raw().0 as *const c_void;
+        let y_ptr = args.y.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
         let axis = self.desc.softmax_axis as usize;
         let shape = self.desc.input_shape;
-        let stride_x = args.x.stride;
-        let stride_y = args.y.stride;
+        let stride_x = args.x.stride();
+        let stride_y = args.y.stride();
         let rank = N as i32;
         let extent = shape[axis];
         let stride_x_axis = stride_x[axis];

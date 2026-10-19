@@ -104,36 +104,12 @@ fn run_block_sparse(
         stream,
         Workspace::None,
         SdpaBlockSparseArgs {
-            q: TensorRef {
-                data: dq.as_slice(),
-                shape: s_qkv,
-                stride: contiguous_stride(s_qkv),
-            },
-            k: TensorRef {
-                data: dk.as_slice(),
-                shape: s_qkv,
-                stride: contiguous_stride(s_qkv),
-            },
-            v: TensorRef {
-                data: dv.as_slice(),
-                shape: s_qkv,
-                stride: contiguous_stride(s_qkv),
-            },
-            block_pattern: TensorRef {
-                data: dbp.as_slice(),
-                shape: s_bp,
-                stride: contiguous_stride(s_bp),
-            },
-            y: TensorMut {
-                data: dy.as_slice_mut(),
-                shape: s_y,
-                stride: contiguous_stride(s_y),
-            },
-            lse: TensorMut {
-                data: dlse.as_slice_mut(),
-                shape: s_lse,
-                stride: contiguous_stride(s_lse),
-            },
+            q: TensorRef::new(dq.as_slice(), s_qkv, contiguous_stride(s_qkv)).unwrap(),
+            k: TensorRef::new(dk.as_slice(), s_qkv, contiguous_stride(s_qkv)).unwrap(),
+            v: TensorRef::new(dv.as_slice(), s_qkv, contiguous_stride(s_qkv)).unwrap(),
+            block_pattern: TensorRef::new(dbp.as_slice(), s_bp, contiguous_stride(s_bp)).unwrap(),
+            y: TensorMut::new(dy.as_slice_mut(), s_y, contiguous_stride(s_y)).unwrap(),
+            lse: TensorMut::new(dlse.as_slice_mut(), s_lse, contiguous_stride(s_lse)).unwrap(),
         },
     )
     .expect("plan run");
@@ -182,32 +158,12 @@ fn run_dense_sdpa_reference(
         stream,
         Workspace::None,
         SdpaArgs {
-            q: TensorRef {
-                data: dq.as_slice(),
-                shape: s_qkv,
-                stride: contiguous_stride(s_qkv),
-            },
-            k: TensorRef {
-                data: dk.as_slice(),
-                shape: s_qkv,
-                stride: contiguous_stride(s_qkv),
-            },
-            v: TensorRef {
-                data: dv.as_slice(),
-                shape: s_qkv,
-                stride: contiguous_stride(s_qkv),
-            },
+            q: TensorRef::new(dq.as_slice(), s_qkv, contiguous_stride(s_qkv)).unwrap(),
+            k: TensorRef::new(dk.as_slice(), s_qkv, contiguous_stride(s_qkv)).unwrap(),
+            v: TensorRef::new(dv.as_slice(), s_qkv, contiguous_stride(s_qkv)).unwrap(),
             mask: None,
-            y: TensorMut {
-                data: dy.as_slice_mut(),
-                shape: s_qkv,
-                stride: contiguous_stride(s_qkv),
-            },
-            attn: TensorMut {
-                data: dattn.as_slice_mut(),
-                shape: s_attn,
-                stride: contiguous_stride(s_attn),
-            },
+            y: TensorMut::new(dy.as_slice_mut(), s_qkv, contiguous_stride(s_qkv)).unwrap(),
+            attn: TensorMut::new(dattn.as_slice_mut(), s_attn, contiguous_stride(s_attn)).unwrap(),
         },
     )
     .expect("plan run");

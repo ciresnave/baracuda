@@ -98,14 +98,14 @@ impl GgufDequantizePlan {
     pub fn can_implement(&self, args: &GgufDequantizeArgs<'_>) -> Result<()> {
         crate::view_check::check_fits(&args.input)?;
         crate::view_check::check_fits(&args.output)?;
-        if args.output.shape != [self.desc.numel as i32] {
+        if args.output.shape() != [self.desc.numel as i32] {
             return Err(Error::InvalidProblem(
                 "GgufDequantizePlan: output shape != [numel]",
             ));
         }
         let blocks = self.desc.numel / self.desc.block_format.block_size() as i64;
         let expected_bytes = blocks * self.desc.block_format.type_size() as i64;
-        if args.input.shape != [expected_bytes as i32] {
+        if args.input.shape() != [expected_bytes as i32] {
             return Err(Error::InvalidProblem(
                 "GgufDequantizePlan: input byte length != blocks * type_size",
             ));
@@ -142,8 +142,8 @@ impl GgufDequantizePlan {
         if self.desc.numel == 0 {
             return Ok(());
         }
-        let x_ptr = args.input.data.as_raw().0 as *const c_void;
-        let y_ptr = args.output.data.as_raw().0 as *mut c_void;
+        let x_ptr = args.input.data().as_raw().0 as *const c_void;
+        let y_ptr = args.output.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         let numel = self.desc.numel;
 

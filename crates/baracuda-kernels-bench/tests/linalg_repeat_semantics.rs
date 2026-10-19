@@ -99,16 +99,8 @@ impl Fixture {
         let t0 = std::time::Instant::now();
         {
             let args = CholeskyArgs::<f32> {
-                a: TensorMut {
-                    data: self.work.as_slice_mut(),
-                    shape: sh,
-                    stride: st,
-                },
-                info: TensorMut {
-                    data: self.info.as_slice_mut(),
-                    shape: [1],
-                    stride: [1],
-                },
+                a: TensorMut::new(self.work.as_slice_mut(), sh, st).unwrap(),
+                info: TensorMut::new(self.info.as_slice_mut(), [1], [1]).unwrap(),
             };
             self.plan
                 .run(

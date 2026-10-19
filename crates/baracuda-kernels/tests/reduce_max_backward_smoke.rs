@@ -96,26 +96,22 @@ fn max_backward_f32_3d_axis1() {
     let plan = ReduceBackwardPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = ReduceBackwardArgs::<f32, 3> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape: dy_shape,
-            stride: contiguous_stride(dy_shape),
-        },
-        x: Some(TensorRef {
-            data: dev_x.as_slice(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        }),
-        y: Some(TensorRef {
-            data: dev_y.as_slice(),
-            shape: dy_shape,
-            stride: contiguous_stride(dy_shape),
-        }),
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), dy_shape, contiguous_stride(dy_shape)).unwrap(),
+        x: Some(
+            TensorRef::new(
+                dev_x.as_slice(),
+                input_shape,
+                contiguous_stride(input_shape),
+            )
+            .unwrap(),
+        ),
+        y: Some(TensorRef::new(dev_y.as_slice(), dy_shape, contiguous_stride(dy_shape)).unwrap()),
+        dx: TensorMut::new(
+            dev_dx.as_slice_mut(),
+            input_shape,
+            contiguous_stride(input_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -170,26 +166,22 @@ fn max_backward_f64_3d_axis2() {
     let plan = ReduceBackwardPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = ReduceBackwardArgs::<f64, 3> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape: dy_shape,
-            stride: contiguous_stride(dy_shape),
-        },
-        x: Some(TensorRef {
-            data: dev_x.as_slice(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        }),
-        y: Some(TensorRef {
-            data: dev_y.as_slice(),
-            shape: dy_shape,
-            stride: contiguous_stride(dy_shape),
-        }),
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), dy_shape, contiguous_stride(dy_shape)).unwrap(),
+        x: Some(
+            TensorRef::new(
+                dev_x.as_slice(),
+                input_shape,
+                contiguous_stride(input_shape),
+            )
+            .unwrap(),
+        ),
+        y: Some(TensorRef::new(dev_y.as_slice(), dy_shape, contiguous_stride(dy_shape)).unwrap()),
+        dx: TensorMut::new(
+            dev_dx.as_slice_mut(),
+            input_shape,
+            contiguous_stride(input_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -246,26 +238,22 @@ fn max_backward_f16_3d_axis0() {
     let plan = ReduceBackwardPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = ReduceBackwardArgs::<f16, 3> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape: dy_shape,
-            stride: contiguous_stride(dy_shape),
-        },
-        x: Some(TensorRef {
-            data: dev_x.as_slice(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        }),
-        y: Some(TensorRef {
-            data: dev_y.as_slice(),
-            shape: dy_shape,
-            stride: contiguous_stride(dy_shape),
-        }),
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), dy_shape, contiguous_stride(dy_shape)).unwrap(),
+        x: Some(
+            TensorRef::new(
+                dev_x.as_slice(),
+                input_shape,
+                contiguous_stride(input_shape),
+            )
+            .unwrap(),
+        ),
+        y: Some(TensorRef::new(dev_y.as_slice(), dy_shape, contiguous_stride(dy_shape)).unwrap()),
+        dx: TensorMut::new(
+            dev_dx.as_slice_mut(),
+            input_shape,
+            contiguous_stride(input_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -322,26 +310,22 @@ fn max_backward_bf16_3d_axis1() {
     let plan = ReduceBackwardPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = ReduceBackwardArgs::<bf16, 3> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape: dy_shape,
-            stride: contiguous_stride(dy_shape),
-        },
-        x: Some(TensorRef {
-            data: dev_x.as_slice(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        }),
-        y: Some(TensorRef {
-            data: dev_y.as_slice(),
-            shape: dy_shape,
-            stride: contiguous_stride(dy_shape),
-        }),
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), dy_shape, contiguous_stride(dy_shape)).unwrap(),
+        x: Some(
+            TensorRef::new(
+                dev_x.as_slice(),
+                input_shape,
+                contiguous_stride(input_shape),
+            )
+            .unwrap(),
+        ),
+        y: Some(TensorRef::new(dev_y.as_slice(), dy_shape, contiguous_stride(dy_shape)).unwrap()),
+        dx: TensorMut::new(
+            dev_dx.as_slice_mut(),
+            input_shape,
+            contiguous_stride(input_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -381,18 +365,10 @@ fn max_backward_requires_saves() {
     let dev_dy: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 4).expect("alloc");
     let mut dev_dx: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 16).expect("alloc");
     let args = ReduceBackwardArgs::<f32, 2> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape: [1, 4],
-            stride: contiguous_stride([1, 4]),
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), [1, 4], contiguous_stride([1, 4])).unwrap(),
         x: None,
         y: None,
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape: [4, 4],
-            stride: contiguous_stride([4, 4]),
-        },
+        dx: TensorMut::new(dev_dx.as_slice_mut(), [4, 4], contiguous_stride([4, 4])).unwrap(),
     };
     let err = plan.can_implement(&args);
     assert!(err.is_err(), "Max BW must reject missing saved x / y");

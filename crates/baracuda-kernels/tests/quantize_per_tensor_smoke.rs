@@ -55,18 +55,10 @@ fn quantize_per_tensor_f32_s8_clipping() {
     let plan = QuantizePerTensorPlan::<f32, S8>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = QuantizePerTensorArgs::<f32, S8> {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape: [numel],
-            stride: contiguous_stride([numel]),
-        },
+        input: TensorRef::new(dev_x.as_slice(), [numel], contiguous_stride([numel])).unwrap(),
         scale,
         zero_point,
-        output: TensorMut {
-            data: dev_q.as_slice_mut(),
-            shape: [numel],
-            stride: contiguous_stride([numel]),
-        },
+        output: TensorMut::new(dev_q.as_slice_mut(), [numel], contiguous_stride([numel])).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

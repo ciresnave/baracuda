@@ -125,13 +125,13 @@ impl<T: Element> PixelUnshufflePlan<T> {
         crate::view_check::check_fits(&args.input)?;
         crate::view_check::check_fits(&args.output)?;
         let r = self.desc.downscale_factor;
-        if args.input.shape != [self.desc.n, self.desc.c, self.desc.h * r, self.desc.w * r] {
+        if args.input.shape() != [self.desc.n, self.desc.c, self.desc.h * r, self.desc.w * r] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::PixelUnshufflePlan: input shape must be [N, C, H*r, W*r]",
             ));
         }
         let cout = self.desc.c * r * r;
-        if args.output.shape != [self.desc.n, cout, self.desc.h, self.desc.w] {
+        if args.output.shape() != [self.desc.n, cout, self.desc.h, self.desc.w] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::PixelUnshufflePlan: output shape must be [N, C*r*r, H, W]",
             ));
@@ -168,8 +168,8 @@ impl<T: Element> PixelUnshufflePlan<T> {
         if args.output.numel() == 0 {
             return Ok(());
         }
-        let input_ptr = args.input.data.as_raw().0 as *const c_void;
-        let out_ptr = args.output.data.as_raw().0 as *mut c_void;
+        let input_ptr = args.input.data().as_raw().0 as *const c_void;
+        let out_ptr = args.output.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         let (n, c, h, w, r) = (
             self.desc.n,

@@ -81,16 +81,8 @@ fn cholesky_f32_basic() {
     let shape = [1i32, n, n];
     let stride = contiguous_stride(shape);
     let args = CholeskyArgs::<f32> {
-        a: TensorMut {
-            data: dev_a.as_slice_mut(),
-            shape,
-            stride,
-        },
-        info: TensorMut {
-            data: dev_info.as_slice_mut(),
-            shape: [1i32],
-            stride: [1],
-        },
+        a: TensorMut::new(dev_a.as_slice_mut(), shape, stride).unwrap(),
+        info: TensorMut::new(dev_info.as_slice_mut(), [1i32], [1]).unwrap(),
     };
     plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
         .expect("run cholesky f32");
@@ -176,16 +168,8 @@ fn cholesky_f64_basic() {
     let shape = [1i32, n, n];
     let stride = contiguous_stride(shape);
     let args = CholeskyArgs::<f64> {
-        a: TensorMut {
-            data: dev_a.as_slice_mut(),
-            shape,
-            stride,
-        },
-        info: TensorMut {
-            data: dev_info.as_slice_mut(),
-            shape: [1i32],
-            stride: [1],
-        },
+        a: TensorMut::new(dev_a.as_slice_mut(), shape, stride).unwrap(),
+        info: TensorMut::new(dev_info.as_slice_mut(), [1i32], [1]).unwrap(),
     };
     plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
         .expect("run cholesky f64");

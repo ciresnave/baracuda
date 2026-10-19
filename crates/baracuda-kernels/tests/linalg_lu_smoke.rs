@@ -154,21 +154,9 @@ fn lu_f32_basic() {
     let pivot_shape = [1i32, n];
     let pivot_stride = contiguous_stride(pivot_shape);
     let args = LuArgs::<f32> {
-        a: TensorMut {
-            data: dev_a.as_slice_mut(),
-            shape: a_shape,
-            stride: a_stride,
-        },
-        pivot: TensorMut {
-            data: dev_pivot.as_slice_mut(),
-            shape: pivot_shape,
-            stride: pivot_stride,
-        },
-        info: TensorMut {
-            data: dev_info.as_slice_mut(),
-            shape: [1i32],
-            stride: [1],
-        },
+        a: TensorMut::new(dev_a.as_slice_mut(), a_shape, a_stride).unwrap(),
+        pivot: TensorMut::new(dev_pivot.as_slice_mut(), pivot_shape, pivot_stride).unwrap(),
+        info: TensorMut::new(dev_info.as_slice_mut(), [1i32], [1]).unwrap(),
     };
     plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
         .expect("run LU f32");
@@ -229,21 +217,9 @@ fn lu_f64_basic() {
     let pivot_shape = [1i32, n];
     let pivot_stride = contiguous_stride(pivot_shape);
     let args = LuArgs::<f64> {
-        a: TensorMut {
-            data: dev_a.as_slice_mut(),
-            shape: a_shape,
-            stride: a_stride,
-        },
-        pivot: TensorMut {
-            data: dev_pivot.as_slice_mut(),
-            shape: pivot_shape,
-            stride: pivot_stride,
-        },
-        info: TensorMut {
-            data: dev_info.as_slice_mut(),
-            shape: [1i32],
-            stride: [1],
-        },
+        a: TensorMut::new(dev_a.as_slice_mut(), a_shape, a_stride).unwrap(),
+        pivot: TensorMut::new(dev_pivot.as_slice_mut(), pivot_shape, pivot_stride).unwrap(),
+        info: TensorMut::new(dev_info.as_slice_mut(), [1i32], [1]).unwrap(),
     };
     plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
         .expect("run LU f64");

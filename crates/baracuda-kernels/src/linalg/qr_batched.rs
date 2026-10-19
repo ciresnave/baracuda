@@ -232,12 +232,12 @@ impl<T: Element> BatchedQrPlan<T> {
         let m = self.desc.m;
         let n = self.desc.n;
         let k = m.min(n);
-        if args.a.shape != [b, m, n] {
+        if args.a.shape() != [b, m, n] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::BatchedQrPlan: A shape != [batch, M, N]",
             ));
         }
-        if args.tau.shape != [b, k] {
+        if args.tau.shape() != [b, k] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::BatchedQrPlan: tau shape != [batch, min(M, N)]",
             ));
@@ -277,8 +277,8 @@ macro_rules! impl_batched_qr_run {
 
                 // Build host arrays of per-slot device pointers, then
                 // copy them into the caller's workspace (lifted to device).
-                let a_base = args.a.data.as_raw().0;
-                let tau_base = args.tau.data.as_raw().0;
+                let a_base = args.a.data().as_raw().0;
+                let tau_base = args.tau.data().as_raw().0;
                 let elem_size = core::mem::size_of::<$T>() as u64;
                 let a_stride = (m as u64) * (n as u64) * elem_size;
                 let tau_stride = (k as u64) * elem_size;

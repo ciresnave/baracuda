@@ -43,21 +43,9 @@ fn threshold_backward_f32_3d() {
     let plan = UnaryParamBackwardPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = UnaryParamBackwardArgs::<f32, 3> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape,
-            stride,
-        },
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride,
-        },
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape,
-            stride,
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), shape, stride).unwrap(),
+        x: TensorRef::new(dev_x.as_slice(), shape, stride).unwrap(),
+        dx: TensorMut::new(dev_dx.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -97,21 +85,9 @@ fn threshold_backward_f64_3d() {
     let plan = UnaryParamBackwardPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = UnaryParamBackwardArgs::<f64, 3> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape,
-            stride,
-        },
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride,
-        },
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape,
-            stride,
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), shape, stride).unwrap(),
+        x: TensorRef::new(dev_x.as_slice(), shape, stride).unwrap(),
+        dx: TensorMut::new(dev_dx.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -158,21 +134,9 @@ fn threshold_backward_f16_3d() {
     let plan = UnaryParamBackwardPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = UnaryParamBackwardArgs::<f16, 3> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape,
-            stride,
-        },
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride,
-        },
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape,
-            stride,
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), shape, stride).unwrap(),
+        x: TensorRef::new(dev_x.as_slice(), shape, stride).unwrap(),
+        dx: TensorMut::new(dev_dx.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -219,21 +183,9 @@ fn threshold_backward_bf16_3d() {
     let plan = UnaryParamBackwardPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = UnaryParamBackwardArgs::<bf16, 3> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape,
-            stride,
-        },
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride,
-        },
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape,
-            stride,
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), shape, stride).unwrap(),
+        x: TensorRef::new(dev_x.as_slice(), shape, stride).unwrap(),
+        dx: TensorMut::new(dev_dx.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

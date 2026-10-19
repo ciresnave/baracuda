@@ -308,25 +308,25 @@ impl<T: Element> FlashDecodingPlan<T> {
         let h_kv = self.desc.num_kv_heads;
         let k = self.desc.k_len;
 
-        if args.q.shape != [b, h_q, d] {
+        if args.q.shape() != [b, h_q, d] {
             return Err(Error::InvalidProblem(
                 "FlashDecodingPlan: q.shape mismatch (expected [B, H_q, D])",
             ));
         }
-        if args.y.shape != [b, h_q, d] {
+        if args.y.shape() != [b, h_q, d] {
             return Err(Error::InvalidProblem(
                 "FlashDecodingPlan: y.shape mismatch (expected [B, H_q, D])",
             ));
         }
         if let Some(a) = &args.a {
-            if a.shape != [b, h_q, k] {
+            if a.shape() != [b, h_q, k] {
                 return Err(Error::InvalidProblem(
                     "FlashDecodingPlan: a.shape mismatch (expected [B, H_q, K_len])",
                 ));
             }
             // The kernel derives a's strides from K_len, so a must be contiguous
             // [B, H_q, K_len] (row-major: [H_q*K_len, K_len, 1]).
-            if a.stride != [(h_q as i64) * (k as i64), k as i64, 1] {
+            if a.stride() != [(h_q as i64) * (k as i64), k as i64, 1] {
                 return Err(Error::InvalidProblem(
                     "FlashDecodingPlan: a must be contiguous [B, H_q, K_len]",
                 ));
@@ -338,23 +338,23 @@ impl<T: Element> FlashDecodingPlan<T> {
                     "FlashDecodingPlan: a_mean requires a (the per-head output is its input)",
                 ));
             }
-            if am.shape != [b, k] {
+            if am.shape() != [b, k] {
                 return Err(Error::InvalidProblem(
                     "FlashDecodingPlan: a_mean.shape mismatch (expected [B, K_len])",
                 ));
             }
-            if am.stride != [k as i64, 1] {
+            if am.stride() != [k as i64, 1] {
                 return Err(Error::InvalidProblem(
                     "FlashDecodingPlan: a_mean must be contiguous [B, K_len]",
                 ));
             }
         }
-        if args.k.shape != [b, h_kv, k, d] {
+        if args.k.shape() != [b, h_kv, k, d] {
             return Err(Error::InvalidProblem(
                 "FlashDecodingPlan: k.shape mismatch (expected [B, H_kv, K_len, D])",
             ));
         }
-        if args.v.shape != [b, h_kv, k, d] {
+        if args.v.shape() != [b, h_kv, k, d] {
             return Err(Error::InvalidProblem(
                 "FlashDecodingPlan: v.shape mismatch (expected [B, H_kv, K_len, D])",
             ));
@@ -417,21 +417,21 @@ impl<T: Element> FlashDecodingPlan<T> {
         };
 
         let stream_ptr = stream.as_raw();
-        let q_ptr = args.q.data.as_raw().0 as *const c_void;
-        let k_ptr = args.k.data.as_raw().0 as *const c_void;
-        let v_ptr = args.v.data.as_raw().0 as *const c_void;
-        let y_ptr = args.y.data.as_raw().0 as *mut c_void;
+        let q_ptr = args.q.data().as_raw().0 as *const c_void;
+        let k_ptr = args.k.data().as_raw().0 as *const c_void;
+        let v_ptr = args.v.data().as_raw().0 as *const c_void;
+        let y_ptr = args.y.data().as_raw().0 as *mut c_void;
         let a_ptr = args
             .a
             .as_ref()
             .map_or(core::ptr::null_mut::<c_void>(), |a| {
-                a.data.as_raw().0 as *mut c_void
+                a.data().as_raw().0 as *mut c_void
             });
         let a_mean_ptr = args
             .a_mean
             .as_ref()
             .map_or(core::ptr::null_mut::<c_void>(), |am| {
-                am.data.as_raw().0 as *mut c_void
+                am.data().as_raw().0 as *mut c_void
             });
 
         let status = unsafe {
@@ -450,16 +450,16 @@ impl<T: Element> FlashDecodingPlan<T> {
                     self.desc.num_kv_heads,
                     self.desc.k_len,
                     self.desc.head_dim,
-                    args.q.stride[0],
-                    args.q.stride[1],
-                    args.k.stride[0],
-                    args.k.stride[1],
-                    args.k.stride[2],
-                    args.v.stride[0],
-                    args.v.stride[1],
-                    args.v.stride[2],
-                    args.y.stride[0],
-                    args.y.stride[1],
+                    args.q.stride()[0],
+                    args.q.stride()[1],
+                    args.k.stride()[0],
+                    args.k.stride()[1],
+                    args.k.stride()[2],
+                    args.v.stride()[0],
+                    args.v.stride()[1],
+                    args.v.stride()[2],
+                    args.y.stride()[0],
+                    args.y.stride()[1],
                     self.desc.scale,
                     stream_ptr,
                 ),
@@ -478,16 +478,16 @@ impl<T: Element> FlashDecodingPlan<T> {
                         self.desc.num_kv_heads,
                         self.desc.k_len,
                         self.desc.head_dim,
-                        args.q.stride[0],
-                        args.q.stride[1],
-                        args.k.stride[0],
-                        args.k.stride[1],
-                        args.k.stride[2],
-                        args.v.stride[0],
-                        args.v.stride[1],
-                        args.v.stride[2],
-                        args.y.stride[0],
-                        args.y.stride[1],
+                        args.q.stride()[0],
+                        args.q.stride()[1],
+                        args.k.stride()[0],
+                        args.k.stride()[1],
+                        args.k.stride()[2],
+                        args.v.stride()[0],
+                        args.v.stride()[1],
+                        args.v.stride()[2],
+                        args.y.stride()[0],
+                        args.y.stride()[1],
                         self.desc.scale,
                         stream_ptr,
                     )

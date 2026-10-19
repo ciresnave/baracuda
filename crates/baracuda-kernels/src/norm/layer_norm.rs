@@ -175,23 +175,23 @@ impl<T: Element, const N: usize> LayerNormPlan<T, N> {
         crate::view_check::check_fits(&args.y)?;
         crate::view_check::check_fits(&args.mean)?;
         crate::view_check::check_fits(&args.inv_std)?;
-        if args.x.shape != self.desc.input_shape {
+        if args.x.shape() != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::LayerNormPlan: x shape mismatch",
             ));
         }
-        if args.y.shape != self.desc.input_shape {
+        if args.y.shape() != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::LayerNormPlan: y shape mismatch",
             ));
         }
         let save_shape = self.desc.save_shape();
-        if args.mean.shape != save_shape || args.inv_std.shape != save_shape {
+        if args.mean.shape() != save_shape || args.inv_std.shape() != save_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::LayerNormPlan: mean / inv_std shape mismatch",
             ));
         }
-        if args.mean.stride != args.inv_std.stride {
+        if args.mean.stride() != args.inv_std.stride() {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::LayerNormPlan: mean and inv_std must share stride",
             ));
@@ -199,15 +199,15 @@ impl<T: Element, const N: usize> LayerNormPlan<T, N> {
         let total_extent = self.desc.norm_total_extent() as i64;
         match (&args.gamma, self.desc.has_gamma) {
             (Some(g), true) => {
-                if g.shape[0] as i64 != total_extent {
+                if g.shape()[0] as i64 != total_extent {
                     return Err(Error::InvalidProblem(
                         "baracuda-kernels::LayerNormPlan: gamma length != norm_total_extent",
                     ));
                 }
-                if (g.data.len() as i64) < total_extent {
+                if (g.data().len() as i64) < total_extent {
                     return Err(Error::BufferTooSmall {
                         needed: total_extent as usize,
-                        got: g.data.len(),
+                        got: g.data().len(),
                     });
                 }
             }
@@ -220,15 +220,15 @@ impl<T: Element, const N: usize> LayerNormPlan<T, N> {
         }
         match (&args.beta, self.desc.has_beta) {
             (Some(b), true) => {
-                if b.shape[0] as i64 != total_extent {
+                if b.shape()[0] as i64 != total_extent {
                     return Err(Error::InvalidProblem(
                         "baracuda-kernels::LayerNormPlan: beta length != norm_total_extent",
                     ));
                 }
-                if (b.data.len() as i64) < total_extent {
+                if (b.data().len() as i64) < total_extent {
                     return Err(Error::BufferTooSmall {
                         needed: total_extent as usize,
-                        got: b.data.len(),
+                        got: b.data().len(),
                     });
                 }
             }
@@ -241,10 +241,10 @@ impl<T: Element, const N: usize> LayerNormPlan<T, N> {
         }
         let numel = args.x.numel();
         let save_numel = args.mean.numel();
-        let x_len = args.x.data.len() as i64;
-        let y_len = args.y.data.len() as i64;
-        let mean_len = args.mean.data.len() as i64;
-        let std_len = args.inv_std.data.len() as i64;
+        let x_len = args.x.data().len() as i64;
+        let y_len = args.y.data().len() as i64;
+        let mean_len = args.mean.data().len() as i64;
+        let std_len = args.inv_std.data().len() as i64;
         if x_len < numel || y_len < numel {
             return Err(Error::BufferTooSmall {
                 needed: numel as usize,
@@ -289,23 +289,23 @@ impl<T: Element, const N: usize> LayerNormPlan<T, N> {
             return Ok(());
         }
         let stream_ptr = stream.as_raw();
-        let x_ptr = args.x.data.as_raw().0 as *const c_void;
-        let y_ptr = args.y.data.as_raw().0 as *mut c_void;
-        let mean_ptr = args.mean.data.as_raw().0 as *mut c_void;
-        let std_ptr = args.inv_std.data.as_raw().0 as *mut c_void;
+        let x_ptr = args.x.data().as_raw().0 as *const c_void;
+        let y_ptr = args.y.data().as_raw().0 as *mut c_void;
+        let mean_ptr = args.mean.data().as_raw().0 as *mut c_void;
+        let std_ptr = args.inv_std.data().as_raw().0 as *mut c_void;
         let gamma_ptr = match &args.gamma {
-            Some(g) => g.data.as_raw().0 as *const c_void,
+            Some(g) => g.data().as_raw().0 as *const c_void,
             None => core::ptr::null(),
         };
         let beta_ptr = match &args.beta {
-            Some(b) => b.data.as_raw().0 as *const c_void,
+            Some(b) => b.data().as_raw().0 as *const c_void,
             None => core::ptr::null(),
         };
 
         let shape = self.desc.input_shape;
-        let stride_x = args.x.stride;
-        let stride_y = args.y.stride;
-        let stride_save = args.mean.stride;
+        let stride_x = args.x.stride();
+        let stride_y = args.y.stride();
+        let stride_save = args.mean.stride();
         let rank = N as i32;
         let mask = self.desc.norm_axes_mask as i32;
         let total_extent = self.desc.norm_total_extent();

@@ -186,31 +186,11 @@ where
         // diagnostic so the rollup script knows this cell was skipped.
         {
             let probe = FlashSdpaArgs::<T> {
-                q: TensorRef {
-                    data: dq.as_slice(),
-                    shape: sq,
-                    stride: stq,
-                },
-                k: TensorRef {
-                    data: dk.as_slice(),
-                    shape: skv,
-                    stride: stkv,
-                },
-                v: TensorRef {
-                    data: dv.as_slice(),
-                    shape: skv,
-                    stride: stkv,
-                },
-                y: TensorMut {
-                    data: dy.as_slice_mut(),
-                    shape: sy,
-                    stride: sty,
-                },
-                lse: TensorMut {
-                    data: dlse.as_slice_mut(),
-                    shape: sl,
-                    stride: stl,
-                },
+                q: TensorRef::new(dq.as_slice(), sq, stq).unwrap(),
+                k: TensorRef::new(dk.as_slice(), skv, stkv).unwrap(),
+                v: TensorRef::new(dv.as_slice(), skv, stkv).unwrap(),
+                y: TensorMut::new(dy.as_slice_mut(), sy, sty).unwrap(),
+                lse: TensorMut::new(dlse.as_slice_mut(), sl, stl).unwrap(),
                 mask: None,
                 alibi_slopes: None,
             };
@@ -238,31 +218,11 @@ where
 
         warmup(&stream, || {
             let args = FlashSdpaArgs::<T> {
-                q: TensorRef {
-                    data: dq.as_slice(),
-                    shape: sq,
-                    stride: stq,
-                },
-                k: TensorRef {
-                    data: dk.as_slice(),
-                    shape: skv,
-                    stride: stkv,
-                },
-                v: TensorRef {
-                    data: dv.as_slice(),
-                    shape: skv,
-                    stride: stkv,
-                },
-                y: TensorMut {
-                    data: dy.as_slice_mut(),
-                    shape: sy,
-                    stride: sty,
-                },
-                lse: TensorMut {
-                    data: dlse.as_slice_mut(),
-                    shape: sl,
-                    stride: stl,
-                },
+                q: TensorRef::new(dq.as_slice(), sq, stq).unwrap(),
+                k: TensorRef::new(dk.as_slice(), skv, stkv).unwrap(),
+                v: TensorRef::new(dv.as_slice(), skv, stkv).unwrap(),
+                y: TensorMut::new(dy.as_slice_mut(), sy, sty).unwrap(),
+                lse: TensorMut::new(dlse.as_slice_mut(), sl, stl).unwrap(),
                 mask: None,
                 alibi_slopes: None,
             };
@@ -277,31 +237,11 @@ where
         assert_cell_live(&format!("sdpa_gqa/{dtype_label}/{label}"), &dy, y_numel);
         let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 20, || {
             let args = FlashSdpaArgs::<T> {
-                q: TensorRef {
-                    data: dq.as_slice(),
-                    shape: sq,
-                    stride: stq,
-                },
-                k: TensorRef {
-                    data: dk.as_slice(),
-                    shape: skv,
-                    stride: stkv,
-                },
-                v: TensorRef {
-                    data: dv.as_slice(),
-                    shape: skv,
-                    stride: stkv,
-                },
-                y: TensorMut {
-                    data: dy.as_slice_mut(),
-                    shape: sy,
-                    stride: sty,
-                },
-                lse: TensorMut {
-                    data: dlse.as_slice_mut(),
-                    shape: sl,
-                    stride: stl,
-                },
+                q: TensorRef::new(dq.as_slice(), sq, stq).unwrap(),
+                k: TensorRef::new(dk.as_slice(), skv, stkv).unwrap(),
+                v: TensorRef::new(dv.as_slice(), skv, stkv).unwrap(),
+                y: TensorMut::new(dy.as_slice_mut(), sy, sty).unwrap(),
+                lse: TensorMut::new(dlse.as_slice_mut(), sl, stl).unwrap(),
                 mask: None,
                 alibi_slopes: None,
             };
@@ -335,31 +275,11 @@ where
             bb.iter_custom(|iters| {
                 time_with_events(&ctx, &stream, iters, || {
                     let args = FlashSdpaArgs::<T> {
-                        q: TensorRef {
-                            data: dq.as_slice(),
-                            shape: sq,
-                            stride: stq,
-                        },
-                        k: TensorRef {
-                            data: dk.as_slice(),
-                            shape: skv,
-                            stride: stkv,
-                        },
-                        v: TensorRef {
-                            data: dv.as_slice(),
-                            shape: skv,
-                            stride: stkv,
-                        },
-                        y: TensorMut {
-                            data: dy.as_slice_mut(),
-                            shape: sy,
-                            stride: sty,
-                        },
-                        lse: TensorMut {
-                            data: dlse.as_slice_mut(),
-                            shape: sl,
-                            stride: stl,
-                        },
+                        q: TensorRef::new(dq.as_slice(), sq, stq).unwrap(),
+                        k: TensorRef::new(dk.as_slice(), skv, stkv).unwrap(),
+                        v: TensorRef::new(dv.as_slice(), skv, stkv).unwrap(),
+                        y: TensorMut::new(dy.as_slice_mut(), sy, sty).unwrap(),
+                        lse: TensorMut::new(dlse.as_slice_mut(), sl, stl).unwrap(),
                         mask: None,
                         alibi_slopes: None,
                     };

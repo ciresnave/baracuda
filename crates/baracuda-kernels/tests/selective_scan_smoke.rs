@@ -159,51 +159,21 @@ fn run_fw_f32(
         stream,
         Workspace::None,
         SelectiveScanArgs {
-            u: TensorRef {
-                data: u_dev.as_slice(),
-                shape: s_ud,
-                stride: contiguous_stride(s_ud),
-            },
-            delta: TensorRef {
-                data: delta_dev.as_slice(),
-                shape: s_ud,
-                stride: contiguous_stride(s_ud),
-            },
-            a: TensorRef {
-                data: a_dev.as_slice(),
-                shape: s_a,
-                stride: contiguous_stride(s_a),
-            },
-            b: TensorRef {
-                data: b_dev.as_slice(),
-                shape: s_bc,
-                stride: contiguous_stride(s_bc),
-            },
-            c: TensorRef {
-                data: c_dev.as_slice(),
-                shape: s_bc,
-                stride: contiguous_stride(s_bc),
-            },
-            d_skip: d_dev.as_ref().map(|x| TensorRef {
-                data: x.as_slice(),
-                shape: s_d,
-                stride: contiguous_stride(s_d),
-            }),
-            z: z_dev.as_ref().map(|x| TensorRef {
-                data: x.as_slice(),
-                shape: s_ud,
-                stride: contiguous_stride(s_ud),
-            }),
-            delta_bias: db_dev.as_ref().map(|x| TensorRef {
-                data: x.as_slice(),
-                shape: s_d,
-                stride: contiguous_stride(s_d),
-            }),
-            y: TensorMut {
-                data: y_dev.as_slice_mut(),
-                shape: s_ud,
-                stride: contiguous_stride(s_ud),
-            },
+            u: TensorRef::new(u_dev.as_slice(), s_ud, contiguous_stride(s_ud)).unwrap(),
+            delta: TensorRef::new(delta_dev.as_slice(), s_ud, contiguous_stride(s_ud)).unwrap(),
+            a: TensorRef::new(a_dev.as_slice(), s_a, contiguous_stride(s_a)).unwrap(),
+            b: TensorRef::new(b_dev.as_slice(), s_bc, contiguous_stride(s_bc)).unwrap(),
+            c: TensorRef::new(c_dev.as_slice(), s_bc, contiguous_stride(s_bc)).unwrap(),
+            d_skip: d_dev
+                .as_ref()
+                .map(|x| TensorRef::new(x.as_slice(), s_d, contiguous_stride(s_d)).unwrap()),
+            z: z_dev
+                .as_ref()
+                .map(|x| TensorRef::new(x.as_slice(), s_ud, contiguous_stride(s_ud)).unwrap()),
+            delta_bias: db_dev
+                .as_ref()
+                .map(|x| TensorRef::new(x.as_slice(), s_d, contiguous_stride(s_d)).unwrap()),
+            y: TensorMut::new(y_dev.as_slice_mut(), s_ud, contiguous_stride(s_ud)).unwrap(),
             last_state: None,
         },
     )
@@ -421,39 +391,15 @@ fn selective_scan_f16_vanilla_matches_cpu_ref_loose() {
         &stream,
         Workspace::None,
         SelectiveScanArgs {
-            u: TensorRef {
-                data: u_dev.as_slice(),
-                shape: s_ud,
-                stride: contiguous_stride(s_ud),
-            },
-            delta: TensorRef {
-                data: delta_dev.as_slice(),
-                shape: s_ud,
-                stride: contiguous_stride(s_ud),
-            },
-            a: TensorRef {
-                data: a_dev.as_slice(),
-                shape: s_a,
-                stride: contiguous_stride(s_a),
-            },
-            b: TensorRef {
-                data: b_dev.as_slice(),
-                shape: s_bc,
-                stride: contiguous_stride(s_bc),
-            },
-            c: TensorRef {
-                data: c_dev.as_slice(),
-                shape: s_bc,
-                stride: contiguous_stride(s_bc),
-            },
+            u: TensorRef::new(u_dev.as_slice(), s_ud, contiguous_stride(s_ud)).unwrap(),
+            delta: TensorRef::new(delta_dev.as_slice(), s_ud, contiguous_stride(s_ud)).unwrap(),
+            a: TensorRef::new(a_dev.as_slice(), s_a, contiguous_stride(s_a)).unwrap(),
+            b: TensorRef::new(b_dev.as_slice(), s_bc, contiguous_stride(s_bc)).unwrap(),
+            c: TensorRef::new(c_dev.as_slice(), s_bc, contiguous_stride(s_bc)).unwrap(),
             d_skip: None,
             z: None,
             delta_bias: None,
-            y: TensorMut {
-                data: y_dev.as_slice_mut(),
-                shape: s_ud,
-                stride: contiguous_stride(s_ud),
-            },
+            y: TensorMut::new(y_dev.as_slice_mut(), s_ud, contiguous_stride(s_ud)).unwrap(),
             last_state: None,
         },
     )
@@ -505,39 +451,15 @@ fn selective_scan_bf16_vanilla_matches_cpu_ref_loose() {
         &stream,
         Workspace::None,
         SelectiveScanArgs {
-            u: TensorRef {
-                data: u_dev.as_slice(),
-                shape: s_ud,
-                stride: contiguous_stride(s_ud),
-            },
-            delta: TensorRef {
-                data: delta_dev.as_slice(),
-                shape: s_ud,
-                stride: contiguous_stride(s_ud),
-            },
-            a: TensorRef {
-                data: a_dev.as_slice(),
-                shape: s_a,
-                stride: contiguous_stride(s_a),
-            },
-            b: TensorRef {
-                data: b_dev.as_slice(),
-                shape: s_bc,
-                stride: contiguous_stride(s_bc),
-            },
-            c: TensorRef {
-                data: c_dev.as_slice(),
-                shape: s_bc,
-                stride: contiguous_stride(s_bc),
-            },
+            u: TensorRef::new(u_dev.as_slice(), s_ud, contiguous_stride(s_ud)).unwrap(),
+            delta: TensorRef::new(delta_dev.as_slice(), s_ud, contiguous_stride(s_ud)).unwrap(),
+            a: TensorRef::new(a_dev.as_slice(), s_a, contiguous_stride(s_a)).unwrap(),
+            b: TensorRef::new(b_dev.as_slice(), s_bc, contiguous_stride(s_bc)).unwrap(),
+            c: TensorRef::new(c_dev.as_slice(), s_bc, contiguous_stride(s_bc)).unwrap(),
             d_skip: None,
             z: None,
             delta_bias: None,
-            y: TensorMut {
-                data: y_dev.as_slice_mut(),
-                shape: s_ud,
-                stride: contiguous_stride(s_ud),
-            },
+            y: TensorMut::new(y_dev.as_slice_mut(), s_ud, contiguous_stride(s_ud)).unwrap(),
             last_state: None,
         },
     )
@@ -625,44 +547,18 @@ fn selective_scan_with_last_state_saves_final_h() {
         &stream,
         Workspace::None,
         SelectiveScanArgs {
-            u: TensorRef {
-                data: u_dev.as_slice(),
-                shape: s_ud,
-                stride: contiguous_stride(s_ud),
-            },
-            delta: TensorRef {
-                data: delta_dev.as_slice(),
-                shape: s_ud,
-                stride: contiguous_stride(s_ud),
-            },
-            a: TensorRef {
-                data: a_dev.as_slice(),
-                shape: s_a,
-                stride: contiguous_stride(s_a),
-            },
-            b: TensorRef {
-                data: b_dev.as_slice(),
-                shape: s_bc,
-                stride: contiguous_stride(s_bc),
-            },
-            c: TensorRef {
-                data: c_dev.as_slice(),
-                shape: s_bc,
-                stride: contiguous_stride(s_bc),
-            },
+            u: TensorRef::new(u_dev.as_slice(), s_ud, contiguous_stride(s_ud)).unwrap(),
+            delta: TensorRef::new(delta_dev.as_slice(), s_ud, contiguous_stride(s_ud)).unwrap(),
+            a: TensorRef::new(a_dev.as_slice(), s_a, contiguous_stride(s_a)).unwrap(),
+            b: TensorRef::new(b_dev.as_slice(), s_bc, contiguous_stride(s_bc)).unwrap(),
+            c: TensorRef::new(c_dev.as_slice(), s_bc, contiguous_stride(s_bc)).unwrap(),
             d_skip: None,
             z: None,
             delta_bias: None,
-            y: TensorMut {
-                data: y_dev.as_slice_mut(),
-                shape: s_ud,
-                stride: contiguous_stride(s_ud),
-            },
-            last_state: Some(TensorMut {
-                data: ls_dev.as_slice_mut(),
-                shape: s_ls,
-                stride: contiguous_stride(s_ls),
-            }),
+            y: TensorMut::new(y_dev.as_slice_mut(), s_ud, contiguous_stride(s_ud)).unwrap(),
+            last_state: Some(
+                TensorMut::new(ls_dev.as_slice_mut(), s_ls, contiguous_stride(s_ls)).unwrap(),
+            ),
         },
     )
     .expect("run");

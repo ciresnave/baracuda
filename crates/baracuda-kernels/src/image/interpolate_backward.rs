@@ -221,28 +221,28 @@ impl<T: Element> InterpolateBackwardPlan<T> {
     pub fn can_implement(&self, args: &InterpolateBackwardArgs<'_, T>) -> Result<()> {
         crate::view_check::check_fits(&args.dout)?;
         crate::view_check::check_fits(&args.dinput)?;
-        if args.dout.shape != [self.desc.n, self.desc.c, self.desc.oh, self.desc.ow] {
+        if args.dout.shape() != [self.desc.n, self.desc.c, self.desc.oh, self.desc.ow] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::InterpolateBackwardPlan: dout shape mismatch",
             ));
         }
-        if args.dinput.shape != [self.desc.n, self.desc.c, self.desc.ih, self.desc.iw] {
+        if args.dinput.shape() != [self.desc.n, self.desc.c, self.desc.ih, self.desc.iw] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::InterpolateBackwardPlan: dinput shape mismatch",
             ));
         }
         let dout_numel = args.dout.numel();
         let din_numel = args.dinput.numel();
-        if (args.dout.data.len() as i64) < dout_numel {
+        if (args.dout.data().len() as i64) < dout_numel {
             return Err(Error::BufferTooSmall {
                 needed: dout_numel as usize,
-                got: args.dout.data.len(),
+                got: args.dout.data().len(),
             });
         }
-        if (args.dinput.data.len() as i64) < din_numel {
+        if (args.dinput.data().len() as i64) < din_numel {
             return Err(Error::BufferTooSmall {
                 needed: din_numel as usize,
-                got: args.dinput.data.len(),
+                got: args.dinput.data().len(),
             });
         }
         Ok(())
@@ -277,8 +277,8 @@ impl<T: Element> InterpolateBackwardPlan<T> {
         if args.dout.numel() == 0 {
             return Ok(());
         }
-        let dout_ptr = args.dout.data.as_raw().0 as *const c_void;
-        let din_ptr = args.dinput.data.as_raw().0 as *mut c_void;
+        let dout_ptr = args.dout.data().as_raw().0 as *const c_void;
+        let din_ptr = args.dinput.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         let ac: i32 = if self.desc.align_corners { 1 } else { 0 };
         let sh: f64 = self.desc.scale_h.unwrap_or(0.0);

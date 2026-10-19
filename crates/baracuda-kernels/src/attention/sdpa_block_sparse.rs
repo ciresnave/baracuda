@@ -306,32 +306,32 @@ impl<T: Element> SdpaBlockSparsePlan<T> {
             self.desc.num_heads,
             self.num_blocks_q * self.num_blocks_k,
         ];
-        if args.q.shape != shape_q {
+        if args.q.shape() != shape_q {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SdpaBlockSparsePlan: Q shape mismatch",
             ));
         }
-        if args.k.shape != shape_k {
+        if args.k.shape() != shape_k {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SdpaBlockSparsePlan: K shape mismatch",
             ));
         }
-        if args.v.shape != shape_v {
+        if args.v.shape() != shape_v {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SdpaBlockSparsePlan: V shape mismatch",
             ));
         }
-        if args.y.shape != shape_y {
+        if args.y.shape() != shape_y {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SdpaBlockSparsePlan: y shape mismatch",
             ));
         }
-        if args.lse.shape != shape_lse {
+        if args.lse.shape() != shape_lse {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SdpaBlockSparsePlan: lse shape mismatch",
             ));
         }
-        if args.block_pattern.shape != shape_bp {
+        if args.block_pattern.shape() != shape_bp {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SdpaBlockSparsePlan: block_pattern shape mismatch \
                  (expected [B, H, num_blocks_q * num_blocks_k])",
@@ -395,12 +395,12 @@ impl<T: Element> SdpaBlockSparsePlan<T> {
         #[cfg(feature = "xformers_blocksparse")]
         {
             let stream_ptr = stream.as_raw() as *mut c_void;
-            let q_ptr = args.q.data.as_raw().0 as *const c_void;
-            let k_ptr = args.k.data.as_raw().0 as *const c_void;
-            let v_ptr = args.v.data.as_raw().0 as *const c_void;
-            let bp_ptr = args.block_pattern.data.as_raw().0 as *const c_void;
-            let y_ptr = args.y.data.as_raw().0 as *mut c_void;
-            let lse_ptr = args.lse.data.as_raw().0 as *mut c_void;
+            let q_ptr = args.q.data().as_raw().0 as *const c_void;
+            let k_ptr = args.k.data().as_raw().0 as *const c_void;
+            let v_ptr = args.v.data().as_raw().0 as *const c_void;
+            let bp_ptr = args.block_pattern.data().as_raw().0 as *const c_void;
+            let y_ptr = args.y.data().as_raw().0 as *mut c_void;
+            let lse_ptr = args.lse.data().as_raw().0 as *mut c_void;
             let is_causal_flag = if self.desc.is_causal { 1 } else { 0 };
 
             let status = unsafe {

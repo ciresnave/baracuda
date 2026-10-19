@@ -70,36 +70,12 @@ fn loss_margin_ranking_backward_f32_mean() {
         &stream,
         Workspace::None,
         MarginRankingLossBackwardArgs {
-            x1: TensorRef {
-                data: dev_x1.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            x2: TensorRef {
-                data: dev_x2.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            t: TensorRef {
-                data: dev_t.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape: [1, 1],
-                stride: [1, 1],
-            },
-            dx1: TensorMut {
-                data: dev_dx1.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            dx2: TensorMut {
-                data: dev_dx2.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            x1: TensorRef::new(dev_x1.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            x2: TensorRef::new(dev_x2.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            t: TensorRef::new(dev_t.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            dy: TensorRef::new(dev_dy.as_slice(), [1, 1], [1, 1]).unwrap(),
+            dx1: TensorMut::new(dev_dx1.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
+            dx2: TensorMut::new(dev_dx2.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
         },
     )
     .unwrap();
@@ -159,36 +135,12 @@ fn loss_margin_ranking_backward_f64_mean() {
         &stream,
         Workspace::None,
         MarginRankingLossBackwardArgs {
-            x1: TensorRef {
-                data: dev_x1.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            x2: TensorRef {
-                data: dev_x2.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            t: TensorRef {
-                data: dev_t.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape: [1, 1],
-                stride: [1, 1],
-            },
-            dx1: TensorMut {
-                data: dev_dx1.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            dx2: TensorMut {
-                data: dev_dx2.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            x1: TensorRef::new(dev_x1.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            x2: TensorRef::new(dev_x2.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            t: TensorRef::new(dev_t.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            dy: TensorRef::new(dev_dy.as_slice(), [1, 1], [1, 1]).unwrap(),
+            dx1: TensorMut::new(dev_dx1.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
+            dx2: TensorMut::new(dev_dx2.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
         },
     )
     .unwrap();
@@ -242,36 +194,12 @@ fn loss_margin_ranking_backward_f16_mean() {
         &stream,
         Workspace::None,
         MarginRankingLossBackwardArgs {
-            x1: TensorRef {
-                data: dev_x1.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            x2: TensorRef {
-                data: dev_x2.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            t: TensorRef {
-                data: dev_t.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape: [1, 1],
-                stride: [1, 1],
-            },
-            dx1: TensorMut {
-                data: dev_dx1.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            dx2: TensorMut {
-                data: dev_dx2.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            x1: TensorRef::new(dev_x1.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            x2: TensorRef::new(dev_x2.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            t: TensorRef::new(dev_t.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            dy: TensorRef::new(dev_dy.as_slice(), [1, 1], [1, 1]).unwrap(),
+            dx1: TensorMut::new(dev_dx1.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
+            dx2: TensorMut::new(dev_dx2.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
         },
     )
     .unwrap();
@@ -339,36 +267,12 @@ fn loss_margin_ranking_backward_bf16_mean() {
         &stream,
         Workspace::None,
         MarginRankingLossBackwardArgs {
-            x1: TensorRef {
-                data: dev_x1.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            x2: TensorRef {
-                data: dev_x2.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            t: TensorRef {
-                data: dev_t.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape: [1, 1],
-                stride: [1, 1],
-            },
-            dx1: TensorMut {
-                data: dev_dx1.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            dx2: TensorMut {
-                data: dev_dx2.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            x1: TensorRef::new(dev_x1.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            x2: TensorRef::new(dev_x2.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            t: TensorRef::new(dev_t.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            dy: TensorRef::new(dev_dy.as_slice(), [1, 1], [1, 1]).unwrap(),
+            dx1: TensorMut::new(dev_dx1.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
+            dx2: TensorMut::new(dev_dx2.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
         },
     )
     .unwrap();

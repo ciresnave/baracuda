@@ -10,13 +10,36 @@
 //! `cargo test -p baracuda-kernels --features sm89,device-tests --test soundness_tensor_view_bounds`
 #![cfg(feature = "device-tests")]
 
-use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
+use baracuda_driver::{Context, Device, DeviceBuffer, DeviceSlice, DeviceSliceMut, Stream, init};
 use baracuda_kernels::{
     Bin, BinGemmArgs, BinGemmDescriptor, BinGemmPlan, BinaryArgs, BinaryDescriptor, BinaryKind,
     BinaryPlan, ContiguizeArgs, ContiguizeDescriptor, ContiguizePlan, ElementKind, LayoutSku,
     LossReduction, MatrixMut, MatrixRef, MseLossArgs, MseLossDescriptor, MseLossPlan,
-    PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
+    PlanPreference, TensorMut, TensorRef, ViewError, Workspace, contiguous_stride,
 };
+
+/// Build a view WITHOUT the constructor's bounds check. These tests exist to
+/// prove each plan rejects an out-of-bounds view on its own (defence in depth),
+/// and `TensorRef::new` / `TensorMut::new` would refuse to build one.
+fn bad_ref<'a, T: baracuda_types::DeviceRepr + Copy + 'static, const N: usize>(
+    data: DeviceSlice<'a, T>,
+    shape: [i32; N],
+    stride: [i64; N],
+) -> TensorRef<'a, T, N> {
+    // SAFETY: deliberately out of bounds. The view is only ever handed to a plan
+    // whose own check must return `Err` before any kernel is launched.
+    unsafe { TensorRef::new_unchecked(data, shape, stride) }
+}
+
+/// Mutable counterpart of [`bad_ref`].
+fn bad_mut<'a, T: baracuda_types::DeviceRepr + Copy + 'static, const N: usize>(
+    data: DeviceSliceMut<'a, T>,
+    shape: [i32; N],
+    stride: [i64; N],
+) -> TensorMut<'a, T, N> {
+    // SAFETY: as for [`bad_ref`].
+    unsafe { TensorMut::new_unchecked(data, shape, stride) }
+}
 
 const N: usize = 64;
 
@@ -44,21 +67,9 @@ fn strided_output_view_cannot_write_past_its_slice() {
         &stream,
         Workspace::None,
         BinaryArgs {
-            a: TensorRef {
-                data: ones.as_slice(),
-                shape: [N as i32],
-                stride: [1],
-            },
-            b: TensorRef {
-                data: ones.as_slice(),
-                shape: [N as i32],
-                stride: [1],
-            },
-            y: TensorMut {
-                data: big.slice_mut(0..N),
-                shape: [N as i32],
-                stride: [2],
-            },
+            a: bad_ref(ones.as_slice(), [N as i32], [1]),
+            b: bad_ref(ones.as_slice(), [N as i32], [1]),
+            y: bad_mut(big.slice_mut(0..N), [N as i32], [2]),
         },
     );
     stream.synchronize().unwrap();
@@ -88,21 +99,9 @@ fn strided_input_view_cannot_read_past_its_slice() {
         &stream,
         Workspace::None,
         BinaryArgs {
-            a: TensorRef {
-                data: big.slice(0..N),
-                shape: [N as i32],
-                stride: [2],
-            },
-            b: TensorRef {
-                data: zeros.as_slice(),
-                shape: [N as i32],
-                stride: [1],
-            },
-            y: TensorMut {
-                data: y.as_slice_mut(),
-                shape: [N as i32],
-                stride: [1],
-            },
+            a: bad_ref(big.slice(0..N), [N as i32], [2]),
+            b: bad_ref(zeros.as_slice(), [N as i32], [1]),
+            y: bad_mut(y.as_slice_mut(), [N as i32], [1]),
         },
     );
     stream.synchronize().unwrap();
@@ -139,21 +138,9 @@ fn run_only_family_rejects_view_longer_than_its_slice() {
         &stream,
         Workspace::Borrowed(ws.as_slice_mut()),
         MseLossArgs {
-            pred: TensorRef {
-                data: short.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            target: TensorRef {
-                data: full.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            out: TensorMut {
-                data: y.as_slice_mut(),
-                shape: [1, 1],
-                stride: [1, 1],
-            },
+            pred: bad_ref(short.as_slice(), shape, contiguous_stride(shape)),
+            target: bad_ref(full.as_slice(), shape, contiguous_stride(shape)),
+            out: bad_mut(y.as_slice_mut(), [1, 1], [1, 1]),
         },
     );
     stream.synchronize().unwrap();
@@ -233,16 +220,8 @@ fn contiguize_source_offset_past_the_slice_is_rejected() {
         &stream,
         Workspace::None,
         ContiguizeArgs::<f32, 2> {
-            source: TensorRef {
-                data: src.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            dest: TensorMut {
-                data: y.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            source: bad_ref(src.as_slice(), shape, contiguous_stride(shape)),
+            dest: bad_mut(y.as_slice_mut(), shape, contiguous_stride(shape)),
         },
     );
     stream.synchronize().unwrap();
@@ -250,4 +229,36 @@ fn contiguize_source_offset_past_the_slice_is_rejected() {
         res.is_err(),
         "run() accepted source_offset 4 over a 12-element slice needing 16"
     );
+}
+
+/// The constructors are now the only safe way to build a view, and they refuse
+/// the shapes that made the plans above unsound: `big[0..N]` at stride 2 reaches
+/// `2N - 1` elements, and a negative stride walks before element 0.
+#[test]
+fn view_constructors_reject_what_the_plans_used_to_accept() {
+    let (ctx, _stream, _) = setup();
+    let big = DeviceBuffer::from_slice(&ctx, &vec![0.0f32; 2 * N]).unwrap();
+    let mut out = DeviceBuffer::from_slice(&ctx, &vec![0.0f32; 2 * N]).unwrap();
+
+    let strided = TensorRef::new(big.slice(0..N), [N as i32], [2]);
+    assert!(
+        matches!(strided, Err(ViewError::TooSmall { needed, got }) if needed == 2 * N - 1 && got == N),
+        "read view reaching past its slice must be refused"
+    );
+    let strided = TensorMut::new(out.slice_mut(0..N), [N as i32], [2]);
+    assert!(
+        matches!(strided, Err(ViewError::TooSmall { .. })),
+        "write view reaching past its slice must be refused"
+    );
+    let negative = TensorRef::new(big.slice(0..N), [N as i32], [-1]);
+    assert!(
+        matches!(negative, Err(ViewError::NotAddressable)),
+        "negative stride reaches before the slice"
+    );
+    let negative_extent = TensorRef::new(big.slice(0..N), [-1], [1]);
+    assert!(matches!(negative_extent, Err(ViewError::NotAddressable)));
+    // Positive controls: the same slice with an in-bounds stride, and a 2x slice at stride 2.
+    assert!(TensorRef::new(big.slice(0..N), [N as i32], [1]).is_ok());
+    assert!(TensorRef::new(big.slice(0..2 * N), [N as i32], [2]).is_ok());
+    assert!(TensorRef::contiguous(big.slice(0..N), [N as i32]).is_ok());
 }

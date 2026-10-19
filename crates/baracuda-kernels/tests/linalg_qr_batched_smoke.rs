@@ -62,16 +62,13 @@ fn qr_batched_f32_basic() {
     let a_shape = [b, m, n];
     let tau_shape = [b, k];
     let args = BatchedQrArgs::<f32> {
-        a: TensorMut {
-            data: dev_a.as_slice_mut(),
-            shape: a_shape,
-            stride: contiguous_stride(a_shape),
-        },
-        tau: TensorMut {
-            data: dev_tau.as_slice_mut(),
-            shape: tau_shape,
-            stride: contiguous_stride(tau_shape),
-        },
+        a: TensorMut::new(dev_a.as_slice_mut(), a_shape, contiguous_stride(a_shape)).unwrap(),
+        tau: TensorMut::new(
+            dev_tau.as_slice_mut(),
+            tau_shape,
+            contiguous_stride(tau_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
         .expect("run batched QR f32");
@@ -120,16 +117,13 @@ fn qr_batched_f64_basic() {
     let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_bytes).expect("alloc ws");
 
     let args = BatchedQrArgs::<f64> {
-        a: TensorMut {
-            data: dev_a.as_slice_mut(),
-            shape: [b, m, n],
-            stride: contiguous_stride([b, m, n]),
-        },
-        tau: TensorMut {
-            data: dev_tau.as_slice_mut(),
-            shape: [b, k],
-            stride: contiguous_stride([b, k]),
-        },
+        a: TensorMut::new(
+            dev_a.as_slice_mut(),
+            [b, m, n],
+            contiguous_stride([b, m, n]),
+        )
+        .unwrap(),
+        tau: TensorMut::new(dev_tau.as_slice_mut(), [b, k], contiguous_stride([b, k])).unwrap(),
     };
     plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
         .expect("run batched QR f64");
@@ -193,16 +187,13 @@ fn qr_batched_complex32_basic() {
     let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_bytes).expect("alloc ws");
 
     let args = BatchedQrArgs::<Complex64> {
-        a: TensorMut {
-            data: dev_a.as_slice_mut(),
-            shape: [b, m, n],
-            stride: contiguous_stride([b, m, n]),
-        },
-        tau: TensorMut {
-            data: dev_tau.as_slice_mut(),
-            shape: [b, k],
-            stride: contiguous_stride([b, k]),
-        },
+        a: TensorMut::new(
+            dev_a.as_slice_mut(),
+            [b, m, n],
+            contiguous_stride([b, m, n]),
+        )
+        .unwrap(),
+        tau: TensorMut::new(dev_tau.as_slice_mut(), [b, k], contiguous_stride([b, k])).unwrap(),
     };
     plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
         .expect("run batched QR Complex64");
@@ -264,16 +255,13 @@ fn qr_batched_complex64_basic() {
     let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_bytes).expect("alloc ws");
 
     let args = BatchedQrArgs::<Complex128> {
-        a: TensorMut {
-            data: dev_a.as_slice_mut(),
-            shape: [b, m, n],
-            stride: contiguous_stride([b, m, n]),
-        },
-        tau: TensorMut {
-            data: dev_tau.as_slice_mut(),
-            shape: [b, k],
-            stride: contiguous_stride([b, k]),
-        },
+        a: TensorMut::new(
+            dev_a.as_slice_mut(),
+            [b, m, n],
+            contiguous_stride([b, m, n]),
+        )
+        .unwrap(),
+        tau: TensorMut::new(dev_tau.as_slice_mut(), [b, k], contiguous_stride([b, k])).unwrap(),
     };
     plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
         .expect("run batched QR Complex128");

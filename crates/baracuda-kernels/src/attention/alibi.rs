@@ -138,17 +138,17 @@ impl<T: Element> AlibiPlan<T> {
             self.desc.query_len,
             self.desc.key_len,
         ];
-        if args.scores.shape != want_shape {
+        if args.scores.shape() != want_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::AlibiPlan: scores shape mismatch",
             ));
         }
-        if args.out.shape != want_shape {
+        if args.out.shape() != want_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::AlibiPlan: out shape mismatch",
             ));
         }
-        if args.slopes.shape != [self.desc.num_heads] {
+        if args.slopes.shape() != [self.desc.num_heads] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::AlibiPlan: slopes shape must be [num_heads]",
             ));
@@ -159,16 +159,16 @@ impl<T: Element> AlibiPlan<T> {
             ));
         }
         let numel = args.scores.numel();
-        if (args.scores.data.len() as i64) < numel || (args.out.data.len() as i64) < numel {
+        if (args.scores.data().len() as i64) < numel || (args.out.data().len() as i64) < numel {
             return Err(Error::BufferTooSmall {
                 needed: numel as usize,
-                got: args.scores.data.len().min(args.out.data.len()),
+                got: args.scores.data().len().min(args.out.data().len()),
             });
         }
-        if (args.slopes.data.len() as i64) < self.desc.num_heads as i64 {
+        if (args.slopes.data().len() as i64) < self.desc.num_heads as i64 {
             return Err(Error::BufferTooSmall {
                 needed: self.desc.num_heads as usize,
-                got: args.slopes.data.len(),
+                got: args.slopes.data().len(),
             });
         }
         Ok(())
@@ -205,9 +205,9 @@ impl<T: Element> AlibiPlan<T> {
             return Ok(());
         }
         let stream_ptr = stream.as_raw();
-        let scores_ptr = args.scores.data.as_raw().0 as *const c_void;
-        let slopes_ptr = args.slopes.data.as_raw().0 as *const c_void;
-        let out_ptr = args.out.data.as_raw().0 as *mut c_void;
+        let scores_ptr = args.scores.data().as_raw().0 as *const c_void;
+        let slopes_ptr = args.slopes.data().as_raw().0 as *const c_void;
+        let out_ptr = args.out.data().as_raw().0 as *mut c_void;
 
         let status = match T::KIND {
             ElementKind::F32 => unsafe {

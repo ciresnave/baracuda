@@ -174,7 +174,7 @@ impl<T: Element, const N: usize> ConcatBackwardPlan<T, N> {
         crate::view_check::check_fits(&args.dy)?;
         crate::view_check::check_fits(&args.da)?;
         crate::view_check::check_fits(&args.db)?;
-        if args.dy.shape != self.desc.output_shape {
+        if args.dy.shape() != self.desc.output_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::ConcatBackwardPlan: dy shape mismatch with descriptor \
                  output_shape",
@@ -182,13 +182,13 @@ impl<T: Element, const N: usize> ConcatBackwardPlan<T, N> {
         }
         let expected_da = self.desc.da_shape();
         let expected_db = self.desc.db_shape();
-        if args.da.shape != expected_da {
+        if args.da.shape() != expected_da {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::ConcatBackwardPlan: da shape mismatch with derived \
                  da shape (= output_shape with [concat_dim] = split_offset)",
             ));
         }
-        if args.db.shape != expected_db {
+        if args.db.shape() != expected_db {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::ConcatBackwardPlan: db shape mismatch with derived \
                  db shape (= output_shape with [concat_dim] = \
@@ -198,9 +198,9 @@ impl<T: Element, const N: usize> ConcatBackwardPlan<T, N> {
         let dy_numel = args.dy.numel();
         let da_numel = args.da.numel();
         let db_numel = args.db.numel();
-        let dy_len = args.dy.data.len() as i64;
-        let da_len = args.da.data.len() as i64;
-        let db_len = args.db.data.len() as i64;
+        let dy_len = args.dy.data().len() as i64;
+        let da_len = args.da.data().len() as i64;
+        let db_len = args.db.data().len() as i64;
         if dy_len < dy_numel {
             return Err(Error::BufferTooSmall {
                 needed: dy_numel as usize,
@@ -250,15 +250,15 @@ impl<T: Element, const N: usize> ConcatBackwardPlan<T, N> {
         if output_numel == 0 {
             return Ok(());
         }
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let da_ptr = args.da.data.as_raw().0 as *mut c_void;
-        let db_ptr = args.db.data.as_raw().0 as *mut c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let da_ptr = args.da.data().as_raw().0 as *mut c_void;
+        let db_ptr = args.db.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
         let output_shape = self.desc.output_shape;
-        let stride_dy = args.dy.stride;
-        let stride_da = args.da.stride;
-        let stride_db = args.db.stride;
+        let stride_dy = args.dy.stride();
+        let stride_da = args.da.stride();
+        let stride_db = args.db.stride();
         let rank = N as i32;
         let concat_dim = self.desc.concat_dim as i32;
         let split_offset = self.desc.split_offset;

@@ -111,21 +111,9 @@ fn bench<T>(
 
         warmup(&stream, || {
             let args = EmbeddingArgs::<T, i32> {
-                weight: TensorRef {
-                    data: dev_weight.as_slice(),
-                    shape: w_shape,
-                    stride: stw,
-                },
-                indices: TensorRef {
-                    data: dev_idx.as_slice(),
-                    shape: i_shape,
-                    stride: sti,
-                },
-                output: TensorMut {
-                    data: dev_out.as_slice_mut(),
-                    shape: o_shape,
-                    stride: sto,
-                },
+                weight: TensorRef::new(dev_weight.as_slice(), w_shape, stw).unwrap(),
+                indices: TensorRef::new(dev_idx.as_slice(), i_shape, sti).unwrap(),
+                output: TensorMut::new(dev_out.as_slice_mut(), o_shape, sto).unwrap(),
             };
             plan.run(&stream, Workspace::None, args)
                 .expect("baracuda embedding");
@@ -139,21 +127,9 @@ fn bench<T>(
         );
         let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 50, || {
             let args = EmbeddingArgs::<T, i32> {
-                weight: TensorRef {
-                    data: dev_weight.as_slice(),
-                    shape: w_shape,
-                    stride: stw,
-                },
-                indices: TensorRef {
-                    data: dev_idx.as_slice(),
-                    shape: i_shape,
-                    stride: sti,
-                },
-                output: TensorMut {
-                    data: dev_out.as_slice_mut(),
-                    shape: o_shape,
-                    stride: sto,
-                },
+                weight: TensorRef::new(dev_weight.as_slice(), w_shape, stw).unwrap(),
+                indices: TensorRef::new(dev_idx.as_slice(), i_shape, sti).unwrap(),
+                output: TensorMut::new(dev_out.as_slice_mut(), o_shape, sto).unwrap(),
             };
             plan.run(&stream, Workspace::None, args)
                 .expect("baracuda embedding");
@@ -174,21 +150,9 @@ fn bench<T>(
             bb.iter_custom(|iters| {
                 time_with_events(&ctx, &stream, iters, || {
                     let args = EmbeddingArgs::<T, i32> {
-                        weight: TensorRef {
-                            data: dev_weight.as_slice(),
-                            shape: w_shape,
-                            stride: stw,
-                        },
-                        indices: TensorRef {
-                            data: dev_idx.as_slice(),
-                            shape: i_shape,
-                            stride: sti,
-                        },
-                        output: TensorMut {
-                            data: dev_out.as_slice_mut(),
-                            shape: o_shape,
-                            stride: sto,
-                        },
+                        weight: TensorRef::new(dev_weight.as_slice(), w_shape, stw).unwrap(),
+                        indices: TensorRef::new(dev_idx.as_slice(), i_shape, sti).unwrap(),
+                        output: TensorMut::new(dev_out.as_slice_mut(), o_shape, sto).unwrap(),
                     };
                     plan.run(&stream, Workspace::None, args)
                         .expect("baracuda embedding");

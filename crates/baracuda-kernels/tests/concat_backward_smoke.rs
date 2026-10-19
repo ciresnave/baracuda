@@ -113,21 +113,14 @@ fn concat_backward_f32_2d_dim0() {
     let plan = ConcatBackwardPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let args = ConcatBackwardArgs::<f32, 2> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape: output_shape,
-            stride: contiguous_stride(output_shape),
-        },
-        da: TensorMut {
-            data: dev_da.as_slice_mut(),
-            shape: da_shape,
-            stride: contiguous_stride(da_shape),
-        },
-        db: TensorMut {
-            data: dev_db.as_slice_mut(),
-            shape: db_shape,
-            stride: contiguous_stride(db_shape),
-        },
+        dy: TensorRef::new(
+            dev_dy.as_slice(),
+            output_shape,
+            contiguous_stride(output_shape),
+        )
+        .unwrap(),
+        da: TensorMut::new(dev_da.as_slice_mut(), da_shape, contiguous_stride(da_shape)).unwrap(),
+        db: TensorMut::new(dev_db.as_slice_mut(), db_shape, contiguous_stride(db_shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -181,21 +174,14 @@ fn concat_backward_f32_3d_dim1() {
     let plan = ConcatBackwardPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let args = ConcatBackwardArgs::<f32, 3> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape: output_shape,
-            stride: contiguous_stride(output_shape),
-        },
-        da: TensorMut {
-            data: dev_da.as_slice_mut(),
-            shape: da_shape,
-            stride: contiguous_stride(da_shape),
-        },
-        db: TensorMut {
-            data: dev_db.as_slice_mut(),
-            shape: db_shape,
-            stride: contiguous_stride(db_shape),
-        },
+        dy: TensorRef::new(
+            dev_dy.as_slice(),
+            output_shape,
+            contiguous_stride(output_shape),
+        )
+        .unwrap(),
+        da: TensorMut::new(dev_da.as_slice_mut(), da_shape, contiguous_stride(da_shape)).unwrap(),
+        db: TensorMut::new(dev_db.as_slice_mut(), db_shape, contiguous_stride(db_shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -261,21 +247,14 @@ fn concat_backward_f16_2d_dim1() {
     let plan = ConcatBackwardPlan::<f16, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let args = ConcatBackwardArgs::<f16, 2> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape: output_shape,
-            stride: contiguous_stride(output_shape),
-        },
-        da: TensorMut {
-            data: dev_da.as_slice_mut(),
-            shape: da_shape,
-            stride: contiguous_stride(da_shape),
-        },
-        db: TensorMut {
-            data: dev_db.as_slice_mut(),
-            shape: db_shape,
-            stride: contiguous_stride(db_shape),
-        },
+        dy: TensorRef::new(
+            dev_dy.as_slice(),
+            output_shape,
+            contiguous_stride(output_shape),
+        )
+        .unwrap(),
+        da: TensorMut::new(dev_da.as_slice_mut(), da_shape, contiguous_stride(da_shape)).unwrap(),
+        db: TensorMut::new(dev_db.as_slice_mut(), db_shape, contiguous_stride(db_shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -333,21 +312,14 @@ fn concat_backward_bf16_3d_dim2() {
     let plan = ConcatBackwardPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let args = ConcatBackwardArgs::<bf16, 3> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape: output_shape,
-            stride: contiguous_stride(output_shape),
-        },
-        da: TensorMut {
-            data: dev_da.as_slice_mut(),
-            shape: da_shape,
-            stride: contiguous_stride(da_shape),
-        },
-        db: TensorMut {
-            data: dev_db.as_slice_mut(),
-            shape: db_shape,
-            stride: contiguous_stride(db_shape),
-        },
+        dy: TensorRef::new(
+            dev_dy.as_slice(),
+            output_shape,
+            contiguous_stride(output_shape),
+        )
+        .unwrap(),
+        da: TensorMut::new(dev_da.as_slice_mut(), da_shape, contiguous_stride(da_shape)).unwrap(),
+        db: TensorMut::new(dev_db.as_slice_mut(), db_shape, contiguous_stride(db_shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -403,21 +375,14 @@ fn concat_backward_f64_2d_dim0() {
     let plan = ConcatBackwardPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let args = ConcatBackwardArgs::<f64, 2> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape: output_shape,
-            stride: contiguous_stride(output_shape),
-        },
-        da: TensorMut {
-            data: dev_da.as_slice_mut(),
-            shape: da_shape,
-            stride: contiguous_stride(da_shape),
-        },
-        db: TensorMut {
-            data: dev_db.as_slice_mut(),
-            shape: db_shape,
-            stride: contiguous_stride(db_shape),
-        },
+        dy: TensorRef::new(
+            dev_dy.as_slice(),
+            output_shape,
+            contiguous_stride(output_shape),
+        )
+        .unwrap(),
+        da: TensorMut::new(dev_da.as_slice_mut(), da_shape, contiguous_stride(da_shape)).unwrap(),
+        db: TensorMut::new(dev_db.as_slice_mut(), db_shape, contiguous_stride(db_shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -461,21 +426,14 @@ fn concat_backward_f32_split_zero_all_to_b() {
     let plan = ConcatBackwardPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let args = ConcatBackwardArgs::<f32, 2> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape: output_shape,
-            stride: contiguous_stride(output_shape),
-        },
-        da: TensorMut {
-            data: dev_da.as_slice_mut(),
-            shape: da_shape,
-            stride: contiguous_stride(da_shape),
-        },
-        db: TensorMut {
-            data: dev_db.as_slice_mut(),
-            shape: db_shape,
-            stride: contiguous_stride(db_shape),
-        },
+        dy: TensorRef::new(
+            dev_dy.as_slice(),
+            output_shape,
+            contiguous_stride(output_shape),
+        )
+        .unwrap(),
+        da: TensorMut::new(dev_da.as_slice_mut(), da_shape, contiguous_stride(da_shape)).unwrap(),
+        db: TensorMut::new(dev_db.as_slice_mut(), db_shape, contiguous_stride(db_shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

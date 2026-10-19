@@ -72,31 +72,36 @@ fn quantize_per_group_backward_f32_ste() {
         QuantizePerGroupBackwardPlan::<f32>::select(&stream, &desc, PlanPreference::default())
             .expect("select");
     let args = QuantizePerGroupBackwardArgs::<f32> {
-        d_output: TensorRef {
-            data: dev_dy.as_slice(),
-            shape: [outer, axis_size],
-            stride: contiguous_stride([outer, axis_size]),
-        },
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape: [outer, axis_size],
-            stride: contiguous_stride([outer, axis_size]),
-        },
-        scale: TensorRef {
-            data: dev_scale.as_slice(),
-            shape: [outer, num_groups],
-            stride: contiguous_stride([outer, num_groups]),
-        },
-        zero_point: TensorRef {
-            data: dev_zp.as_slice(),
-            shape: [outer, num_groups],
-            stride: contiguous_stride([outer, num_groups]),
-        },
-        d_input: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape: [outer, axis_size],
-            stride: contiguous_stride([outer, axis_size]),
-        },
+        d_output: TensorRef::new(
+            dev_dy.as_slice(),
+            [outer, axis_size],
+            contiguous_stride([outer, axis_size]),
+        )
+        .unwrap(),
+        input: TensorRef::new(
+            dev_x.as_slice(),
+            [outer, axis_size],
+            contiguous_stride([outer, axis_size]),
+        )
+        .unwrap(),
+        scale: TensorRef::new(
+            dev_scale.as_slice(),
+            [outer, num_groups],
+            contiguous_stride([outer, num_groups]),
+        )
+        .unwrap(),
+        zero_point: TensorRef::new(
+            dev_zp.as_slice(),
+            [outer, num_groups],
+            contiguous_stride([outer, num_groups]),
+        )
+        .unwrap(),
+        d_input: TensorMut::new(
+            dev_dx.as_slice_mut(),
+            [outer, axis_size],
+            contiguous_stride([outer, axis_size]),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

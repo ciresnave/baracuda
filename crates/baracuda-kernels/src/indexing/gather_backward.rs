@@ -151,12 +151,12 @@ impl<T: Element, const N: usize> GatherBackwardPlan<T, N> {
         &self,
         args: &GatherBackwardArgs<'_, T, N, I>,
     ) -> Result<()> {
-        if args.dout.shape != self.desc.out_shape {
+        if args.dout.shape() != self.desc.out_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::GatherBackwardPlan: dout shape mismatch with descriptor",
             ));
         }
-        if args.index.shape != self.desc.out_shape {
+        if args.index.shape() != self.desc.out_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::GatherBackwardPlan: index shape must equal dout shape",
             ));
@@ -168,8 +168,8 @@ impl<T: Element, const N: usize> GatherBackwardPlan<T, N> {
         }
         let out_numel = args.dout.numel();
         let idx_numel = args.index.numel();
-        let dout_len = args.dout.data.len() as i64;
-        let idx_len = args.index.data.len() as i64;
+        let dout_len = args.dout.data().len() as i64;
+        let idx_len = args.index.data().len() as i64;
         if dout_len < out_numel {
             return Err(Error::BufferTooSmall {
                 needed: out_numel as usize,
@@ -218,15 +218,15 @@ impl<T: Element, const N: usize> GatherBackwardPlan<T, N> {
         if out_numel == 0 {
             return Ok(());
         }
-        let dout_ptr = args.dout.data.as_raw().0 as *const c_void;
-        let idx_ptr = args.index.data.as_raw().0 as *const c_void;
-        let dsrc_ptr = args.dsrc.data.as_raw().0 as *mut c_void;
+        let dout_ptr = args.dout.data().as_raw().0 as *const c_void;
+        let idx_ptr = args.index.data().as_raw().0 as *const c_void;
+        let dsrc_ptr = args.dsrc.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
         let out_shape = self.desc.out_shape;
-        let stride_dout = args.dout.stride;
-        let stride_index = args.index.stride;
-        let stride_dsrc = args.dsrc.stride;
+        let stride_dout = args.dout.stride();
+        let stride_index = args.index.stride();
+        let stride_dsrc = args.dsrc.stride();
         let rank = N as i32;
 
         let status = match (T::KIND, I::KIND) {

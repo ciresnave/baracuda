@@ -101,31 +101,12 @@ fn run_one_f16(d: i32, is_causal: bool) {
                 &stream,
                 Workspace::None,
                 FlashSdpaArgs {
-                    q: TensorRef {
-                        data: dq.as_slice(),
-                        shape: sq,
-                        stride: contiguous_stride(sq),
-                    },
-                    k: TensorRef {
-                        data: dk.as_slice(),
-                        shape: sk,
-                        stride: contiguous_stride(sk),
-                    },
-                    v: TensorRef {
-                        data: dv.as_slice(),
-                        shape: sv,
-                        stride: contiguous_stride(sv),
-                    },
-                    y: TensorMut {
-                        data: dy_ref.as_slice_mut(),
-                        shape: sy,
-                        stride: contiguous_stride(sy),
-                    },
-                    lse: TensorMut {
-                        data: dlse_ref.as_slice_mut(),
-                        shape: sl,
-                        stride: contiguous_stride(sl),
-                    },
+                    q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+                    k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+                    v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
+                    y: TensorMut::new(dy_ref.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
+                    lse: TensorMut::new(dlse_ref.as_slice_mut(), sl, contiguous_stride(sl))
+                        .unwrap(),
                     mask: None,
                     alibi_slopes: None,
                 },
@@ -150,31 +131,12 @@ fn run_one_f16(d: i32, is_causal: bool) {
                 &stream,
                 Workspace::Borrowed(ws_buf.as_slice_mut()),
                 FlashSdpaArgs {
-                    q: TensorRef {
-                        data: dq.as_slice(),
-                        shape: sq,
-                        stride: contiguous_stride(sq),
-                    },
-                    k: TensorRef {
-                        data: dk.as_slice(),
-                        shape: sk,
-                        stride: contiguous_stride(sk),
-                    },
-                    v: TensorRef {
-                        data: dv.as_slice(),
-                        shape: sv,
-                        stride: contiguous_stride(sv),
-                    },
-                    y: TensorMut {
-                        data: dy_fa2.as_slice_mut(),
-                        shape: sy,
-                        stride: contiguous_stride(sy),
-                    },
-                    lse: TensorMut {
-                        data: dlse_fa2.as_slice_mut(),
-                        shape: sl,
-                        stride: contiguous_stride(sl),
-                    },
+                    q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+                    k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+                    v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
+                    y: TensorMut::new(dy_fa2.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
+                    lse: TensorMut::new(dlse_fa2.as_slice_mut(), sl, contiguous_stride(sl))
+                        .unwrap(),
                     mask: None,
                     alibi_slopes: None,
                 },
@@ -218,31 +180,12 @@ fn run_one_f16(d: i32, is_causal: bool) {
                 &stream,
                 Workspace::Borrowed(ws_buf.as_slice_mut()),
                 FlashSdpaArgs {
-                    q: TensorRef {
-                        data: dq.as_slice(),
-                        shape: sq,
-                        stride: contiguous_stride(sq),
-                    },
-                    k: TensorRef {
-                        data: dk.as_slice(),
-                        shape: sk,
-                        stride: contiguous_stride(sk),
-                    },
-                    v: TensorRef {
-                        data: dv.as_slice(),
-                        shape: sv,
-                        stride: contiguous_stride(sv),
-                    },
-                    y: TensorMut {
-                        data: dy_fa2.as_slice_mut(),
-                        shape: sy,
-                        stride: contiguous_stride(sy),
-                    },
-                    lse: TensorMut {
-                        data: dlse_fa2.as_slice_mut(),
-                        shape: sl,
-                        stride: contiguous_stride(sl),
-                    },
+                    q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+                    k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+                    v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
+                    y: TensorMut::new(dy_fa2.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
+                    lse: TensorMut::new(dlse_fa2.as_slice_mut(), sl, contiguous_stride(sl))
+                        .unwrap(),
                     mask: None,
                     alibi_slopes: None,
                 },
@@ -312,31 +255,11 @@ fn run_one_bf16(d: i32, is_causal: bool) {
             &stream,
             Workspace::Borrowed(ws_buf.as_slice_mut()),
             FlashSdpaArgs {
-                q: TensorRef {
-                    data: dq.as_slice(),
-                    shape: sq,
-                    stride: contiguous_stride(sq),
-                },
-                k: TensorRef {
-                    data: dk.as_slice(),
-                    shape: sk,
-                    stride: contiguous_stride(sk),
-                },
-                v: TensorRef {
-                    data: dv.as_slice(),
-                    shape: sv,
-                    stride: contiguous_stride(sv),
-                },
-                y: TensorMut {
-                    data: dy_fa2.as_slice_mut(),
-                    shape: sy,
-                    stride: contiguous_stride(sy),
-                },
-                lse: TensorMut {
-                    data: dlse_fa2.as_slice_mut(),
-                    shape: sl,
-                    stride: contiguous_stride(sl),
-                },
+                q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+                k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+                v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
+                y: TensorMut::new(dy_fa2.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
+                lse: TensorMut::new(dlse_fa2.as_slice_mut(), sl, contiguous_stride(sl)).unwrap(),
                 mask: None,
                 alibi_slopes: None,
             },

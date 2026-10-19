@@ -61,21 +61,9 @@ fn run_contig<const N: usize>(shape: [i32; N]) {
         BinaryCmpPlan::<f32, N>::select(&stream, &desc, PlanPreference::default()).expect("select");
 
     let args = BinaryCmpArgs::<f32, N> {
-        a: TensorRef {
-            data: dev_a.as_slice(),
-            shape,
-            stride,
-        },
-        b: TensorRef {
-            data: dev_b.as_slice(),
-            shape,
-            stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
+        a: TensorRef::new(dev_a.as_slice(), shape, stride).unwrap(),
+        b: TensorRef::new(dev_b.as_slice(), shape, stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -166,21 +154,9 @@ fn cmp_eq_f32_broadcast_row() {
     let plan =
         BinaryCmpPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = BinaryCmpArgs::<f32, 2> {
-        a: TensorRef {
-            data: dev_a.as_slice(),
-            shape: a_shape,
-            stride: a_stride,
-        },
-        b: TensorRef {
-            data: dev_b.as_slice(),
-            shape: b_shape,
-            stride: b_stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: y_shape,
-            stride: y_stride,
-        },
+        a: TensorRef::new(dev_a.as_slice(), a_shape, a_stride).unwrap(),
+        b: TensorRef::new(dev_b.as_slice(), b_shape, b_stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), y_shape, y_stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

@@ -128,19 +128,19 @@ impl<T: Element, const N: usize> TrilPlan<T, N> {
     pub fn can_implement(&self, args: &TrilArgs<'_, T, N>) -> Result<()> {
         crate::view_check::check_fits(&args.input)?;
         crate::view_check::check_fits(&args.output)?;
-        if args.input.shape != self.desc.shape {
+        if args.input.shape() != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::TrilPlan: input shape mismatch with descriptor",
             ));
         }
-        if args.output.shape != self.desc.shape {
+        if args.output.shape() != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::TrilPlan: output shape mismatch with descriptor",
             ));
         }
         let numel = args.output.numel();
-        let in_len = args.input.data.len() as i64;
-        let out_len = args.output.data.len() as i64;
+        let in_len = args.input.data().len() as i64;
+        let out_len = args.output.data().len() as i64;
         if in_len < numel || out_len < numel {
             return Err(Error::BufferTooSmall {
                 needed: numel as usize,
@@ -183,8 +183,8 @@ impl<T: Element, const N: usize> TrilPlan<T, N> {
         if numel == 0 {
             return Ok(());
         }
-        let input_ptr = args.input.data.as_raw().0 as *const c_void;
-        let output_ptr = args.output.data.as_raw().0 as *mut c_void;
+        let input_ptr = args.input.data().as_raw().0 as *const c_void;
+        let output_ptr = args.output.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         let shape = self.desc.shape;
         let rank = N as i32;
@@ -195,8 +195,8 @@ impl<T: Element, const N: usize> TrilPlan<T, N> {
         let all_contig = args.input.is_contiguous() && args.output.is_contiguous();
 
         if !all_contig {
-            let stride_x = args.input.stride;
-            let stride_y = args.output.stride;
+            let stride_x = args.input.stride();
+            let stride_y = args.output.stride();
             let status = match T::KIND {
                 ElementKind::F16 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_tril_f16_strided_run(

@@ -115,12 +115,12 @@ impl<T: Element, const N: usize> RollPlan<T, N> {
     pub fn can_implement(&self, args: &RollArgs<'_, T, N>) -> Result<()> {
         crate::view_check::check_fits(&args.x)?;
         crate::view_check::check_fits(&args.y)?;
-        if args.x.shape != self.desc.shape {
+        if args.x.shape() != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::RollPlan: X shape mismatch",
             ));
         }
-        if args.y.shape != self.desc.shape {
+        if args.y.shape() != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::RollPlan: Y shape mismatch",
             ));
@@ -131,8 +131,8 @@ impl<T: Element, const N: usize> RollPlan<T, N> {
             ));
         }
         let numel = args.y.numel();
-        let x_len = args.x.data.len() as i64;
-        let y_len = args.y.data.len() as i64;
+        let x_len = args.x.data().len() as i64;
+        let y_len = args.y.data().len() as i64;
         if x_len < numel || y_len < numel {
             return Err(Error::BufferTooSmall {
                 needed: numel as usize,
@@ -170,14 +170,14 @@ impl<T: Element, const N: usize> RollPlan<T, N> {
         if numel == 0 {
             return Ok(());
         }
-        let x_ptr = args.x.data.as_raw().0 as *const c_void;
-        let y_ptr = args.y.data.as_raw().0 as *mut c_void;
+        let x_ptr = args.x.data().as_raw().0 as *const c_void;
+        let y_ptr = args.y.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
         let shape = self.desc.shape;
         let shifts = self.desc.shifts;
-        let stride_x = args.x.stride;
-        let stride_y = args.y.stride;
+        let stride_x = args.x.stride();
+        let stride_y = args.y.stride();
         let rank = N as i32;
 
         let status = match T::KIND {

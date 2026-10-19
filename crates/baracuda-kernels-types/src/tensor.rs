@@ -30,14 +30,27 @@ use baracuda_types::DeviceRepr;
 /// [`crate::IntElement`]) so the same view struct can carry any scalar
 /// payload — input, output, mask, or auxiliary buffer. The per-op
 /// element-class enforcement happens at the Plan layer.
+///
+/// The fields are private: build a view with [`TensorRef::new`] (checked) or
+/// [`TensorRef::contiguous`], and read it back with `data()` / `shape()` /
+/// `stride()`. A struct literal does not compile:
+///
+/// ```compile_fail,E0451
+/// use baracuda_driver::DeviceSlice;
+/// use baracuda_kernels_types::TensorRef;
+///
+/// fn forge(data: DeviceSlice<'_, f32>) -> TensorRef<'_, f32, 1> {
+///     TensorRef { data, shape: [8], stride: [1_000_000] }
+/// }
+/// ```
 #[derive(Debug, Copy, Clone)]
 pub struct TensorRef<'a, T: DeviceRepr + Copy + 'static, const N: usize> {
-    /// Device-resident element storage.
-    pub data: DeviceSlice<'a, T>,
-    /// Extent along each axis (in elements).
-    pub shape: [i32; N],
-    /// Element stride along each axis. Stride `0` marks a broadcast axis.
-    pub stride: [i64; N],
+    // The fields are private on purpose: every constructor checks that the
+    // `shape` / `stride` pair stays inside `data`, so a safe plan launch can
+    // rely on it (read them back with `data()` / `shape()` / `stride()`).
+    data: DeviceSlice<'a, T>,
+    shape: [i32; N],
+    stride: [i64; N],
 }
 
 /// Mutable view of a device-resident rank-`N` tensor.
@@ -46,21 +59,18 @@ pub struct TensorRef<'a, T: DeviceRepr + Copy + 'static, const N: usize> {
 /// the stride / broadcast contract.
 #[derive(Debug)]
 pub struct TensorMut<'a, T: DeviceRepr + Copy + 'static, const N: usize> {
-    /// Device-resident element storage.
-    pub data: DeviceSliceMut<'a, T>,
-    /// Extent along each axis (in elements).
-    pub shape: [i32; N],
-    /// Element stride along each axis.
-    pub stride: [i64; N],
+    // Private for the same reason as `TensorRef`'s fields.
+    data: DeviceSliceMut<'a, T>,
+    shape: [i32; N],
+    stride: [i64; N],
 }
 
 impl<'a, T: DeviceRepr + Copy + 'static, const N: usize> TensorRef<'a, T, N> {
     /// Build a view, checking that `shape` / `stride` stay inside `data`.
     ///
-    /// Prefer this over a struct literal: the fields are public, so a literal
-    /// can describe a view that reaches outside its slice. (Plans re-check
-    /// every view in `can_implement`, so a bad literal is rejected at launch
-    /// rather than read or written.)
+    /// This and [`contiguous`](Self::contiguous) are the only safe ways to
+    /// build a view, so a `TensorRef`/`TensorMut` never reaches outside its
+    /// slice. (Plans still re-check every view in `can_implement` / `run`.)
     pub fn new(
         data: DeviceSlice<'a, T>,
         shape: [i32; N],
@@ -83,6 +93,46 @@ impl<'a, T: DeviceRepr + Copy + 'static, const N: usize> TensorRef<'a, T, N> {
     /// Row-major contiguous view of `data` with the given `shape`.
     pub fn contiguous(data: DeviceSlice<'a, T>, shape: [i32; N]) -> Result<Self, ViewError> {
         Self::new(data, shape, contiguous_stride(shape))
+    }
+
+    /// The backing device slice.
+    #[inline]
+    pub fn data(&self) -> DeviceSlice<'a, T> {
+        self.data
+    }
+
+    /// Extent along each axis (in elements).
+    #[inline]
+    pub fn shape(&self) -> [i32; N] {
+        self.shape
+    }
+
+    /// Element stride along each axis. Stride `0` marks a broadcast axis.
+    #[inline]
+    pub fn stride(&self) -> [i64; N] {
+        self.stride
+    }
+
+    /// Build a view WITHOUT checking that it stays inside `data`.
+    ///
+    /// # Safety
+    ///
+    /// Every element `Σ i_k·stride[k]` for `0 <= i_k < shape[k]` must lie in
+    /// `0..data.len()` once the consuming plan has applied any base offset it
+    /// takes separately (for example `ContiguizeDescriptor::source_offset`,
+    /// which is what makes a negative stride legal); otherwise a plan launch
+    /// reads or writes outside `data`.
+    #[inline]
+    pub unsafe fn new_unchecked(
+        data: DeviceSlice<'a, T>,
+        shape: [i32; N],
+        stride: [i64; N],
+    ) -> Self {
+        Self {
+            data,
+            shape,
+            stride,
+        }
     }
 
     /// Elements this view can touch; see [`required_len`]. `None` if the
@@ -136,10 +186,9 @@ impl<'a, T: DeviceRepr + Copy + 'static, const N: usize> TensorRef<'a, T, N> {
 impl<'a, T: DeviceRepr + Copy + 'static, const N: usize> TensorMut<'a, T, N> {
     /// Build a view, checking that `shape` / `stride` stay inside `data`.
     ///
-    /// Prefer this over a struct literal: the fields are public, so a literal
-    /// can describe a view that reaches outside its slice. (Plans re-check
-    /// every view in `can_implement`, so a bad literal is rejected at launch
-    /// rather than read or written.)
+    /// This and [`contiguous`](Self::contiguous) are the only safe ways to
+    /// build a view, so a `TensorRef`/`TensorMut` never reaches outside its
+    /// slice. (Plans still re-check every view in `can_implement` / `run`.)
     pub fn new(
         data: DeviceSliceMut<'a, T>,
         shape: [i32; N],
@@ -162,6 +211,48 @@ impl<'a, T: DeviceRepr + Copy + 'static, const N: usize> TensorMut<'a, T, N> {
     /// Row-major contiguous view of `data` with the given `shape`.
     pub fn contiguous(data: DeviceSliceMut<'a, T>, shape: [i32; N]) -> Result<Self, ViewError> {
         Self::new(data, shape, contiguous_stride(shape))
+    }
+
+    /// The backing device slice.
+    #[inline]
+    pub fn data(&self) -> &DeviceSliceMut<'a, T> {
+        &self.data
+    }
+
+    /// The backing device slice, mutably.
+    #[inline]
+    pub fn data_mut(&mut self) -> &mut DeviceSliceMut<'a, T> {
+        &mut self.data
+    }
+
+    /// Extent along each axis (in elements).
+    #[inline]
+    pub fn shape(&self) -> [i32; N] {
+        self.shape
+    }
+
+    /// Element stride along each axis.
+    #[inline]
+    pub fn stride(&self) -> [i64; N] {
+        self.stride
+    }
+
+    /// Build a view WITHOUT checking that it stays inside `data`.
+    ///
+    /// # Safety
+    ///
+    /// As for [`TensorRef::new_unchecked`].
+    #[inline]
+    pub unsafe fn new_unchecked(
+        data: DeviceSliceMut<'a, T>,
+        shape: [i32; N],
+        stride: [i64; N],
+    ) -> Self {
+        Self {
+            data,
+            shape,
+            stride,
+        }
     }
 
     /// Elements this view can touch; see [`required_len`]. `None` if the
@@ -221,7 +312,7 @@ impl core::fmt::Display for ViewError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::NotAddressable => f.write_str(
-                "tensor view is not addressable (negative extent, or a negative stride                  that reaches before the start of its buffer)",
+                "tensor view is not addressable (negative extent, or a negative stride that reaches before the start of its buffer)",
             ),
             Self::TooSmall { needed, got } => {
                 write!(f, "tensor view reaches {needed} elements but its buffer holds {got}")
@@ -285,7 +376,7 @@ pub fn required_len(shape: &[i32], stride: &[i64]) -> Option<usize> {
 /// ```rust,ignore
 /// let shape = [8, 128, 128];
 /// let stride = baracuda_kernels_types::contiguous_stride(shape);
-/// let tref = TensorRef { data: buf.as_slice(), shape, stride };
+/// let tref = TensorRef::new(buf.as_slice(), shape, stride)?;
 /// ```
 #[inline]
 pub fn contiguous_stride<const N: usize>(shape: [i32; N]) -> [i64; N] {

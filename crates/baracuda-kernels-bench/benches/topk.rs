@@ -93,21 +93,9 @@ fn bench_f32(c: &mut Criterion, baseline: Option<&PytorchBaseline>) {
 
         warmup(&stream, || {
             let args = TopkArgs::<f32> {
-                input: TensorRef {
-                    data: dev_x.as_slice(),
-                    shape: x_shape,
-                    stride: stx,
-                },
-                values: TensorMut {
-                    data: dev_v.as_slice_mut(),
-                    shape: o_shape,
-                    stride: sto,
-                },
-                indices: TensorMut {
-                    data: dev_i.as_slice_mut(),
-                    shape: o_shape,
-                    stride: sto,
-                },
+                input: TensorRef::new(dev_x.as_slice(), x_shape, stx).unwrap(),
+                values: TensorMut::new(dev_v.as_slice_mut(), o_shape, sto).unwrap(),
+                indices: TensorMut::new(dev_i.as_slice_mut(), o_shape, sto).unwrap(),
             };
             plan.run(&stream, Workspace::None, args)
                 .expect("baracuda topk");
@@ -117,21 +105,9 @@ fn bench_f32(c: &mut Criterion, baseline: Option<&PytorchBaseline>) {
         assert_cell_live(&format!("topk/f32/{label}"), &dev_v, out_numel);
         let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 50, || {
             let args = TopkArgs::<f32> {
-                input: TensorRef {
-                    data: dev_x.as_slice(),
-                    shape: x_shape,
-                    stride: stx,
-                },
-                values: TensorMut {
-                    data: dev_v.as_slice_mut(),
-                    shape: o_shape,
-                    stride: sto,
-                },
-                indices: TensorMut {
-                    data: dev_i.as_slice_mut(),
-                    shape: o_shape,
-                    stride: sto,
-                },
+                input: TensorRef::new(dev_x.as_slice(), x_shape, stx).unwrap(),
+                values: TensorMut::new(dev_v.as_slice_mut(), o_shape, sto).unwrap(),
+                indices: TensorMut::new(dev_i.as_slice_mut(), o_shape, sto).unwrap(),
             };
             plan.run(&stream, Workspace::None, args)
                 .expect("baracuda topk");
@@ -152,21 +128,9 @@ fn bench_f32(c: &mut Criterion, baseline: Option<&PytorchBaseline>) {
             bb.iter_custom(|iters| {
                 time_with_events(&ctx, &stream, iters, || {
                     let args = TopkArgs::<f32> {
-                        input: TensorRef {
-                            data: dev_x.as_slice(),
-                            shape: x_shape,
-                            stride: stx,
-                        },
-                        values: TensorMut {
-                            data: dev_v.as_slice_mut(),
-                            shape: o_shape,
-                            stride: sto,
-                        },
-                        indices: TensorMut {
-                            data: dev_i.as_slice_mut(),
-                            shape: o_shape,
-                            stride: sto,
-                        },
+                        input: TensorRef::new(dev_x.as_slice(), x_shape, stx).unwrap(),
+                        values: TensorMut::new(dev_v.as_slice_mut(), o_shape, sto).unwrap(),
+                        indices: TensorMut::new(dev_i.as_slice_mut(), o_shape, sto).unwrap(),
                     };
                     plan.run(&stream, Workspace::None, args)
                         .expect("baracuda topk");

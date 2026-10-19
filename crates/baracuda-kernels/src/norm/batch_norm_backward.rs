@@ -151,16 +151,16 @@ impl<T: Element, const N: usize> BatchNormBackwardPlan<T, N> {
         if let Some(t) = &args.dbeta {
             crate::view_check::check_fits(t)?;
         }
-        if args.dy.shape != self.desc.input_shape
-            || args.x.shape != self.desc.input_shape
-            || args.dx.shape != self.desc.input_shape
+        if args.dy.shape() != self.desc.input_shape
+            || args.x.shape() != self.desc.input_shape
+            || args.dx.shape() != self.desc.input_shape
         {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::BatchNormBackwardPlan: shape mismatch",
             ));
         }
         let c = self.desc.num_channels() as i64;
-        if args.saved_mean.shape[0] as i64 != c || args.saved_rstd.shape[0] as i64 != c {
+        if args.saved_mean.shape()[0] as i64 != c || args.saved_rstd.shape()[0] as i64 != c {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::BatchNormBackwardPlan: saved buffers length != num_channels",
             ));
@@ -235,25 +235,25 @@ impl<T: Element, const N: usize> BatchNormBackwardPlan<T, N> {
         };
 
         let stream_ptr = stream.as_raw();
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let x_ptr = args.x.data.as_raw().0 as *const c_void;
-        let mean_ptr = args.saved_mean.data.as_raw().0 as *const c_void;
-        let rstd_ptr = args.saved_rstd.data.as_raw().0 as *const c_void;
-        let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let x_ptr = args.x.data().as_raw().0 as *const c_void;
+        let mean_ptr = args.saved_mean.data().as_raw().0 as *const c_void;
+        let rstd_ptr = args.saved_rstd.data().as_raw().0 as *const c_void;
+        let dx_ptr = args.dx.data().as_raw().0 as *mut c_void;
         let gamma_ptr = args
             .gamma
             .as_ref()
-            .map(|g| g.data.as_raw().0 as *const c_void)
+            .map(|g| g.data().as_raw().0 as *const c_void)
             .unwrap_or(core::ptr::null());
         let dgamma_ptr = args
             .dgamma
             .as_mut()
-            .map(|g| g.data.as_raw().0 as *mut c_void)
+            .map(|g| g.data().as_raw().0 as *mut c_void)
             .unwrap_or(core::ptr::null_mut());
         let dbeta_ptr = args
             .dbeta
             .as_mut()
-            .map(|b| b.data.as_raw().0 as *mut c_void)
+            .map(|b| b.data().as_raw().0 as *mut c_void)
             .unwrap_or(core::ptr::null_mut());
 
         let status = match T::KIND {

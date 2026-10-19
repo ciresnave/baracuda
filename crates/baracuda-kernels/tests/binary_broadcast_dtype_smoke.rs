@@ -159,21 +159,9 @@ fn run_f32(op: Op) {
     let plan =
         BinaryPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = BinaryArgs::<f32, 2> {
-        a: TensorRef {
-            data: dev_a.as_slice(),
-            shape: a_shape,
-            stride: a_stride,
-        },
-        b: TensorRef {
-            data: dev_b.as_slice(),
-            shape: b_shape,
-            stride: b_stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: y_shape,
-            stride: y_stride,
-        },
+        a: TensorRef::new(dev_a.as_slice(), a_shape, a_stride).unwrap(),
+        b: TensorRef::new(dev_b.as_slice(), b_shape, b_stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), y_shape, y_stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -232,21 +220,9 @@ fn run_f64(op: Op) {
     let plan =
         BinaryPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = BinaryArgs::<f64, 2> {
-        a: TensorRef {
-            data: dev_a.as_slice(),
-            shape: a_shape,
-            stride: a_stride,
-        },
-        b: TensorRef {
-            data: dev_b.as_slice(),
-            shape: b_shape,
-            stride: b_stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: y_shape,
-            stride: y_stride,
-        },
+        a: TensorRef::new(dev_a.as_slice(), a_shape, a_stride).unwrap(),
+        b: TensorRef::new(dev_b.as_slice(), b_shape, b_stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), y_shape, y_stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -316,21 +292,9 @@ fn run_f16(op: Op) {
     let plan =
         BinaryPlan::<f16, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = BinaryArgs::<f16, 2> {
-        a: TensorRef {
-            data: dev_a.as_slice(),
-            shape: a_shape,
-            stride: a_stride,
-        },
-        b: TensorRef {
-            data: dev_b.as_slice(),
-            shape: b_shape,
-            stride: b_stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: y_shape,
-            stride: y_stride,
-        },
+        a: TensorRef::new(dev_a.as_slice(), a_shape, a_stride).unwrap(),
+        b: TensorRef::new(dev_b.as_slice(), b_shape, b_stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), y_shape, y_stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -404,21 +368,9 @@ fn run_bf16(op: Op) {
     let plan =
         BinaryPlan::<bf16, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = BinaryArgs::<bf16, 2> {
-        a: TensorRef {
-            data: dev_a.as_slice(),
-            shape: a_shape,
-            stride: a_stride,
-        },
-        b: TensorRef {
-            data: dev_b.as_slice(),
-            shape: b_shape,
-            stride: b_stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: y_shape,
-            stride: y_stride,
-        },
+        a: TensorRef::new(dev_a.as_slice(), a_shape, a_stride).unwrap(),
+        b: TensorRef::new(dev_b.as_slice(), b_shape, b_stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), y_shape, y_stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

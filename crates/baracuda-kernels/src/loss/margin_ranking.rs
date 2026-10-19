@@ -128,9 +128,9 @@ impl<T: Element, const N: usize> MarginRankingLossPlan<T, N> {
         crate::view_check::check_dense(&args.x2)?;
         crate::view_check::check_dense(&args.t)?;
         crate::view_check::check_dense(&args.out)?;
-        if args.x1.shape != self.desc.input_shape
-            || args.x2.shape != self.desc.input_shape
-            || args.t.shape != self.desc.input_shape
+        if args.x1.shape() != self.desc.input_shape
+            || args.x2.shape() != self.desc.input_shape
+            || args.t.shape() != self.desc.input_shape
         {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::MarginRankingLossPlan: shape mismatch",
@@ -142,10 +142,10 @@ impl<T: Element, const N: usize> MarginRankingLossPlan<T, N> {
         }
         let (ws_ptr, ws_bytes) = unpack_workspace(workspace, self.workspace_size())?;
         let stream_ptr = stream.as_raw();
-        let x1_ptr = args.x1.data.as_raw().0 as *const c_void;
-        let x2_ptr = args.x2.data.as_raw().0 as *const c_void;
-        let t_ptr = args.t.data.as_raw().0 as *const c_void;
-        let out_ptr = args.out.data.as_raw().0 as *mut c_void;
+        let x1_ptr = args.x1.data().as_raw().0 as *const c_void;
+        let x2_ptr = args.x2.data().as_raw().0 as *const c_void;
+        let t_ptr = args.t.data().as_raw().0 as *const c_void;
+        let out_ptr = args.out.data().as_raw().0 as *mut c_void;
         let mode = self.desc.reduction as i32;
         let margin = self.desc.margin;
         let status = match T::KIND {
@@ -295,11 +295,11 @@ impl<T: Element, const N: usize> MarginRankingLossBackwardPlan<T, N> {
         crate::view_check::check_dense(&args.dy)?;
         crate::view_check::check_dense(&args.dx1)?;
         crate::view_check::check_dense(&args.dx2)?;
-        if args.x1.shape != self.desc.input_shape
-            || args.x2.shape != self.desc.input_shape
-            || args.t.shape != self.desc.input_shape
-            || args.dx1.shape != self.desc.input_shape
-            || args.dx2.shape != self.desc.input_shape
+        if args.x1.shape() != self.desc.input_shape
+            || args.x2.shape() != self.desc.input_shape
+            || args.t.shape() != self.desc.input_shape
+            || args.dx1.shape() != self.desc.input_shape
+            || args.dx2.shape() != self.desc.input_shape
         {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::MarginRankingLossBackwardPlan: shape mismatch",
@@ -317,12 +317,12 @@ impl<T: Element, const N: usize> MarginRankingLossBackwardPlan<T, N> {
         };
         let margin = self.desc.margin;
         let stream_ptr = stream.as_raw();
-        let x1_ptr = args.x1.data.as_raw().0 as *const c_void;
-        let x2_ptr = args.x2.data.as_raw().0 as *const c_void;
-        let t_ptr = args.t.data.as_raw().0 as *const c_void;
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let dx1_ptr = args.dx1.data.as_raw().0 as *mut c_void;
-        let dx2_ptr = args.dx2.data.as_raw().0 as *mut c_void;
+        let x1_ptr = args.x1.data().as_raw().0 as *const c_void;
+        let x2_ptr = args.x2.data().as_raw().0 as *const c_void;
+        let t_ptr = args.t.data().as_raw().0 as *const c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let dx1_ptr = args.dx1.data().as_raw().0 as *mut c_void;
+        let dx2_ptr = args.dx2.data().as_raw().0 as *mut c_void;
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_loss_margin_ranking_backward_f32_run(

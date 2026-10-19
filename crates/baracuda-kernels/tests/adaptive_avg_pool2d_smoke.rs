@@ -67,16 +67,8 @@ fn adaptive_avg_pool2d_4x4_to_2x2_f32() {
         &stream,
         Workspace::None,
         AdaptivePool2dFwArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape: x_shape,
-                stride: contiguous_stride(x_shape),
-            },
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
+            x: TensorRef::new(dev_x.as_slice(), x_shape, contiguous_stride(x_shape)).unwrap(),
+            y: TensorMut::new(dev_y.as_slice_mut(), y_shape, contiguous_stride(y_shape)).unwrap(),
         },
     )
     .expect("fw");

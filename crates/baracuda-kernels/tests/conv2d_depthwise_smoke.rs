@@ -129,21 +129,9 @@ fn conv2d_depthwise_f32() {
             Workspace::Borrowed(dev_ws.as_slice_mut())
         },
         Conv2dArgs::<f32> {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape: x_shape,
-                stride: contiguous_stride(x_shape),
-            },
-            w: TensorRef {
-                data: dev_w.as_slice(),
-                shape: w_shape,
-                stride: contiguous_stride(w_shape),
-            },
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
+            x: TensorRef::new(dev_x.as_slice(), x_shape, contiguous_stride(x_shape)).unwrap(),
+            w: TensorRef::new(dev_w.as_slice(), w_shape, contiguous_stride(w_shape)).unwrap(),
+            y: TensorMut::new(dev_y.as_slice_mut(), y_shape, contiguous_stride(y_shape)).unwrap(),
         },
     )
     .expect("run_fw");

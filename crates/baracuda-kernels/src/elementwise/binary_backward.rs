@@ -196,17 +196,17 @@ impl<T: Element, const N: usize> BinaryBackwardPlan<T, N> {
         }
         crate::view_check::check_fits(&args.da)?;
         crate::view_check::check_fits(&args.db)?;
-        if args.dy.shape != self.desc.shape {
+        if args.dy.shape() != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::BinaryBackwardPlan: dy shape mismatch",
             ));
         }
-        if args.da.shape != self.desc.shape {
+        if args.da.shape() != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::BinaryBackwardPlan: da shape mismatch",
             ));
         }
-        if args.db.shape != self.desc.shape {
+        if args.db.shape() != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::BinaryBackwardPlan: db shape mismatch",
             ));
@@ -226,12 +226,12 @@ impl<T: Element, const N: usize> BinaryBackwardPlan<T, N> {
             let b = args.b.as_ref().ok_or(Error::InvalidProblem(
                 "baracuda-kernels::BinaryBackwardPlan: this op requires saved input `b`",
             ))?;
-            if a.shape != self.desc.shape {
+            if a.shape() != self.desc.shape {
                 return Err(Error::InvalidProblem(
                     "baracuda-kernels::BinaryBackwardPlan: saved a shape mismatch",
                 ));
             }
-            if b.shape != self.desc.shape {
+            if b.shape() != self.desc.shape {
                 return Err(Error::InvalidProblem(
                     "baracuda-kernels::BinaryBackwardPlan: saved b shape mismatch",
                 ));
@@ -243,23 +243,23 @@ impl<T: Element, const N: usize> BinaryBackwardPlan<T, N> {
                 ));
             }
             let numel = args.dy.numel() as usize;
-            if a.data.len() < numel {
+            if a.data().len() < numel {
                 return Err(Error::BufferTooSmall {
                     needed: numel,
-                    got: a.data.len(),
+                    got: a.data().len(),
                 });
             }
-            if b.data.len() < numel {
+            if b.data().len() < numel {
                 return Err(Error::BufferTooSmall {
                     needed: numel,
-                    got: b.data.len(),
+                    got: b.data().len(),
                 });
             }
         }
         let numel = args.dy.numel();
-        let dy_len = args.dy.data.len() as i64;
-        let da_len = args.da.data.len() as i64;
-        let db_len = args.db.data.len() as i64;
+        let dy_len = args.dy.data().len() as i64;
+        let da_len = args.da.data().len() as i64;
+        let db_len = args.db.data().len() as i64;
         if dy_len < numel || da_len < numel || db_len < numel {
             return Err(Error::BufferTooSmall {
                 needed: numel as usize,
@@ -297,9 +297,9 @@ impl<T: Element, const N: usize> BinaryBackwardPlan<T, N> {
         if numel == 0 {
             return Ok(());
         }
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let da_ptr = args.da.data.as_raw().0 as *mut c_void;
-        let db_ptr = args.db.data.as_raw().0 as *mut c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let da_ptr = args.da.data().as_raw().0 as *mut c_void;
+        let db_ptr = args.db.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
         let status = match (self.desc.kind, T::KIND) {
@@ -873,8 +873,8 @@ fn saved_ptrs<T: Element, const N: usize>(
         .as_ref()
         .expect("Mul/Div/Pow/Maximum/Minimum/Atan2/Hypot backward require saved b");
     (
-        a.data.as_raw().0 as *const c_void,
-        b.data.as_raw().0 as *const c_void,
+        a.data().as_raw().0 as *const c_void,
+        b.data().as_raw().0 as *const c_void,
     )
 }
 

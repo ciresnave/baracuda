@@ -58,16 +58,8 @@ fn rfft_irfft_roundtrip_f32() {
         .expect("select rfft");
     {
         let args = RfftArgs::<f32, Complex64> {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape: real_shape,
-                stride: real_stride,
-            },
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: freq_shape,
-                stride: freq_stride,
-            },
+            x: TensorRef::new(dev_x.as_slice(), real_shape, real_stride).unwrap(),
+            y: TensorMut::new(dev_y.as_slice_mut(), freq_shape, freq_stride).unwrap(),
         };
         fwd_plan
             .run(&stream, Workspace::None, args)
@@ -84,16 +76,8 @@ fn rfft_irfft_roundtrip_f32() {
         .expect("select irfft");
     {
         let args = IrfftArgs::<f32, Complex64> {
-            x: TensorRef {
-                data: dev_y.as_slice(),
-                shape: freq_shape,
-                stride: freq_stride,
-            },
-            y: TensorMut {
-                data: dev_xr.as_slice_mut(),
-                shape: real_shape,
-                stride: real_stride,
-            },
+            x: TensorRef::new(dev_y.as_slice(), freq_shape, freq_stride).unwrap(),
+            y: TensorMut::new(dev_xr.as_slice_mut(), real_shape, real_stride).unwrap(),
         };
         inv_plan
             .run(&stream, Workspace::None, args)
@@ -146,16 +130,8 @@ fn rfft_irfft_roundtrip_f64() {
         .expect("select rfft");
     {
         let args = RfftArgs::<f64, Complex128> {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape: real_shape,
-                stride: real_stride,
-            },
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: freq_shape,
-                stride: freq_stride,
-            },
+            x: TensorRef::new(dev_x.as_slice(), real_shape, real_stride).unwrap(),
+            y: TensorMut::new(dev_y.as_slice_mut(), freq_shape, freq_stride).unwrap(),
         };
         fwd_plan
             .run(&stream, Workspace::None, args)
@@ -171,16 +147,8 @@ fn rfft_irfft_roundtrip_f64() {
         .expect("select irfft");
     {
         let args = IrfftArgs::<f64, Complex128> {
-            x: TensorRef {
-                data: dev_y.as_slice(),
-                shape: freq_shape,
-                stride: freq_stride,
-            },
-            y: TensorMut {
-                data: dev_xr.as_slice_mut(),
-                shape: real_shape,
-                stride: real_stride,
-            },
+            x: TensorRef::new(dev_y.as_slice(), freq_shape, freq_stride).unwrap(),
+            y: TensorMut::new(dev_xr.as_slice_mut(), real_shape, real_stride).unwrap(),
         };
         inv_plan
             .run(&stream, Workspace::None, args)
@@ -232,16 +200,8 @@ fn rfft_dc_bin_equals_sum() {
     let plan =
         RfftPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("select rfft");
     let args = RfftArgs::<f32, Complex64> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape: real_shape,
-            stride: real_stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: freq_shape,
-            stride: freq_stride,
-        },
+        x: TensorRef::new(dev_x.as_slice(), real_shape, real_stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), freq_shape, freq_stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run rfft");
     stream.synchronize().expect("sync");

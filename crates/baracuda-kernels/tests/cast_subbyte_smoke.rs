@@ -71,16 +71,13 @@ fn cast_s4_to_i32_unpacks_with_sign_extension() {
     // slot count (one slot per byte = two logical elements).
     let packed_slots = (numel as i32) / 2;
     let args = CastSubByteArgs::<S4, i32> {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape: [packed_slots],
-            stride: contiguous_stride([packed_slots]),
-        },
-        output: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: [numel],
-            stride: contiguous_stride([numel]),
-        },
+        input: TensorRef::new(
+            dev_x.as_slice(),
+            [packed_slots],
+            contiguous_stride([packed_slots]),
+        )
+        .unwrap(),
+        output: TensorMut::new(dev_y.as_slice_mut(), [numel], contiguous_stride([numel])).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -124,16 +121,13 @@ fn cast_u4_to_i32_unpacks_with_zero_extension() {
         .expect("select");
     let packed_slots = (numel as i32) / 2;
     let args = CastSubByteArgs::<U4, i32> {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape: [packed_slots],
-            stride: contiguous_stride([packed_slots]),
-        },
-        output: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: [numel],
-            stride: contiguous_stride([numel]),
-        },
+        input: TensorRef::new(
+            dev_x.as_slice(),
+            [packed_slots],
+            contiguous_stride([packed_slots]),
+        )
+        .unwrap(),
+        output: TensorMut::new(dev_y.as_slice_mut(), [numel], contiguous_stride([numel])).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -172,16 +166,8 @@ fn cast_fp8e4m3_to_f32_lattice_grid() {
     let plan = CastSubBytePlan::<Fp8E4M3FN, f32>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = CastSubByteArgs::<Fp8E4M3FN, f32> {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape: [numel],
-            stride: contiguous_stride([numel]),
-        },
-        output: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: [numel],
-            stride: contiguous_stride([numel]),
-        },
+        input: TensorRef::new(dev_x.as_slice(), [numel], contiguous_stride([numel])).unwrap(),
+        output: TensorMut::new(dev_y.as_slice_mut(), [numel], contiguous_stride([numel])).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -214,16 +200,8 @@ fn cast_f32_to_fp8e4m3_lattice_grid() {
     let plan = CastSubBytePlan::<f32, Fp8E4M3FN>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = CastSubByteArgs::<f32, Fp8E4M3FN> {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape: [numel],
-            stride: contiguous_stride([numel]),
-        },
-        output: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: [numel],
-            stride: contiguous_stride([numel]),
-        },
+        input: TensorRef::new(dev_x.as_slice(), [numel], contiguous_stride([numel])).unwrap(),
+        output: TensorMut::new(dev_y.as_slice_mut(), [numel], contiguous_stride([numel])).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -265,16 +243,8 @@ fn cast_bool_to_f32_normalizes_truthy_bytes() {
     let plan = CastSubBytePlan::<Bool, f32>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = CastSubByteArgs::<Bool, f32> {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape: [numel],
-            stride: contiguous_stride([numel]),
-        },
-        output: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: [numel],
-            stride: contiguous_stride([numel]),
-        },
+        input: TensorRef::new(dev_x.as_slice(), [numel], contiguous_stride([numel])).unwrap(),
+        output: TensorMut::new(dev_y.as_slice_mut(), [numel], contiguous_stride([numel])).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

@@ -104,9 +104,9 @@ impl<T: Element> SegmentSumPlan<T> {
         crate::view_check::check_fits(&args.output)?;
         validate_args(
             &self.desc,
-            args.input.shape,
-            args.segment_ids.shape,
-            args.output.shape,
+            args.input.shape(),
+            args.segment_ids.shape(),
+            args.output.shape(),
             "SegmentSumPlan",
         )
     }
@@ -298,9 +298,9 @@ pub(crate) fn run_sorted_fw<T: Element>(
     output: &TensorMut<'_, T, 2>,
     op: SortedFwOp,
 ) -> Result<()> {
-    let in_ptr = input.data.as_raw().0 as *const c_void;
-    let id_ptr = segment_ids.data.as_raw().0 as *const c_void;
-    let out_ptr = output.data.as_raw().0 as *mut c_void;
+    let in_ptr = input.data().as_raw().0 as *const c_void;
+    let id_ptr = segment_ids.data().as_raw().0 as *const c_void;
+    let out_ptr = output.data().as_raw().0 as *mut c_void;
     let stream_ptr = stream.as_raw();
 
     let status = match (T::KIND, op) {

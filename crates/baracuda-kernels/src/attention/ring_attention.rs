@@ -320,18 +320,18 @@ impl<T: Element> RingAttentionPlan<T> {
             self.desc.num_heads,
             self.desc.query_len,
         ];
-        if args.q.shape != shape_q {
+        if args.q.shape() != shape_q {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::RingAttentionPlan: Q shape mismatch",
             ));
         }
-        if args.y.shape != shape_y {
+        if args.y.shape() != shape_y {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::RingAttentionPlan: y shape mismatch",
             ));
         }
         if let Some(lse) = args.lse.as_ref() {
-            if lse.shape != shape_lse {
+            if lse.shape() != shape_lse {
                 return Err(Error::InvalidProblem(
                     "baracuda-kernels::RingAttentionPlan: lse shape must be [B, H, Q_local]",
                 ));

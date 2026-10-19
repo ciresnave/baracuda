@@ -137,9 +137,9 @@ impl<T: Element> MultiMarginLossPlan<T> {
         }
         let (ws_ptr, ws_bytes) = unpack_workspace(workspace, self.workspace_size())?;
         let stream_ptr = stream.as_raw();
-        let input_ptr = args.input.data.as_raw().0 as *const c_void;
-        let target_ptr = args.target.data.as_raw().0 as *const c_void;
-        let out_ptr = args.out.data.as_raw().0 as *mut c_void;
+        let input_ptr = args.input.data().as_raw().0 as *const c_void;
+        let target_ptr = args.target.data().as_raw().0 as *const c_void;
+        let out_ptr = args.out.data().as_raw().0 as *mut c_void;
         let mode = self.desc.reduction as i32;
         let margin = self.desc.margin;
         let p_norm = self.desc.p_norm;
@@ -354,10 +354,10 @@ impl<T: Element> MultiMarginLossBackwardPlan<T> {
         let margin = self.desc.margin;
         let p_norm = self.desc.p_norm;
         let stream_ptr = stream.as_raw();
-        let input_ptr = args.input.data.as_raw().0 as *const c_void;
-        let target_ptr = args.target.data.as_raw().0 as *const c_void;
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let dinput_ptr = args.dinput.data.as_raw().0 as *mut c_void;
+        let input_ptr = args.input.data().as_raw().0 as *const c_void;
+        let target_ptr = args.target.data().as_raw().0 as *const c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let dinput_ptr = args.dinput.data().as_raw().0 as *mut c_void;
         let row_stride: i64 = class_extent as i64;
         let status = match T::KIND {
             ElementKind::F32 => unsafe {

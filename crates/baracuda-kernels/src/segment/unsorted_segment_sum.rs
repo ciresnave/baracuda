@@ -115,9 +115,9 @@ impl<T: Element> UnsortedSegmentSumPlan<T> {
             self.desc.num_inputs,
             self.desc.embedding_dim,
             self.desc.num_segments,
-            args.input.shape,
-            args.segment_ids.shape,
-            args.output.shape,
+            args.input.shape(),
+            args.segment_ids.shape(),
+            args.output.shape(),
             "UnsortedSegmentSumPlan",
         )
     }
@@ -152,9 +152,9 @@ impl<T: Element> UnsortedSegmentSumPlan<T> {
         if total == 0 {
             return Ok(());
         }
-        let in_ptr = args.input.data.as_raw().0 as *const c_void;
-        let id_ptr = args.segment_ids.data.as_raw().0 as *const c_void;
-        let out_ptr = args.output.data.as_raw().0 as *mut c_void;
+        let in_ptr = args.input.data().as_raw().0 as *const c_void;
+        let id_ptr = args.segment_ids.data().as_raw().0 as *const c_void;
+        let out_ptr = args.output.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         let status = match T::KIND {
             ElementKind::F32 => unsafe {

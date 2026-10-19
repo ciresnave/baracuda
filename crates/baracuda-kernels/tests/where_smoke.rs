@@ -57,26 +57,10 @@ fn run_contig<const N: usize>(shape: [i32; N]) {
         WherePlan::<f32, N>::select(&stream, &desc, PlanPreference::default()).expect("select");
 
     let args = WhereArgs::<f32, N> {
-        cond: TensorRef {
-            data: dev_cond.as_slice(),
-            shape,
-            stride,
-        },
-        a: TensorRef {
-            data: dev_a.as_slice(),
-            shape,
-            stride,
-        },
-        b: TensorRef {
-            data: dev_b.as_slice(),
-            shape,
-            stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
+        cond: TensorRef::new(dev_cond.as_slice(), shape, stride).unwrap(),
+        a: TensorRef::new(dev_a.as_slice(), shape, stride).unwrap(),
+        b: TensorRef::new(dev_b.as_slice(), shape, stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -154,26 +138,10 @@ fn where_f32_broadcast_row_cond() {
     let plan =
         WherePlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = WhereArgs::<f32, 2> {
-        cond: TensorRef {
-            data: dev_cond.as_slice(),
-            shape: cond_shape,
-            stride: cond_stride,
-        },
-        a: TensorRef {
-            data: dev_a.as_slice(),
-            shape: val_shape,
-            stride: val_stride,
-        },
-        b: TensorRef {
-            data: dev_b.as_slice(),
-            shape: val_shape,
-            stride: val_stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: y_shape,
-            stride: y_stride,
-        },
+        cond: TensorRef::new(dev_cond.as_slice(), cond_shape, cond_stride).unwrap(),
+        a: TensorRef::new(dev_a.as_slice(), val_shape, val_stride).unwrap(),
+        b: TensorRef::new(dev_b.as_slice(), val_shape, val_stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), y_shape, y_stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -227,26 +195,10 @@ fn where_f32_scalar_cond() {
     let plan =
         WherePlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = WhereArgs::<f32, 2> {
-        cond: TensorRef {
-            data: dev_cond.as_slice(),
-            shape: cond_shape,
-            stride: cond_stride,
-        },
-        a: TensorRef {
-            data: dev_a.as_slice(),
-            shape: val_shape,
-            stride: val_stride,
-        },
-        b: TensorRef {
-            data: dev_b.as_slice(),
-            shape: val_shape,
-            stride: val_stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: y_shape,
-            stride: y_stride,
-        },
+        cond: TensorRef::new(dev_cond.as_slice(), cond_shape, cond_stride).unwrap(),
+        a: TensorRef::new(dev_a.as_slice(), val_shape, val_stride).unwrap(),
+        b: TensorRef::new(dev_b.as_slice(), val_shape, val_stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), y_shape, y_stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

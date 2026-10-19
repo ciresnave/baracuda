@@ -127,7 +127,9 @@ impl<T: Element, const N: usize> PoissonNllLossPlan<T, N> {
         crate::view_check::check_dense(&args.input)?;
         crate::view_check::check_dense(&args.target)?;
         crate::view_check::check_dense(&args.out)?;
-        if args.input.shape != self.desc.input_shape || args.target.shape != self.desc.input_shape {
+        if args.input.shape() != self.desc.input_shape
+            || args.target.shape() != self.desc.input_shape
+        {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::PoissonNllLossPlan: input / target shape mismatch",
             ));
@@ -138,9 +140,9 @@ impl<T: Element, const N: usize> PoissonNllLossPlan<T, N> {
         }
         let (ws_ptr, ws_bytes) = unpack_workspace(workspace, self.workspace_size())?;
         let stream_ptr = stream.as_raw();
-        let input_ptr = args.input.data.as_raw().0 as *const c_void;
-        let target_ptr = args.target.data.as_raw().0 as *const c_void;
-        let out_ptr = args.out.data.as_raw().0 as *mut c_void;
+        let input_ptr = args.input.data().as_raw().0 as *const c_void;
+        let target_ptr = args.target.data().as_raw().0 as *const c_void;
+        let out_ptr = args.out.data().as_raw().0 as *mut c_void;
         let mode = self.desc.reduction as i32;
         let log_input_flag: i32 = if self.desc.log_input { 1 } else { 0 };
 
@@ -313,9 +315,9 @@ impl<T: Element, const N: usize> PoissonNllLossBackwardPlan<T, N> {
         crate::view_check::check_dense(&args.target)?;
         crate::view_check::check_dense(&args.dy)?;
         crate::view_check::check_dense(&args.dinput)?;
-        if args.input.shape != self.desc.input_shape
-            || args.target.shape != self.desc.input_shape
-            || args.dinput.shape != self.desc.input_shape
+        if args.input.shape() != self.desc.input_shape
+            || args.target.shape() != self.desc.input_shape
+            || args.dinput.shape() != self.desc.input_shape
         {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::PoissonNllLossBackwardPlan: shape mismatch",
@@ -333,10 +335,10 @@ impl<T: Element, const N: usize> PoissonNllLossBackwardPlan<T, N> {
         };
         let log_input_flag: i32 = if self.desc.log_input { 1 } else { 0 };
         let stream_ptr = stream.as_raw();
-        let input_ptr = args.input.data.as_raw().0 as *const c_void;
-        let target_ptr = args.target.data.as_raw().0 as *const c_void;
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let dinput_ptr = args.dinput.data.as_raw().0 as *mut c_void;
+        let input_ptr = args.input.data().as_raw().0 as *const c_void;
+        let target_ptr = args.target.data().as_raw().0 as *const c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let dinput_ptr = args.dinput.data().as_raw().0 as *mut c_void;
 
         let status = match T::KIND {
             ElementKind::F32 => unsafe {

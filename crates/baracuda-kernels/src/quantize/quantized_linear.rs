@@ -211,32 +211,32 @@ impl<TIn: Element, TWQ: IntElement> QuantizedLinearPlan<TIn, TWQ> {
         crate::view_check::check_fits(&args.output)?;
         crate::view_check::check_fits(&args.act_q_scratch)?;
         crate::view_check::check_fits(&args.act_scale_scratch)?;
-        if args.activation.shape != [self.desc.m, self.desc.k] {
+        if args.activation.shape() != [self.desc.m, self.desc.k] {
             return Err(Error::InvalidProblem(
                 "QuantizedLinearPlan: activation shape != [M, K]",
             ));
         }
-        if args.weight_q.shape != [self.desc.c_out, self.desc.k] {
+        if args.weight_q.shape() != [self.desc.c_out, self.desc.k] {
             return Err(Error::InvalidProblem(
                 "QuantizedLinearPlan: weight_q shape != [C_out, K]",
             ));
         }
-        if args.weight_scale.shape != [self.desc.c_out] {
+        if args.weight_scale.shape() != [self.desc.c_out] {
             return Err(Error::InvalidProblem(
                 "QuantizedLinearPlan: weight_scale shape != [C_out]",
             ));
         }
-        if args.output.shape != [self.desc.m, self.desc.c_out] {
+        if args.output.shape() != [self.desc.m, self.desc.c_out] {
             return Err(Error::InvalidProblem(
                 "QuantizedLinearPlan: output shape != [M, C_out]",
             ));
         }
-        if args.act_q_scratch.shape != [self.desc.m, self.desc.k] {
+        if args.act_q_scratch.shape() != [self.desc.m, self.desc.k] {
             return Err(Error::InvalidProblem(
                 "QuantizedLinearPlan: act_q_scratch shape != [M, K]",
             ));
         }
-        if args.act_scale_scratch.shape != [self.desc.m] {
+        if args.act_scale_scratch.shape() != [self.desc.m] {
             return Err(Error::InvalidProblem(
                 "QuantizedLinearPlan: act_scale_scratch shape != [M]",
             ));
@@ -280,9 +280,9 @@ impl<TIn: Element, TWQ: IntElement> QuantizedLinearPlan<TIn, TWQ> {
 
         // ---- Pass 1: dynamic-range per-token symmetric quantize the
         //              FP activation into the int8 scratch. -----------
-        let act_ptr = args.activation.data.as_raw().0 as *const c_void;
-        let act_scale_ptr = args.act_scale_scratch.data.as_raw().0 as *mut c_void;
-        let act_q_ptr = args.act_q_scratch.data.as_raw().0 as *mut c_void;
+        let act_ptr = args.activation.data().as_raw().0 as *const c_void;
+        let act_scale_ptr = args.act_scale_scratch.data().as_raw().0 as *mut c_void;
+        let act_q_ptr = args.act_q_scratch.data().as_raw().0 as *mut c_void;
         let drq_status = match TIn::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_dynamic_range_quantize_per_token_sym_f32_s8_run(
@@ -314,11 +314,11 @@ impl<TIn: Element, TWQ: IntElement> QuantizedLinearPlan<TIn, TWQ> {
         map_status(drq_status)?;
 
         // ---- Pass 2: fused quantized-linear (int8 GEMM + dequant + FP store). ----
-        let weight_ptr = args.weight_q.data.as_raw().0 as *const c_void;
-        let act_q_const = args.act_q_scratch.data.as_raw().0 as *const c_void;
-        let act_scale_const = args.act_scale_scratch.data.as_raw().0 as *const c_void;
-        let w_scale_ptr = args.weight_scale.data.as_raw().0 as *const c_void;
-        let out_ptr = args.output.data.as_raw().0 as *mut c_void;
+        let weight_ptr = args.weight_q.data().as_raw().0 as *const c_void;
+        let act_q_const = args.act_q_scratch.data().as_raw().0 as *const c_void;
+        let act_scale_const = args.act_scale_scratch.data().as_raw().0 as *const c_void;
+        let w_scale_ptr = args.weight_scale.data().as_raw().0 as *const c_void;
+        let out_ptr = args.output.data().as_raw().0 as *mut c_void;
         let ql_status = match TIn::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_quantized_linear_w8a8_f32_run(

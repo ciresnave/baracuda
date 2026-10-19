@@ -135,31 +135,31 @@ fn run_case<T>(
         &stream,
         Workspace::None,
         KvCacheAppendArgs {
-            k_new: TensorRef {
-                data: dev_k_new.as_slice(),
-                shape: shape_k_new,
-                stride: contiguous_stride(shape_k_new),
-            },
-            v_new: TensorRef {
-                data: dev_v_new.as_slice(),
-                shape: shape_v_new,
-                stride: contiguous_stride(shape_v_new),
-            },
-            cache_offsets: TensorRef {
-                data: dev_offsets.as_slice(),
-                shape: [shape.batch],
-                stride: [1],
-            },
-            k_cache: TensorMut {
-                data: dev_k_cache.as_slice_mut(),
-                shape: shape_k_cache,
-                stride: contiguous_stride(shape_k_cache),
-            },
-            v_cache: TensorMut {
-                data: dev_v_cache.as_slice_mut(),
-                shape: shape_v_cache,
-                stride: contiguous_stride(shape_v_cache),
-            },
+            k_new: TensorRef::new(
+                dev_k_new.as_slice(),
+                shape_k_new,
+                contiguous_stride(shape_k_new),
+            )
+            .unwrap(),
+            v_new: TensorRef::new(
+                dev_v_new.as_slice(),
+                shape_v_new,
+                contiguous_stride(shape_v_new),
+            )
+            .unwrap(),
+            cache_offsets: TensorRef::new(dev_offsets.as_slice(), [shape.batch], [1]).unwrap(),
+            k_cache: TensorMut::new(
+                dev_k_cache.as_slice_mut(),
+                shape_k_cache,
+                contiguous_stride(shape_k_cache),
+            )
+            .unwrap(),
+            v_cache: TensorMut::new(
+                dev_v_cache.as_slice_mut(),
+                shape_v_cache,
+                contiguous_stride(shape_v_cache),
+            )
+            .unwrap(),
         },
     )
     .expect("run");

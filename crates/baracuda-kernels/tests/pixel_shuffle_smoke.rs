@@ -48,16 +48,18 @@ fn pixel_shuffle_roundtrip_f32() {
         &stream,
         Workspace::None,
         PixelShuffleArgs {
-            input: TensorRef {
-                data: dev_in.as_slice(),
-                shape: [n, cin, h, w],
-                stride: contiguous_stride([n, cin, h, w]),
-            },
-            output: TensorMut {
-                data: dev_mid.as_slice_mut(),
-                shape: [n, c, h * r, w * r],
-                stride: contiguous_stride([n, c, h * r, w * r]),
-            },
+            input: TensorRef::new(
+                dev_in.as_slice(),
+                [n, cin, h, w],
+                contiguous_stride([n, cin, h, w]),
+            )
+            .unwrap(),
+            output: TensorMut::new(
+                dev_mid.as_slice_mut(),
+                [n, c, h * r, w * r],
+                contiguous_stride([n, c, h * r, w * r]),
+            )
+            .unwrap(),
         },
     )
     .expect("");
@@ -82,16 +84,18 @@ fn pixel_shuffle_roundtrip_f32() {
             &stream,
             Workspace::None,
             PixelUnshuffleArgs {
-                input: TensorRef {
-                    data: dev_mid.as_slice(),
-                    shape: [n, c, h * r, w * r],
-                    stride: contiguous_stride([n, c, h * r, w * r]),
-                },
-                output: TensorMut {
-                    data: dev_out.as_slice_mut(),
-                    shape: [n, cin, h, w],
-                    stride: contiguous_stride([n, cin, h, w]),
-                },
+                input: TensorRef::new(
+                    dev_mid.as_slice(),
+                    [n, c, h * r, w * r],
+                    contiguous_stride([n, c, h * r, w * r]),
+                )
+                .unwrap(),
+                output: TensorMut::new(
+                    dev_out.as_slice_mut(),
+                    [n, cin, h, w],
+                    contiguous_stride([n, cin, h, w]),
+                )
+                .unwrap(),
             },
         )
         .expect("");
@@ -132,16 +136,18 @@ fn pixel_shuffle_known_permutation_f32() {
         &stream,
         Workspace::None,
         PixelShuffleArgs {
-            input: TensorRef {
-                data: dev_in.as_slice(),
-                shape: [n, cin, h, w],
-                stride: contiguous_stride([n, cin, h, w]),
-            },
-            output: TensorMut {
-                data: dev_out.as_slice_mut(),
-                shape: [n, c, h * r, w * r],
-                stride: contiguous_stride([n, c, h * r, w * r]),
-            },
+            input: TensorRef::new(
+                dev_in.as_slice(),
+                [n, cin, h, w],
+                contiguous_stride([n, cin, h, w]),
+            )
+            .unwrap(),
+            output: TensorMut::new(
+                dev_out.as_slice_mut(),
+                [n, c, h * r, w * r],
+                contiguous_stride([n, c, h * r, w * r]),
+            )
+            .unwrap(),
         },
     )
     .expect("");
@@ -177,16 +183,18 @@ fn pixel_shuffle_roundtrip_f64() {
         &stream,
         Workspace::None,
         PixelShuffleArgs {
-            input: TensorRef {
-                data: dev_in.as_slice(),
-                shape: [n, cin, h, w],
-                stride: contiguous_stride([n, cin, h, w]),
-            },
-            output: TensorMut {
-                data: dev_mid.as_slice_mut(),
-                shape: [n, c, h * r, w * r],
-                stride: contiguous_stride([n, c, h * r, w * r]),
-            },
+            input: TensorRef::new(
+                dev_in.as_slice(),
+                [n, cin, h, w],
+                contiguous_stride([n, cin, h, w]),
+            )
+            .unwrap(),
+            output: TensorMut::new(
+                dev_mid.as_slice_mut(),
+                [n, c, h * r, w * r],
+                contiguous_stride([n, c, h * r, w * r]),
+            )
+            .unwrap(),
         },
     )
     .expect("");
@@ -209,16 +217,18 @@ fn pixel_shuffle_roundtrip_f64() {
         &stream,
         Workspace::None,
         PixelUnshuffleArgs {
-            input: TensorRef {
-                data: dev_mid.as_slice(),
-                shape: [n, c, h * r, w * r],
-                stride: contiguous_stride([n, c, h * r, w * r]),
-            },
-            output: TensorMut {
-                data: dev_out.as_slice_mut(),
-                shape: [n, cin, h, w],
-                stride: contiguous_stride([n, cin, h, w]),
-            },
+            input: TensorRef::new(
+                dev_mid.as_slice(),
+                [n, c, h * r, w * r],
+                contiguous_stride([n, c, h * r, w * r]),
+            )
+            .unwrap(),
+            output: TensorMut::new(
+                dev_out.as_slice_mut(),
+                [n, cin, h, w],
+                contiguous_stride([n, cin, h, w]),
+            )
+            .unwrap(),
         },
     )
     .expect("");
@@ -257,16 +267,18 @@ fn pixel_shuffle_f16_bf16_smoke() {
         &stream,
         Workspace::None,
         PixelShuffleArgs {
-            input: TensorRef {
-                data: dev_in.as_slice(),
-                shape: [n, cin, h, w],
-                stride: contiguous_stride([n, cin, h, w]),
-            },
-            output: TensorMut {
-                data: dev_out.as_slice_mut(),
-                shape: [n, c, h * r, w * r],
-                stride: contiguous_stride([n, c, h * r, w * r]),
-            },
+            input: TensorRef::new(
+                dev_in.as_slice(),
+                [n, cin, h, w],
+                contiguous_stride([n, cin, h, w]),
+            )
+            .unwrap(),
+            output: TensorMut::new(
+                dev_out.as_slice_mut(),
+                [n, c, h * r, w * r],
+                contiguous_stride([n, c, h * r, w * r]),
+            )
+            .unwrap(),
         },
     )
     .expect("");
@@ -298,16 +310,18 @@ fn pixel_shuffle_f16_bf16_smoke() {
         &stream,
         Workspace::None,
         PixelShuffleArgs {
-            input: TensorRef {
-                data: dev_in_bf16.as_slice(),
-                shape: [n, cin, h, w],
-                stride: contiguous_stride([n, cin, h, w]),
-            },
-            output: TensorMut {
-                data: dev_out_bf16.as_slice_mut(),
-                shape: [n, c, h * r, w * r],
-                stride: contiguous_stride([n, c, h * r, w * r]),
-            },
+            input: TensorRef::new(
+                dev_in_bf16.as_slice(),
+                [n, cin, h, w],
+                contiguous_stride([n, cin, h, w]),
+            )
+            .unwrap(),
+            output: TensorMut::new(
+                dev_out_bf16.as_slice_mut(),
+                [n, c, h * r, w * r],
+                contiguous_stride([n, c, h * r, w * r]),
+            )
+            .unwrap(),
         },
     )
     .expect("");

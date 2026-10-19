@@ -256,13 +256,13 @@ impl<T: Element, const N: usize> RandomPlan<T, N> {
         &self,
         y: &TensorMut<'_, U, N>,
     ) -> Result<i64> {
-        if y.shape != self.desc.shape {
+        if y.shape() != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::RandomPlan: y shape != descriptor shape",
             ));
         }
         let numel = y.numel();
-        let len = y.data.len() as i64;
+        let len = y.data().len() as i64;
         if len < numel {
             return Err(Error::BufferTooSmall {
                 needed: numel as usize,
@@ -297,7 +297,7 @@ impl<const N: usize> RandomPlan<f32, N> {
         }
         let gen_handle = self.ensure_generator()?;
         self.bind_stream(gen_handle, stream)?;
-        let ptr = args.y.data.as_raw().0 as *mut f32;
+        let ptr = args.y.data().as_raw().0 as *mut f32;
         let n = numel as usize;
 
         match self.desc.kind {
@@ -362,7 +362,7 @@ impl<const N: usize> RandomPlan<f64, N> {
         }
         let gen_handle = self.ensure_generator()?;
         self.bind_stream(gen_handle, stream)?;
-        let ptr = args.y.data.as_raw().0 as *mut f64;
+        let ptr = args.y.data().as_raw().0 as *mut f64;
         let n = numel as usize;
 
         match self.desc.kind {
@@ -446,7 +446,7 @@ impl<const N: usize> RandomPlan<Bool, N> {
             return Err(Error::CutlassInternal(curand_to_status(status)));
         }
 
-        let y_ptr = args.y.data.as_raw().0 as *mut c_void;
+        let y_ptr = args.y.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         let status = unsafe {
             baracuda_kernels_sys::baracuda_kernels_bernoulli_run(

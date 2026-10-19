@@ -127,16 +127,18 @@ fn write_slice_kv_cache_append_f32() {
     let plan = WriteSlicePlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = WriteSliceArgs::<f32, 3> {
-        dest: TensorMut {
-            data: dev_dest.as_slice_mut(),
-            shape: dest_shape,
-            stride: contiguous_stride(dest_shape),
-        },
-        source: TensorRef {
-            data: dev_source.as_slice(),
-            shape: source_shape,
-            stride: contiguous_stride(source_shape),
-        },
+        dest: TensorMut::new(
+            dev_dest.as_slice_mut(),
+            dest_shape,
+            contiguous_stride(dest_shape),
+        )
+        .unwrap(),
+        source: TensorRef::new(
+            dev_source.as_slice(),
+            source_shape,
+            contiguous_stride(source_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -183,16 +185,18 @@ fn write_slice_kv_cache_append_f16() {
     let plan = WriteSlicePlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = WriteSliceArgs::<f16, 3> {
-        dest: TensorMut {
-            data: dev_dest.as_slice_mut(),
-            shape: dest_shape,
-            stride: contiguous_stride(dest_shape),
-        },
-        source: TensorRef {
-            data: dev_source.as_slice(),
-            shape: source_shape,
-            stride: contiguous_stride(source_shape),
-        },
+        dest: TensorMut::new(
+            dev_dest.as_slice_mut(),
+            dest_shape,
+            contiguous_stride(dest_shape),
+        )
+        .unwrap(),
+        source: TensorRef::new(
+            dev_source.as_slice(),
+            source_shape,
+            contiguous_stride(source_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -245,16 +249,18 @@ fn write_slice_kv_cache_append_bf16() {
     let plan = WriteSlicePlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = WriteSliceArgs::<bf16, 3> {
-        dest: TensorMut {
-            data: dev_dest.as_slice_mut(),
-            shape: dest_shape,
-            stride: contiguous_stride(dest_shape),
-        },
-        source: TensorRef {
-            data: dev_source.as_slice(),
-            shape: source_shape,
-            stride: contiguous_stride(source_shape),
-        },
+        dest: TensorMut::new(
+            dev_dest.as_slice_mut(),
+            dest_shape,
+            contiguous_stride(dest_shape),
+        )
+        .unwrap(),
+        source: TensorRef::new(
+            dev_source.as_slice(),
+            source_shape,
+            contiguous_stride(source_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -300,16 +306,18 @@ fn write_slice_kv_cache_append_f64() {
     let plan = WriteSlicePlan::<f64, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = WriteSliceArgs::<f64, 3> {
-        dest: TensorMut {
-            data: dev_dest.as_slice_mut(),
-            shape: dest_shape,
-            stride: contiguous_stride(dest_shape),
-        },
-        source: TensorRef {
-            data: dev_source.as_slice(),
-            shape: source_shape,
-            stride: contiguous_stride(source_shape),
-        },
+        dest: TensorMut::new(
+            dev_dest.as_slice_mut(),
+            dest_shape,
+            contiguous_stride(dest_shape),
+        )
+        .unwrap(),
+        source: TensorRef::new(
+            dev_source.as_slice(),
+            source_shape,
+            contiguous_stride(source_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -367,16 +375,18 @@ fn write_slice_interior_2d_f32() {
     let plan = WriteSlicePlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = WriteSliceArgs::<f32, 2> {
-        dest: TensorMut {
-            data: dev_dest.as_slice_mut(),
-            shape: dest_shape,
-            stride: contiguous_stride(dest_shape),
-        },
-        source: TensorRef {
-            data: dev_source.as_slice(),
-            shape: source_shape,
-            stride: contiguous_stride(source_shape),
-        },
+        dest: TensorMut::new(
+            dev_dest.as_slice_mut(),
+            dest_shape,
+            contiguous_stride(dest_shape),
+        )
+        .unwrap(),
+        source: TensorRef::new(
+            dev_source.as_slice(),
+            source_shape,
+            contiguous_stride(source_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -416,16 +426,18 @@ fn write_slice_1d_i32() {
     let plan = WriteSlicePlan::<i32, 1>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = WriteSliceArgs::<i32, 1> {
-        dest: TensorMut {
-            data: dev_dest.as_slice_mut(),
-            shape: dest_shape,
-            stride: contiguous_stride(dest_shape),
-        },
-        source: TensorRef {
-            data: dev_source.as_slice(),
-            shape: source_shape,
-            stride: contiguous_stride(source_shape),
-        },
+        dest: TensorMut::new(
+            dev_dest.as_slice_mut(),
+            dest_shape,
+            contiguous_stride(dest_shape),
+        )
+        .unwrap(),
+        source: TensorRef::new(
+            dev_source.as_slice(),
+            source_shape,
+            contiguous_stride(source_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -476,16 +488,9 @@ fn write_slice_nibble_s4_rank2() {
         let dev_dest_s4 = dev_dest_u8.view_as_mut::<S4>();
         let dev_source_s4 = dev_source_u8.view_as::<S4>();
         let args = WriteSliceArgs::<S4, 2> {
-            dest: TensorMut {
-                data: dev_dest_s4,
-                shape: dest_shape,
-                stride: contiguous_stride(dest_shape),
-            },
-            source: TensorRef {
-                data: dev_source_s4,
-                shape: source_shape,
-                stride: contiguous_stride(source_shape),
-            },
+            dest: TensorMut::new(dev_dest_s4, dest_shape, contiguous_stride(dest_shape)).unwrap(),
+            source: TensorRef::new(dev_source_s4, source_shape, contiguous_stride(source_shape))
+                .unwrap(),
         };
         plan.run(&stream, Workspace::None, args).expect("run");
         stream.synchronize().expect("sync");

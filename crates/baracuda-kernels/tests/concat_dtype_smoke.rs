@@ -107,21 +107,14 @@ fn concat_3d_axis_1_f16() {
     let plan = ConcatPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select f16");
     let args = ConcatArgs::<f16, 3> {
-        a: TensorRef {
-            data: dev_a.as_slice(),
-            shape: a_shape,
-            stride: contiguous_stride(a_shape),
-        },
-        b: TensorRef {
-            data: dev_b.as_slice(),
-            shape: b_shape,
-            stride: contiguous_stride(b_shape),
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: output_shape,
-            stride: contiguous_stride(output_shape),
-        },
+        a: TensorRef::new(dev_a.as_slice(), a_shape, contiguous_stride(a_shape)).unwrap(),
+        b: TensorRef::new(dev_b.as_slice(), b_shape, contiguous_stride(b_shape)).unwrap(),
+        y: TensorMut::new(
+            dev_y.as_slice_mut(),
+            output_shape,
+            contiguous_stride(output_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run f16");
     stream.synchronize().expect("sync");
@@ -169,21 +162,14 @@ fn concat_3d_axis_1_bf16() {
     let plan = ConcatPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select bf16");
     let args = ConcatArgs::<bf16, 3> {
-        a: TensorRef {
-            data: dev_a.as_slice(),
-            shape: a_shape,
-            stride: contiguous_stride(a_shape),
-        },
-        b: TensorRef {
-            data: dev_b.as_slice(),
-            shape: b_shape,
-            stride: contiguous_stride(b_shape),
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: output_shape,
-            stride: contiguous_stride(output_shape),
-        },
+        a: TensorRef::new(dev_a.as_slice(), a_shape, contiguous_stride(a_shape)).unwrap(),
+        b: TensorRef::new(dev_b.as_slice(), b_shape, contiguous_stride(b_shape)).unwrap(),
+        y: TensorMut::new(
+            dev_y.as_slice_mut(),
+            output_shape,
+            contiguous_stride(output_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run bf16");
     stream.synchronize().expect("sync");
@@ -227,21 +213,14 @@ fn concat_3d_axis_1_f64() {
     let plan = ConcatPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select f64");
     let args = ConcatArgs::<f64, 3> {
-        a: TensorRef {
-            data: dev_a.as_slice(),
-            shape: a_shape,
-            stride: contiguous_stride(a_shape),
-        },
-        b: TensorRef {
-            data: dev_b.as_slice(),
-            shape: b_shape,
-            stride: contiguous_stride(b_shape),
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: output_shape,
-            stride: contiguous_stride(output_shape),
-        },
+        a: TensorRef::new(dev_a.as_slice(), a_shape, contiguous_stride(a_shape)).unwrap(),
+        b: TensorRef::new(dev_b.as_slice(), b_shape, contiguous_stride(b_shape)).unwrap(),
+        y: TensorMut::new(
+            dev_y.as_slice_mut(),
+            output_shape,
+            contiguous_stride(output_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run f64");
     stream.synchronize().expect("sync");

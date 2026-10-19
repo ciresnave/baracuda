@@ -279,12 +279,12 @@ impl<T: Element> CholeskyPlan<T> {
             self.desc.matrix_size,
             self.desc.matrix_size,
         ];
-        if args.a.shape != expected_shape {
+        if args.a.shape() != expected_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::CholeskyPlan: A shape != [batch, N, N]",
             ));
         }
-        if args.info.shape != [self.desc.batch_size] {
+        if args.info.shape() != [self.desc.batch_size] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::CholeskyPlan: info shape != [batch]",
             ));
@@ -292,16 +292,16 @@ impl<T: Element> CholeskyPlan<T> {
         let needed_a = (self.desc.batch_size as i64)
             * (self.desc.matrix_size as i64)
             * (self.desc.matrix_size as i64);
-        if (args.a.data.len() as i64) < needed_a {
+        if (args.a.data().len() as i64) < needed_a {
             return Err(Error::BufferTooSmall {
                 needed: needed_a as usize,
-                got: args.a.data.len(),
+                got: args.a.data().len(),
             });
         }
-        if (args.info.data.len() as i64) < self.desc.batch_size as i64 {
+        if (args.info.data().len() as i64) < self.desc.batch_size as i64 {
             return Err(Error::BufferTooSmall {
                 needed: self.desc.batch_size as usize,
-                got: args.info.data.len(),
+                got: args.info.data().len(),
             });
         }
         Ok(())
@@ -325,8 +325,8 @@ impl CholeskyPlan<f32> {
         self.bind_stream(h, stream)?;
         let n = self.desc.matrix_size;
         let uplo = self.cusolver_uplo();
-        let a_ptr = args.a.data.as_raw().0 as *mut f32;
-        let info_ptr = args.info.data.as_raw().0 as *mut i32;
+        let a_ptr = args.a.data().as_raw().0 as *mut f32;
+        let info_ptr = args.info.data().as_raw().0 as *mut i32;
         let stride: usize = (n as usize) * (n as usize);
 
         if self.desc.batch_size == 1 {
@@ -361,7 +361,7 @@ impl CholeskyPlan<f32> {
                 });
             }
             // Build host-side array of device pointers, then upload.
-            let base = args.a.data.as_raw().0;
+            let base = args.a.data().as_raw().0;
             let mut host_ptrs: Vec<u64> = Vec::with_capacity(self.desc.batch_size as usize);
             for b in 0..self.desc.batch_size {
                 host_ptrs.push(
@@ -412,8 +412,8 @@ impl CholeskyPlan<f64> {
         self.bind_stream(h, stream)?;
         let n = self.desc.matrix_size;
         let uplo = self.cusolver_uplo();
-        let a_ptr = args.a.data.as_raw().0 as *mut f64;
-        let info_ptr = args.info.data.as_raw().0 as *mut i32;
+        let a_ptr = args.a.data().as_raw().0 as *mut f64;
+        let info_ptr = args.info.data().as_raw().0 as *mut i32;
         let stride: usize = (n as usize) * (n as usize);
 
         if self.desc.batch_size == 1 {
@@ -440,7 +440,7 @@ impl CholeskyPlan<f64> {
                     got: ws_bytes,
                 });
             }
-            let base = args.a.data.as_raw().0;
+            let base = args.a.data().as_raw().0;
             let mut host_ptrs: Vec<u64> = Vec::with_capacity(self.desc.batch_size as usize);
             for b in 0..self.desc.batch_size {
                 host_ptrs.push(

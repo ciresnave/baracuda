@@ -225,27 +225,27 @@ impl<T: Element> SdpaPlan<T> {
             self.desc.query_len,
             self.desc.d_v,
         ];
-        if args.q.shape != shape_q {
+        if args.q.shape() != shape_q {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SdpaPlan: Q shape mismatch",
             ));
         }
-        if args.k.shape != shape_k {
+        if args.k.shape() != shape_k {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SdpaPlan: K shape mismatch",
             ));
         }
-        if args.v.shape != shape_v {
+        if args.v.shape() != shape_v {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SdpaPlan: V shape mismatch",
             ));
         }
-        if args.attn.shape != shape_attn {
+        if args.attn.shape() != shape_attn {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SdpaPlan: attn shape mismatch",
             ));
         }
-        if args.y.shape != shape_y {
+        if args.y.shape() != shape_y {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SdpaPlan: y shape mismatch",
             ));
@@ -260,29 +260,29 @@ impl<T: Element> SdpaPlan<T> {
                 "baracuda-kernels::SdpaPlan: attn must be contiguous",
             ));
         }
-        if args.q.stride[3] != 1 {
+        if args.q.stride()[3] != 1 {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SdpaPlan: Q head_dim axis (stride[3]) must be 1",
             ));
         }
-        if args.k.stride[3] != 1 {
+        if args.k.stride()[3] != 1 {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SdpaPlan: K head_dim axis (stride[3]) must be 1",
             ));
         }
-        if args.v.stride[3] != 1 {
+        if args.v.stride()[3] != 1 {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SdpaPlan: V head_dim axis (stride[3]) must be 1",
             ));
         }
-        if args.y.stride[3] != 1 {
+        if args.y.stride()[3] != 1 {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SdpaPlan: y head_dim axis (stride[3]) must be 1",
             ));
         }
         match (&args.mask, self.desc.has_mask) {
             (Some(m), true) => {
-                if m.shape != shape_attn {
+                if m.shape() != shape_attn {
                     return Err(Error::InvalidProblem(
                         "baracuda-kernels::SdpaPlan: mask shape must be [B, H, Q, K]",
                     ));
@@ -293,10 +293,10 @@ impl<T: Element> SdpaPlan<T> {
                     ));
                 }
                 let mn = m.numel();
-                if (m.data.len() as i64) < mn {
+                if (m.data().len() as i64) < mn {
                     return Err(Error::BufferTooSmall {
                         needed: mn as usize,
-                        got: m.data.len(),
+                        got: m.data().len(),
                     });
                 }
             }
@@ -311,34 +311,34 @@ impl<T: Element> SdpaPlan<T> {
         // views may legitimately point into a larger backing buffer).
         let attn_n = args.attn.numel();
         let y_n = args.y.numel();
-        if (args.attn.data.len() as i64) < attn_n {
+        if (args.attn.data().len() as i64) < attn_n {
             return Err(Error::BufferTooSmall {
                 needed: attn_n as usize,
-                got: args.attn.data.len(),
+                got: args.attn.data().len(),
             });
         }
-        if args.q.is_contiguous() && (args.q.data.len() as i64) < args.q.numel() {
+        if args.q.is_contiguous() && (args.q.data().len() as i64) < args.q.numel() {
             return Err(Error::BufferTooSmall {
                 needed: args.q.numel() as usize,
-                got: args.q.data.len(),
+                got: args.q.data().len(),
             });
         }
-        if args.k.is_contiguous() && (args.k.data.len() as i64) < args.k.numel() {
+        if args.k.is_contiguous() && (args.k.data().len() as i64) < args.k.numel() {
             return Err(Error::BufferTooSmall {
                 needed: args.k.numel() as usize,
-                got: args.k.data.len(),
+                got: args.k.data().len(),
             });
         }
-        if args.v.is_contiguous() && (args.v.data.len() as i64) < args.v.numel() {
+        if args.v.is_contiguous() && (args.v.data().len() as i64) < args.v.numel() {
             return Err(Error::BufferTooSmall {
                 needed: args.v.numel() as usize,
-                got: args.v.data.len(),
+                got: args.v.data().len(),
             });
         }
-        if args.y.is_contiguous() && (args.y.data.len() as i64) < y_n {
+        if args.y.is_contiguous() && (args.y.data().len() as i64) < y_n {
             return Err(Error::BufferTooSmall {
                 needed: y_n as usize,
-                got: args.y.data.len(),
+                got: args.y.data().len(),
             });
         }
         Ok(())
@@ -381,17 +381,17 @@ impl<T: Element> SdpaPlan<T> {
             return Ok(());
         }
         let stream_ptr = stream.as_raw();
-        let q_ptr = args.q.data.as_raw().0 as *const c_void;
-        let k_ptr = args.k.data.as_raw().0 as *const c_void;
-        let v_ptr = args.v.data.as_raw().0 as *const c_void;
+        let q_ptr = args.q.data().as_raw().0 as *const c_void;
+        let k_ptr = args.k.data().as_raw().0 as *const c_void;
+        let v_ptr = args.v.data().as_raw().0 as *const c_void;
         let mask_ptr = match &args.mask {
-            Some(m) => m.data.as_raw().0 as *const c_void,
+            Some(m) => m.data().as_raw().0 as *const c_void,
             None => core::ptr::null::<c_void>(),
         };
         let has_mask_flag = if self.desc.has_mask { 1 } else { 0 };
         let is_causal_flag = if self.desc.is_causal { 1 } else { 0 };
-        let attn_ptr = args.attn.data.as_raw().0 as *mut c_void;
-        let y_ptr = args.y.data.as_raw().0 as *mut c_void;
+        let attn_ptr = args.attn.data().as_raw().0 as *mut c_void;
+        let y_ptr = args.y.data().as_raw().0 as *mut c_void;
 
         let contig = args.q.is_contiguous()
             && args.k.is_contiguous()
@@ -491,17 +491,21 @@ impl<T: Element> SdpaPlan<T> {
                 // Strided sibling. Build per-tensor outer-dim stride
                 // arrays (length 3, one per outer dim: batch, heads,
                 // seq). head_dim axis is implicitly stride=1.
-                let stride_q: [i64; 3] = [args.q.stride[0], args.q.stride[1], args.q.stride[2]];
-                let stride_k: [i64; 3] = [args.k.stride[0], args.k.stride[1], args.k.stride[2]];
-                let stride_v: [i64; 3] = [args.v.stride[0], args.v.stride[1], args.v.stride[2]];
-                let stride_y: [i64; 3] = [args.y.stride[0], args.y.stride[1], args.y.stride[2]];
+                let stride_q: [i64; 3] =
+                    [args.q.stride()[0], args.q.stride()[1], args.q.stride()[2]];
+                let stride_k: [i64; 3] =
+                    [args.k.stride()[0], args.k.stride()[1], args.k.stride()[2]];
+                let stride_v: [i64; 3] =
+                    [args.v.stride()[0], args.v.stride()[1], args.v.stride()[2]];
+                let stride_y: [i64; 3] =
+                    [args.y.stride()[0], args.y.stride()[1], args.y.stride()[2]];
                 // mask is always contig at the plan layer; the strided
                 // FFI ignores stride_mask but we pass a valid pointer
                 // (its strides) to keep the contract simple.
                 let stride_mask_zero: [i64; 4] = [0, 0, 0, 0];
                 let stride_mask_ptr: *const i64 = if self.desc.has_mask {
                     if let Some(ref m) = args.mask {
-                        m.stride.as_ptr()
+                        m.stride().as_ptr()
                     } else {
                         stride_mask_zero.as_ptr()
                     }

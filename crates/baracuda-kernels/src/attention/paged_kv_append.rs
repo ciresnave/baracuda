@@ -139,7 +139,7 @@ impl<T: Element> PagedKvAppendPlan<T> {
             self.desc.paged_kv.num_kv_heads,
             self.desc.paged_kv.head_dim,
         ];
-        if args.key.shape != kv_row_shape || args.value.shape != kv_row_shape {
+        if args.key.shape() != kv_row_shape || args.value.shape() != kv_row_shape {
             return Err(Error::InvalidProblem(
                 "PagedKvAppendPlan: key/value shape mismatch",
             ));
@@ -150,13 +150,13 @@ impl<T: Element> PagedKvAppendPlan<T> {
             self.desc.paged_kv.page_size,
             self.desc.paged_kv.head_dim,
         ];
-        if args.k_data.shape != cache_shape || args.v_data.shape != cache_shape {
+        if args.k_data.shape() != cache_shape || args.v_data.shape() != cache_shape {
             return Err(Error::InvalidProblem(
                 "PagedKvAppendPlan: k_data/v_data shape mismatch",
             ));
         }
-        if args.indptr.shape != [self.desc.batch_size + 1]
-            || args.last_page_len.shape != [self.desc.batch_size]
+        if args.indptr.shape() != [self.desc.batch_size + 1]
+            || args.last_page_len.shape() != [self.desc.batch_size]
         {
             return Err(Error::InvalidProblem(
                 "PagedKvAppendPlan: indptr / last_page_len shape mismatch",
@@ -211,13 +211,13 @@ impl<T: Element> PagedKvAppendPlan<T> {
         #[cfg(feature = "flashinfer")]
         {
             let stream_ptr = stream.as_raw() as *mut c_void;
-            let key_ptr = args.key.data.as_raw().0 as *const c_void;
-            let value_ptr = args.value.data.as_raw().0 as *const c_void;
-            let k_ptr = args.k_data.data.as_raw().0 as *mut c_void;
-            let v_ptr = args.v_data.data.as_raw().0 as *mut c_void;
-            let indices_ptr = args.indices.data.as_raw().0 as *mut c_void;
-            let indptr_ptr = args.indptr.data.as_raw().0 as *mut c_void;
-            let last_page_len_ptr = args.last_page_len.data.as_raw().0 as *mut c_void;
+            let key_ptr = args.key.data().as_raw().0 as *const c_void;
+            let value_ptr = args.value.data().as_raw().0 as *const c_void;
+            let k_ptr = args.k_data.data().as_raw().0 as *mut c_void;
+            let v_ptr = args.v_data.data().as_raw().0 as *mut c_void;
+            let indices_ptr = args.indices.data().as_raw().0 as *mut c_void;
+            let indptr_ptr = args.indptr.data().as_raw().0 as *mut c_void;
+            let last_page_len_ptr = args.last_page_len.data().as_raw().0 as *mut c_void;
 
             let status = match T::KIND {
                 ElementKind::F16 => unsafe {

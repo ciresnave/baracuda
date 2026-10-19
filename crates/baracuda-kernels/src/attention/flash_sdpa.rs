@@ -160,11 +160,11 @@ fn physical_span3(shape: &[i32; 3], stride: &[i64; 3]) -> i64 {
 /// tensors and for any non-standard stride pattern.
 #[inline]
 fn is_full_mqa_broadcast<T: Element>(t: &TensorRef<'_, T, 4>, num_heads: i32) -> bool {
-    t.shape[1] == num_heads
-        && t.stride[1] == 0
-        && t.stride[3] == 1
-        && t.stride[2] == t.shape[3] as i64
-        && t.stride[0] == (t.shape[2] as i64) * (t.shape[3] as i64)
+    t.shape()[1] == num_heads
+        && t.stride()[1] == 0
+        && t.stride()[3] == 1
+        && t.stride()[2] == t.shape()[3] as i64
+        && t.stride()[0] == (t.shape()[2] as i64) * (t.shape()[3] as i64)
 }
 
 /// FA2 routing heuristic. Returns `true` when the shape + dtype falls
@@ -547,7 +547,7 @@ impl<T: Element> FlashSdpaPlan<T> {
             crate::view_check::check_fits(t)?;
         }
         // Q always has H heads; K/V have H_k heads (derived from args.k.shape[1]).
-        let num_heads_k = args.k.shape[1];
+        let num_heads_k = args.k.shape()[1];
         if num_heads_k <= 0
             || num_heads_k > self.desc.num_heads
             || self.desc.num_heads % num_heads_k != 0
@@ -600,27 +600,27 @@ impl<T: Element> FlashSdpaPlan<T> {
             self.desc.num_heads,
             self.desc.query_len,
         ];
-        if args.q.shape != shape_q {
+        if args.q.shape() != shape_q {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FlashSdpaPlan: Q shape mismatch",
             ));
         }
-        if args.k.shape != shape_k {
+        if args.k.shape() != shape_k {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FlashSdpaPlan: K shape mismatch",
             ));
         }
-        if args.v.shape != shape_v {
+        if args.v.shape() != shape_v {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FlashSdpaPlan: V shape mismatch",
             ));
         }
-        if args.y.shape != shape_y {
+        if args.y.shape() != shape_y {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FlashSdpaPlan: y shape mismatch",
             ));
         }
-        if args.lse.shape != shape_lse {
+        if args.lse.shape() != shape_lse {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FlashSdpaPlan: lse shape must be [B, H, Q]",
             ));
@@ -665,7 +665,7 @@ impl<T: Element> FlashSdpaPlan<T> {
                 self.desc.query_len,
                 self.desc.key_len,
             ];
-            if mask.shape != shape_mask {
+            if mask.shape() != shape_mask {
                 return Err(Error::InvalidProblem(
                     "baracuda-kernels::FlashSdpaPlan: mask shape must be [B, H, Q, K]",
                 ));
@@ -676,7 +676,7 @@ impl<T: Element> FlashSdpaPlan<T> {
                 ));
             }
             let m_n = mask.numel();
-            if (mask.data.len() as i64) < m_n {
+            if (mask.data().len() as i64) < m_n {
                 return Err(Error::BufferTooSmall {
                     needed: m_n as usize,
                     got: 0,
@@ -690,14 +690,14 @@ impl<T: Element> FlashSdpaPlan<T> {
                     "baracuda-kernels::FlashSdpaPlan: ALiBi requires the FA2 backend",
                 ));
             }
-            if slopes.shape[1] != self.desc.num_heads {
+            if slopes.shape()[1] != self.desc.num_heads {
                 return Err(Error::InvalidProblem(
                     "baracuda-kernels::FlashSdpaPlan: alibi_slopes shape[1] must equal num_heads",
                 ));
             }
             // shape[0] must be either 1 (broadcast-batch) or batch_size
             // (per-batch). The plan picks the layout via stride[0] in run().
-            if slopes.shape[0] != 1 && slopes.shape[0] != self.desc.batch_size {
+            if slopes.shape()[0] != 1 && slopes.shape()[0] != self.desc.batch_size {
                 return Err(Error::InvalidProblem(
                     "baracuda-kernels::FlashSdpaPlan: alibi_slopes shape[0] must be 1 \
                      (per-head broadcast) or batch_size (per-batch-per-head)",
@@ -709,16 +709,16 @@ impl<T: Element> FlashSdpaPlan<T> {
         // equal; for full-MQA-broadcast K/V (stride[1] == 0) the
         // physical span correctly excludes the broadcast axis — the
         // backing buffer is only [B, 1, K, D], not [B, H, K, D].
-        let q_n = physical_span(&args.q.shape, &args.q.stride);
-        let k_n = physical_span(&args.k.shape, &args.k.stride);
-        let v_n = physical_span(&args.v.shape, &args.v.stride);
-        let y_n = physical_span(&args.y.shape, &args.y.stride);
-        let l_n = physical_span3(&args.lse.shape, &args.lse.stride);
-        if (args.q.data.len() as i64) < q_n
-            || (args.k.data.len() as i64) < k_n
-            || (args.v.data.len() as i64) < v_n
-            || (args.y.data.len() as i64) < y_n
-            || (args.lse.data.len() as i64) < l_n
+        let q_n = physical_span(&args.q.shape(), &args.q.stride());
+        let k_n = physical_span(&args.k.shape(), &args.k.stride());
+        let v_n = physical_span(&args.v.shape(), &args.v.stride());
+        let y_n = physical_span(&args.y.shape(), &args.y.stride());
+        let l_n = physical_span3(&args.lse.shape(), &args.lse.stride());
+        if (args.q.data().len() as i64) < q_n
+            || (args.k.data().len() as i64) < k_n
+            || (args.v.data().len() as i64) < v_n
+            || (args.y.data().len() as i64) < y_n
+            || (args.lse.data().len() as i64) < l_n
         {
             return Err(Error::BufferTooSmall {
                 needed: y_n.max(l_n).max(q_n).max(k_n).max(v_n) as usize,
@@ -812,11 +812,11 @@ impl<T: Element> FlashSdpaPlan<T> {
         }
 
         let stream_ptr = stream.as_raw();
-        let q_ptr = args.q.data.as_raw().0 as *const c_void;
-        let k_ptr = args.k.data.as_raw().0 as *const c_void;
-        let v_ptr = args.v.data.as_raw().0 as *const c_void;
-        let y_ptr = args.y.data.as_raw().0 as *mut c_void;
-        let lse_ptr = args.lse.data.as_raw().0 as *mut c_void;
+        let q_ptr = args.q.data().as_raw().0 as *const c_void;
+        let k_ptr = args.k.data().as_raw().0 as *const c_void;
+        let v_ptr = args.v.data().as_raw().0 as *const c_void;
+        let y_ptr = args.y.data().as_raw().0 as *mut c_void;
+        let lse_ptr = args.lse.data().as_raw().0 as *mut c_void;
         let is_causal_flag = if self.desc.is_causal { 1 } else { 0 };
 
         // Phase 51 — arbitrary-mask path. When `mask.is_some()`, route
@@ -828,7 +828,7 @@ impl<T: Element> FlashSdpaPlan<T> {
         // bias applied to S before softmax.
         if let Some(mask) = args.mask.as_ref() {
             let _ = workspace; // arbmask path is workspace-free
-            let mask_ptr = mask.data.as_raw().0 as *const c_void;
+            let mask_ptr = mask.data().as_raw().0 as *const c_void;
             return self.run_arbmask(
                 stream_ptr,
                 q_ptr,
@@ -1014,16 +1014,8 @@ impl<T: Element> FlashSdpaPlan<T> {
                 ];
                 let phys_args = FlashSdpaArgs::<T> {
                     q: args.q,
-                    k: TensorRef {
-                        data: args.k.data,
-                        shape: k_shape,
-                        stride: k_stride,
-                    },
-                    v: TensorRef {
-                        data: args.v.data,
-                        shape: v_shape,
-                        stride: v_stride,
-                    },
+                    k: crate::view_check::valid(TensorRef::new(args.k.data(), k_shape, k_stride))?,
+                    v: crate::view_check::valid(TensorRef::new(args.v.data(), v_shape, v_stride))?,
                     y: args.y,
                     lse: args.lse,
                     mask: None,
@@ -1100,15 +1092,15 @@ impl<T: Element> FlashSdpaPlan<T> {
         args: &FlashSdpaArgs<'_, T>,
     ) -> Result<()> {
         let stream_ptr = stream.as_raw();
-        let q_ptr = args.q.data.as_raw().0 as *const c_void;
-        let k_ptr = args.k.data.as_raw().0 as *const c_void;
-        let v_ptr = args.v.data.as_raw().0 as *const c_void;
-        let y_ptr = args.y.data.as_raw().0 as *mut c_void;
+        let q_ptr = args.q.data().as_raw().0 as *const c_void;
+        let k_ptr = args.k.data().as_raw().0 as *const c_void;
+        let v_ptr = args.v.data().as_raw().0 as *const c_void;
+        let y_ptr = args.y.data().as_raw().0 as *mut c_void;
         let is_causal_flag = if self.desc.is_causal { 1 } else { 0 };
 
         // num_heads_k from the K tensor (GQA); guaranteed by
         // can_implement that this divides num_heads.
-        let num_heads_k = args.k.shape[1];
+        let num_heads_k = args.k.shape()[1];
 
         // ALiBi: detect per-head vs per-batch-per-head layout from shape[0].
         //   shape[0] = 1                          → per-head broadcast
@@ -1118,8 +1110,8 @@ impl<T: Element> FlashSdpaPlan<T> {
         let (alibi_ptr, alibi_batch_stride) = match args.alibi_slopes.as_ref() {
             None => (core::ptr::null::<c_void>(), 0i32),
             Some(slopes) => {
-                let ptr = slopes.data.as_raw().0 as *const c_void;
-                let batch_stride = if slopes.shape[0] == 1 {
+                let ptr = slopes.data().as_raw().0 as *const c_void;
+                let batch_stride = if slopes.shape()[0] == 1 {
                     0_i32 // broadcast over batch
                 } else {
                     self.desc.num_heads // per-batch stride is num_heads elements

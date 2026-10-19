@@ -111,31 +111,26 @@ fn awq_gemm_zero_weights_smoke() {
     assert_eq!(plan.workspace_size(), ws_bytes, "plan/FFI workspace agree");
 
     let args = Int4AwqGemmArgs::<f16> {
-        activation: TensorRef {
-            data: dev_a.as_slice(),
-            shape: [m, ic],
-            stride: contiguous_stride([m, ic]),
-        },
-        weight_packed: TensorRef {
-            data: dev_w.as_slice(),
-            shape: [oc, ic / 8],
-            stride: contiguous_stride([oc, ic / 8]),
-        },
-        scales: TensorRef {
-            data: dev_s.as_slice(),
-            shape: [ic / group_size, oc],
-            stride: contiguous_stride([ic / group_size, oc]),
-        },
-        zeros: TensorRef {
-            data: dev_z.as_slice(),
-            shape: [ic / group_size, oc / 8],
-            stride: contiguous_stride([ic / group_size, oc / 8]),
-        },
-        output: TensorMut {
-            data: dev_c.as_slice_mut(),
-            shape: [m, oc],
-            stride: contiguous_stride([m, oc]),
-        },
+        activation: TensorRef::new(dev_a.as_slice(), [m, ic], contiguous_stride([m, ic])).unwrap(),
+        weight_packed: TensorRef::new(
+            dev_w.as_slice(),
+            [oc, ic / 8],
+            contiguous_stride([oc, ic / 8]),
+        )
+        .unwrap(),
+        scales: TensorRef::new(
+            dev_s.as_slice(),
+            [ic / group_size, oc],
+            contiguous_stride([ic / group_size, oc]),
+        )
+        .unwrap(),
+        zeros: TensorRef::new(
+            dev_z.as_slice(),
+            [ic / group_size, oc / 8],
+            contiguous_stride([ic / group_size, oc / 8]),
+        )
+        .unwrap(),
+        output: TensorMut::new(dev_c.as_slice_mut(), [m, oc], contiguous_stride([m, oc])).unwrap(),
     };
 
     let ws = Workspace::Borrowed(dev_ws.as_slice_mut());

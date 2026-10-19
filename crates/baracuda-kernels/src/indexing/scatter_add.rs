@@ -161,12 +161,12 @@ impl<T: Element, const N: usize> ScatterAddPlan<T, N> {
     /// Validate `args` against the descriptor: shapes match, rank ≤ 8,
     /// device buffers are large enough.
     pub fn can_implement<I: IndexElement>(&self, args: &ScatterAddArgs<'_, T, N, I>) -> Result<()> {
-        if args.updates.shape != self.desc.upd_shape {
+        if args.updates.shape() != self.desc.upd_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::ScatterAddPlan: updates shape mismatch with descriptor",
             ));
         }
-        if args.index.shape != self.desc.upd_shape {
+        if args.index.shape() != self.desc.upd_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::ScatterAddPlan: index shape must equal updates shape",
             ));
@@ -177,8 +177,8 @@ impl<T: Element, const N: usize> ScatterAddPlan<T, N> {
             ));
         }
         let upd_numel = args.updates.numel();
-        let upd_len = args.updates.data.len() as i64;
-        let idx_len = args.index.data.len() as i64;
+        let upd_len = args.updates.data().len() as i64;
+        let idx_len = args.index.data().len() as i64;
         if upd_len < upd_numel {
             return Err(Error::BufferTooSmall {
                 needed: upd_numel as usize,
@@ -228,15 +228,15 @@ impl<T: Element, const N: usize> ScatterAddPlan<T, N> {
         if upd_numel == 0 {
             return Ok(());
         }
-        let upd_ptr = args.updates.data.as_raw().0 as *const c_void;
-        let idx_ptr = args.index.data.as_raw().0 as *const c_void;
-        let out_ptr = args.out.data.as_raw().0 as *mut c_void;
+        let upd_ptr = args.updates.data().as_raw().0 as *const c_void;
+        let idx_ptr = args.index.data().as_raw().0 as *const c_void;
+        let out_ptr = args.out.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
         let upd_shape = self.desc.upd_shape;
-        let stride_upd = args.updates.stride;
-        let stride_index = args.index.stride;
-        let stride_out = args.out.stride;
+        let stride_upd = args.updates.stride();
+        let stride_index = args.index.stride();
+        let stride_out = args.out.stride();
         let rank = N as i32;
 
         let status = match (T::KIND, I::KIND) {

@@ -96,41 +96,20 @@ fn ragged_prefill_uniform_key_is_mean() {
         &stream,
         Workspace::None,
         BatchRaggedPrefillArgs {
-            q: TensorRef {
-                data: q_dev.as_slice(),
-                shape: qo_shape,
-                stride: contiguous_stride(qo_shape),
-            },
-            q_indptr: TensorRef {
-                data: q_indptr_dev.as_slice(),
-                shape: [2],
-                stride: [1],
-            },
-            k_data: TensorRef {
-                data: k_dev.as_slice(),
-                shape: kv_shape,
-                stride: contiguous_stride(kv_shape),
-            },
-            v_data: TensorRef {
-                data: v_dev.as_slice(),
-                shape: kv_shape,
-                stride: contiguous_stride(kv_shape),
-            },
-            kv_indptr: TensorRef {
-                data: kv_indptr_dev.as_slice(),
-                shape: [2],
-                stride: [1],
-            },
-            o: TensorMut {
-                data: o_dev.as_slice_mut(),
-                shape: qo_shape,
-                stride: contiguous_stride(qo_shape),
-            },
-            lse: TensorMut {
-                data: lse_dev.as_slice_mut(),
-                shape: [qo_len as i32, 1],
-                stride: contiguous_stride([qo_len as i32, 1]),
-            },
+            q: TensorRef::new(q_dev.as_slice(), qo_shape, contiguous_stride(qo_shape)).unwrap(),
+            q_indptr: TensorRef::new(q_indptr_dev.as_slice(), [2], [1]).unwrap(),
+            k_data: TensorRef::new(k_dev.as_slice(), kv_shape, contiguous_stride(kv_shape))
+                .unwrap(),
+            v_data: TensorRef::new(v_dev.as_slice(), kv_shape, contiguous_stride(kv_shape))
+                .unwrap(),
+            kv_indptr: TensorRef::new(kv_indptr_dev.as_slice(), [2], [1]).unwrap(),
+            o: TensorMut::new(o_dev.as_slice_mut(), qo_shape, contiguous_stride(qo_shape)).unwrap(),
+            lse: TensorMut::new(
+                lse_dev.as_slice_mut(),
+                [qo_len as i32, 1],
+                contiguous_stride([qo_len as i32, 1]),
+            )
+            .unwrap(),
         },
     )
     .expect("ragged prefill run");

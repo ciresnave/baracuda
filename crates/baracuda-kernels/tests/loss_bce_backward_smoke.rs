@@ -61,26 +61,10 @@ fn loss_bce_backward_f32_mean() {
         &stream,
         Workspace::None,
         BceLossBackwardArgs {
-            pred: TensorRef {
-                data: dev_p.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            target: TensorRef {
-                data: dev_t.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape: [1, 1],
-                stride: [1, 1],
-            },
-            dpred: TensorMut {
-                data: dev_dp.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            pred: TensorRef::new(dev_p.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            target: TensorRef::new(dev_t.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            dy: TensorRef::new(dev_dy.as_slice(), [1, 1], [1, 1]).unwrap(),
+            dpred: TensorMut::new(dev_dp.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
         },
     )
     .unwrap();
@@ -127,26 +111,10 @@ fn loss_bce_backward_f64_mean() {
         &stream,
         Workspace::None,
         BceLossBackwardArgs {
-            pred: TensorRef {
-                data: dev_p.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            target: TensorRef {
-                data: dev_t.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape: [1, 1],
-                stride: [1, 1],
-            },
-            dpred: TensorMut {
-                data: dev_dp.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            pred: TensorRef::new(dev_p.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            target: TensorRef::new(dev_t.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            dy: TensorRef::new(dev_dy.as_slice(), [1, 1], [1, 1]).unwrap(),
+            dpred: TensorMut::new(dev_dp.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
         },
     )
     .unwrap();
@@ -198,26 +166,10 @@ fn loss_bce_backward_f16_mean() {
         &stream,
         Workspace::None,
         BceLossBackwardArgs {
-            pred: TensorRef {
-                data: dev_p.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            target: TensorRef {
-                data: dev_t.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape: [1, 1],
-                stride: [1, 1],
-            },
-            dpred: TensorMut {
-                data: dev_dp.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            pred: TensorRef::new(dev_p.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            target: TensorRef::new(dev_t.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            dy: TensorRef::new(dev_dy.as_slice(), [1, 1], [1, 1]).unwrap(),
+            dpred: TensorMut::new(dev_dp.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
         },
     )
     .unwrap();
@@ -275,26 +227,10 @@ fn loss_bce_backward_bf16_mean() {
         &stream,
         Workspace::None,
         BceLossBackwardArgs {
-            pred: TensorRef {
-                data: dev_p.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            target: TensorRef {
-                data: dev_t.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape: [1, 1],
-                stride: [1, 1],
-            },
-            dpred: TensorMut {
-                data: dev_dp.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            pred: TensorRef::new(dev_p.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            target: TensorRef::new(dev_t.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            dy: TensorRef::new(dev_dy.as_slice(), [1, 1], [1, 1]).unwrap(),
+            dpred: TensorMut::new(dev_dp.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
         },
     )
     .unwrap();

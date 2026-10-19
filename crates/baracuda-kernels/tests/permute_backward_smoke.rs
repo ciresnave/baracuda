@@ -85,16 +85,13 @@ fn run_case<T, const N: usize>(
     let plan =
         PermuteBackwardPlan::<T, N>::select(stream, &desc, PlanPreference::default()).expect("sel");
     let args = PermuteBackwardArgs::<T, N> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape: dy_shape,
-            stride: contiguous_stride(dy_shape),
-        },
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), dy_shape, contiguous_stride(dy_shape)).unwrap(),
+        dx: TensorMut::new(
+            dev_dx.as_slice_mut(),
+            input_shape,
+            contiguous_stride(input_shape),
+        )
+        .unwrap(),
     };
     plan.run(stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

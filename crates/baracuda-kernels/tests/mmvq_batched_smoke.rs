@@ -149,32 +149,23 @@ fn batched_q8_0_f32_top_k_1_no_aliasing() {
     let plan = GgufMmvqBatchedPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = GgufMmvqBatchedArgs {
-        weights: TensorRef {
-            data: dev_w.as_slice(),
-            shape: [host_w.len() as i32],
-            stride: contiguous_stride([host_w.len() as i32]),
-        },
-        activations: TensorRef {
-            data: dev_y.as_slice(),
-            shape: [n_tokens, n_cols],
-            stride: [n_cols as i64, 1],
-        },
-        sorted_token_ids: TensorRef {
-            data: dev_tids.as_slice(),
-            shape: [m_total],
-            stride: [1],
-        },
-        expert_offsets: TensorRef {
-            data: dev_offs.as_slice(),
-            shape: [n_experts + 1],
-            stride: [1],
-        },
+        weights: TensorRef::new(
+            dev_w.as_slice(),
+            [host_w.len() as i32],
+            contiguous_stride([host_w.len() as i32]),
+        )
+        .unwrap(),
+        activations: TensorRef::new(dev_y.as_slice(), [n_tokens, n_cols], [n_cols as i64, 1])
+            .unwrap(),
+        sorted_token_ids: TensorRef::new(dev_tids.as_slice(), [m_total], [1]).unwrap(),
+        expert_offsets: TensorRef::new(dev_offs.as_slice(), [n_experts + 1], [1]).unwrap(),
         topk_weights: None,
-        output: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: [n_tokens, n_rows],
-            stride: [n_rows as i64, 1],
-        },
+        output: TensorMut::new(
+            dev_out.as_slice_mut(),
+            [n_tokens, n_rows],
+            [n_rows as i64, 1],
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
         .expect("run");
@@ -282,32 +273,23 @@ fn batched_q8_0_f32_top_k_2_atomic() {
     let plan = GgufMmvqBatchedPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = GgufMmvqBatchedArgs {
-        weights: TensorRef {
-            data: dev_w.as_slice(),
-            shape: [host_w.len() as i32],
-            stride: contiguous_stride([host_w.len() as i32]),
-        },
-        activations: TensorRef {
-            data: dev_y.as_slice(),
-            shape: [n_tokens, n_cols],
-            stride: [n_cols as i64, 1],
-        },
-        sorted_token_ids: TensorRef {
-            data: dev_tids.as_slice(),
-            shape: [m_total],
-            stride: [1],
-        },
-        expert_offsets: TensorRef {
-            data: dev_offs.as_slice(),
-            shape: [n_experts + 1],
-            stride: [1],
-        },
+        weights: TensorRef::new(
+            dev_w.as_slice(),
+            [host_w.len() as i32],
+            contiguous_stride([host_w.len() as i32]),
+        )
+        .unwrap(),
+        activations: TensorRef::new(dev_y.as_slice(), [n_tokens, n_cols], [n_cols as i64, 1])
+            .unwrap(),
+        sorted_token_ids: TensorRef::new(dev_tids.as_slice(), [m_total], [1]).unwrap(),
+        expert_offsets: TensorRef::new(dev_offs.as_slice(), [n_experts + 1], [1]).unwrap(),
         topk_weights: None,
-        output: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: [n_tokens, n_rows],
-            stride: [n_rows as i64, 1],
-        },
+        output: TensorMut::new(
+            dev_out.as_slice_mut(),
+            [n_tokens, n_rows],
+            [n_rows as i64, 1],
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
         .expect("run");
@@ -433,21 +415,15 @@ fn batched_q4_K_f16_top_k_1() {
                 GgufMmvqPlan::<f32>::select(&stream, &desc_ref, PlanPreference::default())
                     .expect("sel ref");
             let args_ref = GgufMmvqArgs {
-                weight: TensorRef {
-                    data: dev_w_ref.as_slice(),
-                    shape: [host_w.len() as i32],
-                    stride: contiguous_stride([host_w.len() as i32]),
-                },
-                activation: TensorRef {
-                    data: dev_y_ref.as_slice(),
-                    shape: [n_cols],
-                    stride: [1],
-                },
-                output: TensorMut {
-                    data: dev_out_ref.as_slice_mut(),
-                    shape: [1],
-                    stride: contiguous_stride([1]),
-                },
+                weight: TensorRef::new(
+                    dev_w_ref.as_slice(),
+                    [host_w.len() as i32],
+                    contiguous_stride([host_w.len() as i32]),
+                )
+                .unwrap(),
+                activation: TensorRef::new(dev_y_ref.as_slice(), [n_cols], [1]).unwrap(),
+                output: TensorMut::new(dev_out_ref.as_slice_mut(), [1], contiguous_stride([1]))
+                    .unwrap(),
             };
             plan_ref
                 .run(&stream, Workspace::None, args_ref)
@@ -479,32 +455,23 @@ fn batched_q4_K_f16_top_k_1() {
     let plan = GgufMmvqBatchedPlan::<f16>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = GgufMmvqBatchedArgs {
-        weights: TensorRef {
-            data: dev_w.as_slice(),
-            shape: [host_w.len() as i32],
-            stride: contiguous_stride([host_w.len() as i32]),
-        },
-        activations: TensorRef {
-            data: dev_y.as_slice(),
-            shape: [n_tokens, n_cols],
-            stride: [n_cols as i64, 1],
-        },
-        sorted_token_ids: TensorRef {
-            data: dev_tids.as_slice(),
-            shape: [m_total],
-            stride: [1],
-        },
-        expert_offsets: TensorRef {
-            data: dev_offs.as_slice(),
-            shape: [n_experts + 1],
-            stride: [1],
-        },
+        weights: TensorRef::new(
+            dev_w.as_slice(),
+            [host_w.len() as i32],
+            contiguous_stride([host_w.len() as i32]),
+        )
+        .unwrap(),
+        activations: TensorRef::new(dev_y.as_slice(), [n_tokens, n_cols], [n_cols as i64, 1])
+            .unwrap(),
+        sorted_token_ids: TensorRef::new(dev_tids.as_slice(), [m_total], [1]).unwrap(),
+        expert_offsets: TensorRef::new(dev_offs.as_slice(), [n_experts + 1], [1]).unwrap(),
         topk_weights: None,
-        output: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: [n_tokens, n_rows],
-            stride: [n_rows as i64, 1],
-        },
+        output: TensorMut::new(
+            dev_out.as_slice_mut(),
+            [n_tokens, n_rows],
+            [n_rows as i64, 1],
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
         .expect("run");
@@ -602,32 +569,23 @@ fn batched_fp_f16_top_k_1() {
     let plan = GgufMmvqBatchedPlan::<f16>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = GgufMmvqBatchedArgs {
-        weights: TensorRef {
-            data: dev_w.as_slice(),
-            shape: [host_w.len() as i32],
-            stride: contiguous_stride([host_w.len() as i32]),
-        },
-        activations: TensorRef {
-            data: dev_y.as_slice(),
-            shape: [n_tokens, n_cols],
-            stride: [n_cols as i64, 1],
-        },
-        sorted_token_ids: TensorRef {
-            data: dev_tids.as_slice(),
-            shape: [m_total],
-            stride: [1],
-        },
-        expert_offsets: TensorRef {
-            data: dev_offs.as_slice(),
-            shape: [n_experts + 1],
-            stride: [1],
-        },
+        weights: TensorRef::new(
+            dev_w.as_slice(),
+            [host_w.len() as i32],
+            contiguous_stride([host_w.len() as i32]),
+        )
+        .unwrap(),
+        activations: TensorRef::new(dev_y.as_slice(), [n_tokens, n_cols], [n_cols as i64, 1])
+            .unwrap(),
+        sorted_token_ids: TensorRef::new(dev_tids.as_slice(), [m_total], [1]).unwrap(),
+        expert_offsets: TensorRef::new(dev_offs.as_slice(), [n_experts + 1], [1]).unwrap(),
         topk_weights: None,
-        output: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: [n_tokens, n_rows],
-            stride: [n_rows as i64, 1],
-        },
+        output: TensorMut::new(
+            dev_out.as_slice_mut(),
+            [n_tokens, n_rows],
+            [n_rows as i64, 1],
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
         .expect("run");
@@ -720,40 +678,27 @@ fn run_q8_0_with_optional_topk_weights(
     let plan = GgufMmvqBatchedPlan::<f32>::select(stream, &desc, PlanPreference::default())
         .expect("select");
     let args = GgufMmvqBatchedArgs {
-        weights: TensorRef {
-            data: dev_w.as_slice(),
-            shape: [host_w.len() as i32],
-            stride: contiguous_stride([host_w.len() as i32]),
-        },
-        activations: TensorRef {
-            data: dev_y.as_slice(),
-            shape: [n_tokens, n_cols],
-            stride: [n_cols as i64, 1],
-        },
-        sorted_token_ids: TensorRef {
-            data: dev_tids.as_slice(),
-            shape: [m_total],
-            stride: [1],
-        },
-        expert_offsets: TensorRef {
-            data: dev_offs.as_slice(),
-            shape: [n_experts + 1],
-            stride: [1],
-        },
+        weights: TensorRef::new(
+            dev_w.as_slice(),
+            [host_w.len() as i32],
+            contiguous_stride([host_w.len() as i32]),
+        )
+        .unwrap(),
+        activations: TensorRef::new(dev_y.as_slice(), [n_tokens, n_cols], [n_cols as i64, 1])
+            .unwrap(),
+        sorted_token_ids: TensorRef::new(dev_tids.as_slice(), [m_total], [1]).unwrap(),
+        expert_offsets: TensorRef::new(dev_offs.as_slice(), [n_experts + 1], [1]).unwrap(),
         topk_weights: if use_topk_weights {
-            Some(TensorRef {
-                data: dev_tw.as_slice(),
-                shape: [m_total],
-                stride: [1],
-            })
+            Some(TensorRef::new(dev_tw.as_slice(), [m_total], [1]).unwrap())
         } else {
             None
         },
-        output: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: [n_tokens, n_rows],
-            stride: [n_rows as i64, 1],
-        },
+        output: TensorMut::new(
+            dev_out.as_slice_mut(),
+            [n_tokens, n_rows],
+            [n_rows as i64, 1],
+        )
+        .unwrap(),
     };
     plan.run(stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
         .expect("run");

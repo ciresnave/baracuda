@@ -305,16 +305,8 @@ fn max_pool2d_f32() {
         &stream,
         Workspace::None,
         Pool2dFwArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape: x_shape,
-                stride: contiguous_stride(x_shape),
-            },
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
+            x: TensorRef::new(dev_x.as_slice(), x_shape, contiguous_stride(x_shape)).unwrap(),
+            y: TensorMut::new(dev_y.as_slice_mut(), y_shape, contiguous_stride(y_shape)).unwrap(),
         },
     )
     .expect("fw");
@@ -356,26 +348,10 @@ fn max_pool2d_f32() {
         &stream,
         Workspace::None,
         Pool2dBwArgs {
-            y: TensorRef {
-                data: dev_y.as_slice(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape: x_shape,
-                stride: contiguous_stride(x_shape),
-            },
-            dx: TensorMut {
-                data: dev_dx.as_slice_mut(),
-                shape: x_shape,
-                stride: contiguous_stride(x_shape),
-            },
+            y: TensorRef::new(dev_y.as_slice(), y_shape, contiguous_stride(y_shape)).unwrap(),
+            dy: TensorRef::new(dev_dy.as_slice(), y_shape, contiguous_stride(y_shape)).unwrap(),
+            x: TensorRef::new(dev_x.as_slice(), x_shape, contiguous_stride(x_shape)).unwrap(),
+            dx: TensorMut::new(dev_dx.as_slice_mut(), x_shape, contiguous_stride(x_shape)).unwrap(),
         },
     )
     .expect("bw");
@@ -427,16 +403,8 @@ fn max_pool2d_f64() {
         &stream,
         Workspace::None,
         Pool2dFwArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape: x_shape,
-                stride: contiguous_stride(x_shape),
-            },
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
+            x: TensorRef::new(dev_x.as_slice(), x_shape, contiguous_stride(x_shape)).unwrap(),
+            y: TensorMut::new(dev_y.as_slice_mut(), y_shape, contiguous_stride(y_shape)).unwrap(),
         },
     )
     .expect("fw");
@@ -478,26 +446,10 @@ fn max_pool2d_f64() {
         &stream,
         Workspace::None,
         Pool2dBwArgs {
-            y: TensorRef {
-                data: dev_y.as_slice(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape: x_shape,
-                stride: contiguous_stride(x_shape),
-            },
-            dx: TensorMut {
-                data: dev_dx.as_slice_mut(),
-                shape: x_shape,
-                stride: contiguous_stride(x_shape),
-            },
+            y: TensorRef::new(dev_y.as_slice(), y_shape, contiguous_stride(y_shape)).unwrap(),
+            dy: TensorRef::new(dev_dy.as_slice(), y_shape, contiguous_stride(y_shape)).unwrap(),
+            x: TensorRef::new(dev_x.as_slice(), x_shape, contiguous_stride(x_shape)).unwrap(),
+            dx: TensorMut::new(dev_dx.as_slice_mut(), x_shape, contiguous_stride(x_shape)).unwrap(),
         },
     )
     .expect("bw");
@@ -558,16 +510,8 @@ fn avg_pool2d_f32() {
         &stream,
         Workspace::None,
         Pool2dFwArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape: x_shape,
-                stride: contiguous_stride(x_shape),
-            },
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
+            x: TensorRef::new(dev_x.as_slice(), x_shape, contiguous_stride(x_shape)).unwrap(),
+            y: TensorMut::new(dev_y.as_slice_mut(), y_shape, contiguous_stride(y_shape)).unwrap(),
         },
     )
     .expect("fw");
@@ -606,26 +550,10 @@ fn avg_pool2d_f32() {
         &stream,
         Workspace::None,
         Pool2dBwArgs {
-            y: TensorRef {
-                data: dev_y.as_slice(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape: x_shape,
-                stride: contiguous_stride(x_shape),
-            },
-            dx: TensorMut {
-                data: dev_dx.as_slice_mut(),
-                shape: x_shape,
-                stride: contiguous_stride(x_shape),
-            },
+            y: TensorRef::new(dev_y.as_slice(), y_shape, contiguous_stride(y_shape)).unwrap(),
+            dy: TensorRef::new(dev_dy.as_slice(), y_shape, contiguous_stride(y_shape)).unwrap(),
+            x: TensorRef::new(dev_x.as_slice(), x_shape, contiguous_stride(x_shape)).unwrap(),
+            dx: TensorMut::new(dev_dx.as_slice_mut(), x_shape, contiguous_stride(x_shape)).unwrap(),
         },
     )
     .expect("bw");
@@ -686,16 +614,8 @@ fn avg_pool2d_f64() {
         &stream,
         Workspace::None,
         Pool2dFwArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape: x_shape,
-                stride: contiguous_stride(x_shape),
-            },
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
+            x: TensorRef::new(dev_x.as_slice(), x_shape, contiguous_stride(x_shape)).unwrap(),
+            y: TensorMut::new(dev_y.as_slice_mut(), y_shape, contiguous_stride(y_shape)).unwrap(),
         },
     )
     .expect("fw");
@@ -736,26 +656,10 @@ fn avg_pool2d_f64() {
         &stream,
         Workspace::None,
         Pool2dBwArgs {
-            y: TensorRef {
-                data: dev_y.as_slice(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape: x_shape,
-                stride: contiguous_stride(x_shape),
-            },
-            dx: TensorMut {
-                data: dev_dx.as_slice_mut(),
-                shape: x_shape,
-                stride: contiguous_stride(x_shape),
-            },
+            y: TensorRef::new(dev_y.as_slice(), y_shape, contiguous_stride(y_shape)).unwrap(),
+            dy: TensorRef::new(dev_dy.as_slice(), y_shape, contiguous_stride(y_shape)).unwrap(),
+            x: TensorRef::new(dev_x.as_slice(), x_shape, contiguous_stride(x_shape)).unwrap(),
+            dx: TensorMut::new(dev_dx.as_slice_mut(), x_shape, contiguous_stride(x_shape)).unwrap(),
         },
     )
     .expect("bw");
@@ -824,16 +728,13 @@ fn pool2d_f16_smoke() {
             &stream,
             Workspace::None,
             Pool2dFwArgs {
-                x: TensorRef {
-                    data: dev_x.as_slice(),
-                    shape: x_shape,
-                    stride: contiguous_stride(x_shape),
-                },
-                y: TensorMut {
-                    data: dev_y_max.as_slice_mut(),
-                    shape: y_shape,
-                    stride: contiguous_stride(y_shape),
-                },
+                x: TensorRef::new(dev_x.as_slice(), x_shape, contiguous_stride(x_shape)).unwrap(),
+                y: TensorMut::new(
+                    dev_y_max.as_slice_mut(),
+                    y_shape,
+                    contiguous_stride(y_shape),
+                )
+                .unwrap(),
             },
         )
         .expect("max fw");
@@ -856,16 +757,13 @@ fn pool2d_f16_smoke() {
             &stream,
             Workspace::None,
             Pool2dFwArgs {
-                x: TensorRef {
-                    data: dev_x.as_slice(),
-                    shape: x_shape,
-                    stride: contiguous_stride(x_shape),
-                },
-                y: TensorMut {
-                    data: dev_y_avg.as_slice_mut(),
-                    shape: y_shape,
-                    stride: contiguous_stride(y_shape),
-                },
+                x: TensorRef::new(dev_x.as_slice(), x_shape, contiguous_stride(x_shape)).unwrap(),
+                y: TensorMut::new(
+                    dev_y_avg.as_slice_mut(),
+                    y_shape,
+                    contiguous_stride(y_shape),
+                )
+                .unwrap(),
             },
         )
         .expect("avg fw");
@@ -944,16 +842,13 @@ fn pool2d_bf16_smoke() {
             &stream,
             Workspace::None,
             Pool2dFwArgs {
-                x: TensorRef {
-                    data: dev_x.as_slice(),
-                    shape: x_shape,
-                    stride: contiguous_stride(x_shape),
-                },
-                y: TensorMut {
-                    data: dev_y_max.as_slice_mut(),
-                    shape: y_shape,
-                    stride: contiguous_stride(y_shape),
-                },
+                x: TensorRef::new(dev_x.as_slice(), x_shape, contiguous_stride(x_shape)).unwrap(),
+                y: TensorMut::new(
+                    dev_y_max.as_slice_mut(),
+                    y_shape,
+                    contiguous_stride(y_shape),
+                )
+                .unwrap(),
             },
         )
         .expect("max fw");
@@ -975,16 +870,13 @@ fn pool2d_bf16_smoke() {
             &stream,
             Workspace::None,
             Pool2dFwArgs {
-                x: TensorRef {
-                    data: dev_x.as_slice(),
-                    shape: x_shape,
-                    stride: contiguous_stride(x_shape),
-                },
-                y: TensorMut {
-                    data: dev_y_avg.as_slice_mut(),
-                    shape: y_shape,
-                    stride: contiguous_stride(y_shape),
-                },
+                x: TensorRef::new(dev_x.as_slice(), x_shape, contiguous_stride(x_shape)).unwrap(),
+                y: TensorMut::new(
+                    dev_y_avg.as_slice_mut(),
+                    y_shape,
+                    contiguous_stride(y_shape),
+                )
+                .unwrap(),
             },
         )
         .expect("avg fw");
@@ -1054,16 +946,8 @@ fn max_pool2d_with_padding_f32() {
         &stream,
         Workspace::None,
         Pool2dFwArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape: x_shape,
-                stride: contiguous_stride(x_shape),
-            },
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
+            x: TensorRef::new(dev_x.as_slice(), x_shape, contiguous_stride(x_shape)).unwrap(),
+            y: TensorMut::new(dev_y.as_slice_mut(), y_shape, contiguous_stride(y_shape)).unwrap(),
         },
     )
     .expect("fw");
@@ -1104,26 +988,10 @@ fn max_pool2d_with_padding_f32() {
         &stream,
         Workspace::None,
         Pool2dBwArgs {
-            y: TensorRef {
-                data: dev_y.as_slice(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape: x_shape,
-                stride: contiguous_stride(x_shape),
-            },
-            dx: TensorMut {
-                data: dev_dx.as_slice_mut(),
-                shape: x_shape,
-                stride: contiguous_stride(x_shape),
-            },
+            y: TensorRef::new(dev_y.as_slice(), y_shape, contiguous_stride(y_shape)).unwrap(),
+            dy: TensorRef::new(dev_dy.as_slice(), y_shape, contiguous_stride(y_shape)).unwrap(),
+            x: TensorRef::new(dev_x.as_slice(), x_shape, contiguous_stride(x_shape)).unwrap(),
+            dx: TensorMut::new(dev_dx.as_slice_mut(), x_shape, contiguous_stride(x_shape)).unwrap(),
         },
     )
     .expect("bw");

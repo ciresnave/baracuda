@@ -157,21 +157,24 @@ fn geglu_bw_f32() {
         GatedActivationBackwardPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
             .expect("select");
     let args = GatedActivationBackwardArgs::<f32, 3> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape: output_shape,
-            stride: contiguous_stride(output_shape),
-        },
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        },
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        },
+        dy: TensorRef::new(
+            dev_dy.as_slice(),
+            output_shape,
+            contiguous_stride(output_shape),
+        )
+        .unwrap(),
+        x: TensorRef::new(
+            dev_x.as_slice(),
+            input_shape,
+            contiguous_stride(input_shape),
+        )
+        .unwrap(),
+        dx: TensorMut::new(
+            dev_dx.as_slice_mut(),
+            input_shape,
+            contiguous_stride(input_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -215,21 +218,24 @@ fn geglu_bw_f64() {
         GatedActivationBackwardPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default())
             .expect("select");
     let args = GatedActivationBackwardArgs::<f64, 2> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape: output_shape,
-            stride: contiguous_stride(output_shape),
-        },
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        },
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        },
+        dy: TensorRef::new(
+            dev_dy.as_slice(),
+            output_shape,
+            contiguous_stride(output_shape),
+        )
+        .unwrap(),
+        x: TensorRef::new(
+            dev_x.as_slice(),
+            input_shape,
+            contiguous_stride(input_shape),
+        )
+        .unwrap(),
+        dx: TensorMut::new(
+            dev_dx.as_slice_mut(),
+            input_shape,
+            contiguous_stride(input_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -277,21 +283,24 @@ fn geglu_bw_f16() {
         GatedActivationBackwardPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
             .expect("select");
     let args = GatedActivationBackwardArgs::<f16, 3> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape: output_shape,
-            stride: contiguous_stride(output_shape),
-        },
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        },
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        },
+        dy: TensorRef::new(
+            dev_dy.as_slice(),
+            output_shape,
+            contiguous_stride(output_shape),
+        )
+        .unwrap(),
+        x: TensorRef::new(
+            dev_x.as_slice(),
+            input_shape,
+            contiguous_stride(input_shape),
+        )
+        .unwrap(),
+        dx: TensorMut::new(
+            dev_dx.as_slice_mut(),
+            input_shape,
+            contiguous_stride(input_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -338,21 +347,24 @@ fn geglu_bw_bf16() {
         GatedActivationBackwardPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
             .expect("select");
     let args = GatedActivationBackwardArgs::<bf16, 3> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape: output_shape,
-            stride: contiguous_stride(output_shape),
-        },
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        },
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        },
+        dy: TensorRef::new(
+            dev_dy.as_slice(),
+            output_shape,
+            contiguous_stride(output_shape),
+        )
+        .unwrap(),
+        x: TensorRef::new(
+            dev_x.as_slice(),
+            input_shape,
+            contiguous_stride(input_shape),
+        )
+        .unwrap(),
+        dx: TensorMut::new(
+            dev_dx.as_slice_mut(),
+            input_shape,
+            contiguous_stride(input_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

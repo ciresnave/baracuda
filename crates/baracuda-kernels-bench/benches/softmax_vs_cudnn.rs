@@ -89,32 +89,16 @@ mod cudnn_impl {
 
                 warmup(&stream, || {
                     let args = SoftmaxArgs::<T, 2> {
-                        x: TensorRef {
-                            data: dev_x.as_slice(),
-                            shape: xs,
-                            stride: stx,
-                        },
-                        y: TensorMut {
-                            data: dev_y.as_slice_mut(),
-                            shape: xs,
-                            stride: stx,
-                        },
+                        x: TensorRef::new(dev_x.as_slice(), xs, stx).unwrap(),
+                        y: TensorMut::new(dev_y.as_slice_mut(), xs, stx).unwrap(),
                     };
                     plan.run(&stream, Workspace::None, args)
                         .expect("baracuda softmax");
                 });
                 let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 50, || {
                     let args = SoftmaxArgs::<T, 2> {
-                        x: TensorRef {
-                            data: dev_x.as_slice(),
-                            shape: xs,
-                            stride: stx,
-                        },
-                        y: TensorMut {
-                            data: dev_y.as_slice_mut(),
-                            shape: xs,
-                            stride: stx,
-                        },
+                        x: TensorRef::new(dev_x.as_slice(), xs, stx).unwrap(),
+                        y: TensorMut::new(dev_y.as_slice_mut(), xs, stx).unwrap(),
                     };
                     plan.run(&stream, Workspace::None, args)
                         .expect("baracuda softmax");
@@ -135,16 +119,8 @@ mod cudnn_impl {
                     bb.iter_custom(|iters| {
                         time_with_events(&ctx, &stream, iters, || {
                             let args = SoftmaxArgs::<T, 2> {
-                                x: TensorRef {
-                                    data: dev_x.as_slice(),
-                                    shape: xs,
-                                    stride: stx,
-                                },
-                                y: TensorMut {
-                                    data: dev_y.as_slice_mut(),
-                                    shape: xs,
-                                    stride: stx,
-                                },
+                                x: TensorRef::new(dev_x.as_slice(), xs, stx).unwrap(),
+                                y: TensorMut::new(dev_y.as_slice_mut(), xs, stx).unwrap(),
                             };
                             plan.run(&stream, Workspace::None, args)
                                 .expect("baracuda softmax");

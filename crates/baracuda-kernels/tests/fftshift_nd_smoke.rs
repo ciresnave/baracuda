@@ -108,16 +108,8 @@ fn fftshift_nd_2d_even_f32_both_axes() {
         .expect("select");
     let stride = contiguous_stride(shape);
     let args = FftShiftNdArgs::<f32, 2> {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride,
-        },
-        output: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
+        input: TensorRef::new(dev_x.as_slice(), shape, stride).unwrap(),
+        output: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -148,16 +140,8 @@ fn fftshift_nd_2d_odd_f32_both_axes_fft_vs_ifft() {
     let f_plan = FftShiftNdPlan::<f32, 2>::select(&stream, &f_desc, PlanPreference::default())
         .expect("select fft");
     let f_args = FftShiftNdArgs::<f32, 2> {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride,
-        },
-        output: TensorMut {
-            data: dev_fwd.as_slice_mut(),
-            shape,
-            stride,
-        },
+        input: TensorRef::new(dev_x.as_slice(), shape, stride).unwrap(),
+        output: TensorMut::new(dev_fwd.as_slice_mut(), shape, stride).unwrap(),
     };
     f_plan
         .run(&stream, Workspace::None, f_args)
@@ -168,16 +152,8 @@ fn fftshift_nd_2d_odd_f32_both_axes_fft_vs_ifft() {
     let i_plan = FftShiftNdPlan::<f32, 2>::select(&stream, &i_desc, PlanPreference::default())
         .expect("select ifft");
     let i_args = FftShiftNdArgs::<f32, 2> {
-        input: TensorRef {
-            data: dev_fwd.as_slice(),
-            shape,
-            stride,
-        },
-        output: TensorMut {
-            data: dev_rt.as_slice_mut(),
-            shape,
-            stride,
-        },
+        input: TensorRef::new(dev_fwd.as_slice(), shape, stride).unwrap(),
+        output: TensorMut::new(dev_rt.as_slice_mut(), shape, stride).unwrap(),
     };
     i_plan
         .run(&stream, Workspace::None, i_args)
@@ -217,16 +193,8 @@ fn fftshift_nd_2d_one_axis_only_complex32() {
         .expect("select");
     let stride = contiguous_stride(shape);
     let args = FftShiftNdArgs::<Complex64, 2> {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride,
-        },
-        output: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
+        input: TensorRef::new(dev_x.as_slice(), shape, stride).unwrap(),
+        output: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -257,16 +225,8 @@ fn fftshift_nd_3d_mixed_parity_f32() {
         .expect("select");
     let stride = contiguous_stride(shape);
     let args = FftShiftNdArgs::<f32, 3> {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride,
-        },
-        output: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
+        input: TensorRef::new(dev_x.as_slice(), shape, stride).unwrap(),
+        output: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -297,16 +257,8 @@ fn fftshift_nd_3d_batched_inner_two_axes_f64() {
     let f_plan = FftShiftNdPlan::<f64, 3>::select(&stream, &f_desc, PlanPreference::default())
         .expect("select fft");
     let f_args = FftShiftNdArgs::<f64, 3> {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride,
-        },
-        output: TensorMut {
-            data: dev_fwd.as_slice_mut(),
-            shape,
-            stride,
-        },
+        input: TensorRef::new(dev_x.as_slice(), shape, stride).unwrap(),
+        output: TensorMut::new(dev_fwd.as_slice_mut(), shape, stride).unwrap(),
     };
     f_plan
         .run(&stream, Workspace::None, f_args)
@@ -323,16 +275,8 @@ fn fftshift_nd_3d_batched_inner_two_axes_f64() {
     let i_plan = FftShiftNdPlan::<f64, 3>::select(&stream, &i_desc, PlanPreference::default())
         .expect("select ifft");
     let i_args = FftShiftNdArgs::<f64, 3> {
-        input: TensorRef {
-            data: dev_fwd.as_slice(),
-            shape,
-            stride,
-        },
-        output: TensorMut {
-            data: dev_rt.as_slice_mut(),
-            shape,
-            stride,
-        },
+        input: TensorRef::new(dev_fwd.as_slice(), shape, stride).unwrap(),
+        output: TensorMut::new(dev_rt.as_slice_mut(), shape, stride).unwrap(),
     };
     i_plan
         .run(&stream, Workspace::None, i_args)
@@ -365,16 +309,8 @@ fn fftshift_nd_3d_complex32_all_axes_odd() {
         .expect("select");
     let stride = contiguous_stride(shape);
     let args = FftShiftNdArgs::<Complex64, 3> {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride,
-        },
-        output: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
+        input: TensorRef::new(dev_x.as_slice(), shape, stride).unwrap(),
+        output: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

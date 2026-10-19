@@ -51,21 +51,14 @@ fn index_select_backward_f32_2d_dim0() {
     let plan = IndexSelectBackwardPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = IndexSelectBackwardArgs::<f32, 2> {
-        dout: TensorRef {
-            data: dev_dout.as_slice(),
-            shape: out_shape,
-            stride: contiguous_stride(out_shape),
-        },
-        idx: TensorRef {
-            data: dev_idx.as_slice(),
-            shape: [3i32],
-            stride: contiguous_stride([3i32]),
-        },
-        dsrc: TensorMut {
-            data: dev_dsrc.as_slice_mut(),
-            shape: dsrc_shape,
-            stride: contiguous_stride(dsrc_shape),
-        },
+        dout: TensorRef::new(dev_dout.as_slice(), out_shape, contiguous_stride(out_shape)).unwrap(),
+        idx: TensorRef::new(dev_idx.as_slice(), [3i32], contiguous_stride([3i32])).unwrap(),
+        dsrc: TensorMut::new(
+            dev_dsrc.as_slice_mut(),
+            dsrc_shape,
+            contiguous_stride(dsrc_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -112,21 +105,14 @@ fn index_select_backward_f64_2d_dim1() {
     let plan = IndexSelectBackwardPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = IndexSelectBackwardArgs::<f64, 2> {
-        dout: TensorRef {
-            data: dev_dout.as_slice(),
-            shape: out_shape,
-            stride: contiguous_stride(out_shape),
-        },
-        idx: TensorRef {
-            data: dev_idx.as_slice(),
-            shape: [4i32],
-            stride: contiguous_stride([4i32]),
-        },
-        dsrc: TensorMut {
-            data: dev_dsrc.as_slice_mut(),
-            shape: dsrc_shape,
-            stride: contiguous_stride(dsrc_shape),
-        },
+        dout: TensorRef::new(dev_dout.as_slice(), out_shape, contiguous_stride(out_shape)).unwrap(),
+        idx: TensorRef::new(dev_idx.as_slice(), [4i32], contiguous_stride([4i32])).unwrap(),
+        dsrc: TensorMut::new(
+            dev_dsrc.as_slice_mut(),
+            dsrc_shape,
+            contiguous_stride(dsrc_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

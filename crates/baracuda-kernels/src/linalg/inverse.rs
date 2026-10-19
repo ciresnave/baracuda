@@ -237,22 +237,22 @@ impl<T: Element> InversePlan<T> {
 
     fn check_args(&self, args: &InverseArgs<'_, T>) -> Result<()> {
         let m = self.desc.m;
-        if args.a.shape != [m, m] {
+        if args.a.shape() != [m, m] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::InversePlan: A shape != [M, M]",
             ));
         }
-        if args.inv.shape != [m, m] {
+        if args.inv.shape() != [m, m] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::InversePlan: inv shape != [M, M]",
             ));
         }
-        if args.pivot.shape != [m] {
+        if args.pivot.shape() != [m] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::InversePlan: pivot shape != [M]",
             ));
         }
-        if args.info.shape != [1] {
+        if args.info.shape() != [1] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::InversePlan: info shape != [1]",
             ));
@@ -288,10 +288,10 @@ macro_rules! impl_inverse_run {
                 };
                 let (ws_ptr, _ws_bytes) = unpack_workspace(workspace, needed)?;
 
-                let a_ptr = args.a.data.as_raw().0 as *mut $T;
-                let inv_ptr = args.inv.data.as_raw().0 as *mut $T;
-                let pivot_ptr = args.pivot.data.as_raw().0 as *mut i32;
-                let info_ptr = args.info.data.as_raw().0 as *mut i32;
+                let a_ptr = args.a.data().as_raw().0 as *mut $T;
+                let inv_ptr = args.inv.data().as_raw().0 as *mut $T;
+                let pivot_ptr = args.pivot.data().as_raw().0 as *mut i32;
+                let info_ptr = args.info.data().as_raw().0 as *mut i32;
 
                 // 1. getrf — factors A in place, writes pivot + info.
                 let status =

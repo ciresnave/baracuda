@@ -80,16 +80,8 @@ fn triu_strided_dispatch_contig_f32() {
     let plan =
         TriuPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = TriuArgs::<f32, 2> {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        output: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        input: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        output: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -133,16 +125,13 @@ fn triu_strided_transposed_input_f32() {
     let plan =
         TriuPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = TriuArgs::<f32, 2> {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape: logical_shape,
-            stride: logical_stride,
-        },
-        output: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: logical_shape,
-            stride: contiguous_stride(logical_shape),
-        },
+        input: TensorRef::new(dev_x.as_slice(), logical_shape, logical_stride).unwrap(),
+        output: TensorMut::new(
+            dev_y.as_slice_mut(),
+            logical_shape,
+            contiguous_stride(logical_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -190,16 +179,8 @@ fn tril_strided_interior_output_f32() {
     let plan =
         TrilPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = TrilArgs::<f32, 2> {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape: logical_shape,
-            stride: in_stride,
-        },
-        output: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: logical_shape,
-            stride: out_stride,
-        },
+        input: TensorRef::new(dev_x.as_slice(), logical_shape, in_stride).unwrap(),
+        output: TensorMut::new(dev_y.as_slice_mut(), logical_shape, out_stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -267,16 +248,13 @@ fn triu_strided_transposed_input_f16() {
     let plan =
         TriuPlan::<f16, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = TriuArgs::<f16, 2> {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape: logical_shape,
-            stride: logical_stride,
-        },
-        output: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: logical_shape,
-            stride: contiguous_stride(logical_shape),
-        },
+        input: TensorRef::new(dev_x.as_slice(), logical_shape, logical_stride).unwrap(),
+        output: TensorMut::new(
+            dev_y.as_slice_mut(),
+            logical_shape,
+            contiguous_stride(logical_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -313,16 +291,13 @@ fn triu_strided_transposed_input_bf16() {
     let plan =
         TriuPlan::<bf16, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = TriuArgs::<bf16, 2> {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape: logical_shape,
-            stride: logical_stride,
-        },
-        output: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: logical_shape,
-            stride: contiguous_stride(logical_shape),
-        },
+        input: TensorRef::new(dev_x.as_slice(), logical_shape, logical_stride).unwrap(),
+        output: TensorMut::new(
+            dev_y.as_slice_mut(),
+            logical_shape,
+            contiguous_stride(logical_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -359,16 +334,13 @@ fn triu_strided_transposed_input_i32() {
     let plan =
         TriuPlan::<i32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = TriuArgs::<i32, 2> {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape: logical_shape,
-            stride: logical_stride,
-        },
-        output: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: logical_shape,
-            stride: contiguous_stride(logical_shape),
-        },
+        input: TensorRef::new(dev_x.as_slice(), logical_shape, logical_stride).unwrap(),
+        output: TensorMut::new(
+            dev_y.as_slice_mut(),
+            logical_shape,
+            contiguous_stride(logical_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -420,16 +392,13 @@ fn triu_bw_strided_transposed_input_f32() {
     let plan = TriuBackwardPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = TriuBackwardArgs::<f32, 2> {
-        grad_output: TensorRef {
-            data: dev_dy.as_slice(),
-            shape: logical_shape,
-            stride: logical_stride,
-        },
-        grad_input: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape: logical_shape,
-            stride: contiguous_stride(logical_shape),
-        },
+        grad_output: TensorRef::new(dev_dy.as_slice(), logical_shape, logical_stride).unwrap(),
+        grad_input: TensorMut::new(
+            dev_dx.as_slice_mut(),
+            logical_shape,
+            contiguous_stride(logical_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

@@ -85,26 +85,15 @@ fn solve_f32_basic() {
     let b_shape = [m, nrhs];
     let pivot_shape = [m];
     let args = SolveArgs::<f32> {
-        a: TensorMut {
-            data: dev_a.as_slice_mut(),
-            shape: a_shape,
-            stride: contiguous_stride(a_shape),
-        },
-        b: TensorMut {
-            data: dev_b.as_slice_mut(),
-            shape: b_shape,
-            stride: contiguous_stride(b_shape),
-        },
-        pivot: TensorMut {
-            data: dev_pivot.as_slice_mut(),
-            shape: pivot_shape,
-            stride: contiguous_stride(pivot_shape),
-        },
-        info: TensorMut {
-            data: dev_info.as_slice_mut(),
-            shape: [1i32],
-            stride: [1],
-        },
+        a: TensorMut::new(dev_a.as_slice_mut(), a_shape, contiguous_stride(a_shape)).unwrap(),
+        b: TensorMut::new(dev_b.as_slice_mut(), b_shape, contiguous_stride(b_shape)).unwrap(),
+        pivot: TensorMut::new(
+            dev_pivot.as_slice_mut(),
+            pivot_shape,
+            contiguous_stride(pivot_shape),
+        )
+        .unwrap(),
+        info: TensorMut::new(dev_info.as_slice_mut(), [1i32], [1]).unwrap(),
     };
     plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
         .expect("run Solve f32");
@@ -163,26 +152,15 @@ fn solve_f64_multi_rhs() {
     let b_shape = [m, nrhs];
     let pivot_shape = [m];
     let args = SolveArgs::<f64> {
-        a: TensorMut {
-            data: dev_a.as_slice_mut(),
-            shape: a_shape,
-            stride: contiguous_stride(a_shape),
-        },
-        b: TensorMut {
-            data: dev_b.as_slice_mut(),
-            shape: b_shape,
-            stride: contiguous_stride(b_shape),
-        },
-        pivot: TensorMut {
-            data: dev_pivot.as_slice_mut(),
-            shape: pivot_shape,
-            stride: contiguous_stride(pivot_shape),
-        },
-        info: TensorMut {
-            data: dev_info.as_slice_mut(),
-            shape: [1i32],
-            stride: [1],
-        },
+        a: TensorMut::new(dev_a.as_slice_mut(), a_shape, contiguous_stride(a_shape)).unwrap(),
+        b: TensorMut::new(dev_b.as_slice_mut(), b_shape, contiguous_stride(b_shape)).unwrap(),
+        pivot: TensorMut::new(
+            dev_pivot.as_slice_mut(),
+            pivot_shape,
+            contiguous_stride(pivot_shape),
+        )
+        .unwrap(),
+        info: TensorMut::new(dev_info.as_slice_mut(), [1i32], [1]).unwrap(),
     };
     plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
         .expect("run Solve f64");

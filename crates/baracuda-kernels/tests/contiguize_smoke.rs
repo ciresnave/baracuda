@@ -51,16 +51,8 @@ fn contiguize_already_contiguous_rank3_f32() {
     let plan = ContiguizePlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = ContiguizeArgs::<f32, 3> {
-        source: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride: strides,
-        },
-        dest: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        source: TensorRef::new(dev_x.as_slice(), shape, strides).unwrap(),
+        dest: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -108,16 +100,13 @@ fn contiguize_inner_stride1_fastpath_f32() {
     let plan = ContiguizePlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = ContiguizeArgs::<f32, 3> {
-        source: TensorRef {
-            data: dev_phys.as_slice(),
-            shape: view_shape,
-            stride: view_strides,
-        },
-        dest: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: view_shape,
-            stride: contiguous_stride(view_shape),
-        },
+        source: TensorRef::new(dev_phys.as_slice(), view_shape, view_strides).unwrap(),
+        dest: TensorMut::new(
+            dev_y.as_slice_mut(),
+            view_shape,
+            contiguous_stride(view_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -176,16 +165,13 @@ fn contiguize_transposed_rank2_f32() {
     let plan = ContiguizePlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = ContiguizeArgs::<f32, 2> {
-        source: TensorRef {
-            data: dev_phys.as_slice(),
-            shape: view_shape,
-            stride: view_strides,
-        },
-        dest: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: view_shape,
-            stride: contiguous_stride(view_shape),
-        },
+        source: TensorRef::new(dev_phys.as_slice(), view_shape, view_strides).unwrap(),
+        dest: TensorMut::new(
+            dev_y.as_slice_mut(),
+            view_shape,
+            contiguous_stride(view_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -232,16 +218,8 @@ fn contiguize_negative_stride_rank2_f32() {
     let plan = ContiguizePlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = ContiguizeArgs::<f32, 2> {
-        source: TensorRef {
-            data: dev_phys.as_slice(),
-            shape,
-            stride: view_strides,
-        },
-        dest: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        source: TensorRef::new(dev_phys.as_slice(), shape, view_strides).unwrap(),
+        dest: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -291,16 +269,13 @@ fn contiguize_zero_stride_rank3_f32() {
     let plan = ContiguizePlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = ContiguizeArgs::<f32, 3> {
-        source: TensorRef {
-            data: dev_phys.as_slice(),
-            shape: view_shape,
-            stride: view_strides,
-        },
-        dest: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: view_shape,
-            stride: contiguous_stride(view_shape),
-        },
+        source: TensorRef::new(dev_phys.as_slice(), view_shape, view_strides).unwrap(),
+        dest: TensorMut::new(
+            dev_y.as_slice_mut(),
+            view_shape,
+            contiguous_stride(view_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -348,16 +323,8 @@ fn contiguize_s4_contiguous_rank1() {
     let plan = ContiguizePlan::<S4, 1>::select(&stream, &desc, PlanPreference::default())
         .expect("select s4");
     let args = ContiguizeArgs::<S4, 1> {
-        source: TensorRef {
-            data: dev_src.as_slice(),
-            shape,
-            stride: [1i64],
-        },
-        dest: TensorMut {
-            data: dev_dst.as_slice_mut(),
-            shape,
-            stride: [1i64],
-        },
+        source: TensorRef::new(dev_src.as_slice(), shape, [1i64]).unwrap(),
+        dest: TensorMut::new(dev_dst.as_slice_mut(), shape, [1i64]).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run s4");
     stream.synchronize().expect("sync");
@@ -405,16 +372,13 @@ fn contiguize_transposed_dtype<T>(
     let plan =
         ContiguizePlan::<T, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = ContiguizeArgs::<T, 2> {
-        source: TensorRef {
-            data: dev_phys.as_slice(),
-            shape: view_shape,
-            stride: view_strides,
-        },
-        dest: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: view_shape,
-            stride: contiguous_stride(view_shape),
-        },
+        source: TensorRef::new(dev_phys.as_slice(), view_shape, view_strides).unwrap(),
+        dest: TensorMut::new(
+            dev_y.as_slice_mut(),
+            view_shape,
+            contiguous_stride(view_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

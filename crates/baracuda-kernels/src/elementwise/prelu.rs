@@ -157,7 +157,7 @@ impl<T: Element, const N: usize> PReluPlan<T, N> {
         crate::view_check::check_dense(&args.x)?;
         crate::view_check::check_dense(&args.weight)?;
         crate::view_check::check_dense(&args.y)?;
-        if args.x.shape != self.desc.input_shape || args.y.shape != self.desc.input_shape {
+        if args.x.shape() != self.desc.input_shape || args.y.shape() != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::PReluPlan: x / y shape mismatch",
             ));
@@ -167,7 +167,7 @@ impl<T: Element, const N: usize> PReluPlan<T, N> {
         } else {
             self.channel_extent
         };
-        if args.weight.shape[0] != expected_weight {
+        if args.weight.shape()[0] != expected_weight {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::PReluPlan: weight shape mismatch",
             ));
@@ -177,9 +177,9 @@ impl<T: Element, const N: usize> PReluPlan<T, N> {
             return Ok(());
         }
         let stream_ptr = stream.as_raw();
-        let x_ptr = args.x.data.as_raw().0 as *const c_void;
-        let weight_ptr = args.weight.data.as_raw().0 as *const c_void;
-        let y_ptr = args.y.data.as_raw().0 as *mut c_void;
+        let x_ptr = args.x.data().as_raw().0 as *const c_void;
+        let weight_ptr = args.weight.data().as_raw().0 as *const c_void;
+        let y_ptr = args.y.data().as_raw().0 as *mut c_void;
         let scalar_flag: i32 = if self.scalar_weight { 1 } else { 0 };
         let status = match T::KIND {
             ElementKind::F32 => unsafe {

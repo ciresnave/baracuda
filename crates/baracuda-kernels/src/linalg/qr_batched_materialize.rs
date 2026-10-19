@@ -201,22 +201,22 @@ impl<T: Element> BatchedQrMaterializePlan<T> {
         let m = self.desc.m;
         let n = self.desc.n;
         let k = m.min(n);
-        if args.a_packed.shape != [b, m, n] {
+        if args.a_packed.shape() != [b, m, n] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::BatchedQrMaterializePlan: A_packed shape != [batch, M, N]",
             ));
         }
-        if args.tau.shape != [b, k] {
+        if args.tau.shape() != [b, k] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::BatchedQrMaterializePlan: tau shape != [batch, min(M, N)]",
             ));
         }
-        if args.q.shape != [b, m, m] {
+        if args.q.shape() != [b, m, m] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::BatchedQrMaterializePlan: Q shape != [batch, M, M]",
             ));
         }
-        if args.r.shape != [b, k, n] {
+        if args.r.shape() != [b, k, n] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::BatchedQrMaterializePlan: R shape != [batch, min(M, N), N]",
             ));
@@ -271,8 +271,8 @@ impl<T: Element> BatchedQrMaterializePlan<T> {
         let stream_ptr = stream.as_raw();
 
         // ----- Step 1: upper-triangle copy → R ---------------------------
-        let a_ptr = args.a_packed.data.as_raw().0 as *const c_void;
-        let r_ptr = args.r.data.as_raw().0 as *mut c_void;
+        let a_ptr = args.a_packed.data().as_raw().0 as *const c_void;
+        let r_ptr = args.r.data().as_raw().0 as *mut c_void;
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_batched_qr_materialize_r_f32_run(
@@ -309,7 +309,7 @@ impl<T: Element> BatchedQrMaterializePlan<T> {
         map_status(status)?;
 
         // ----- Step 2: stage identity into Q -----------------------------
-        let q_ptr = args.q.data.as_raw().0 as *mut c_void;
+        let q_ptr = args.q.data().as_raw().0 as *mut c_void;
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_batched_qr_materialize_identity_f32_run(

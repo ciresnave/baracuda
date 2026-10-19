@@ -293,18 +293,18 @@ impl<T: Element> BatchedOrmqrPlan<T> {
             BatchedOrmqrSide::Left => [b, m, k],
             BatchedOrmqrSide::Right => [b, n, n],
         };
-        if args.a_packed.shape != expected_a_shape {
+        if args.a_packed.shape() != expected_a_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::BatchedOrmqrPlan: A_packed shape mismatch (Left expects \
                  [batch, M, K]; Right expects [batch, N, N])",
             ));
         }
-        if args.tau.shape != [b, k] {
+        if args.tau.shape() != [b, k] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::BatchedOrmqrPlan: tau shape != [batch, K]",
             ));
         }
-        if args.c.shape != [b, m, n] {
+        if args.c.shape() != [b, m, n] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::BatchedOrmqrPlan: C shape != [batch, M, N]",
             ));
@@ -324,9 +324,9 @@ impl<T: Element> BatchedOrmqrPlan<T> {
         crate::view_check::check_dense(&args.c)?;
         self.check_args(&args)?;
         let stream_ptr = stream.as_raw();
-        let a_ptr = args.a_packed.data.as_raw().0 as *const c_void;
-        let tau_ptr = args.tau.data.as_raw().0 as *const c_void;
-        let c_ptr = args.c.data.as_raw().0 as *mut c_void;
+        let a_ptr = args.a_packed.data().as_raw().0 as *const c_void;
+        let tau_ptr = args.tau.data().as_raw().0 as *const c_void;
+        let c_ptr = args.c.data().as_raw().0 as *mut c_void;
         // Discriminant values for the kernel-side BARACUDA_ORMQR_SIDE_*
         // and BARACUDA_ORMQR_OP_* constants — Left=0/Right=1,
         // N=0/T=1/C=2.

@@ -70,24 +70,18 @@ fn run_cudnn_f32(
     let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(ctx, needed.max(1)).expect("alloc ws");
 
     let args = CtcLossCudnnArgs::<f32> {
-        log_probs: TensorRef {
-            data: dev_lp.as_slice(),
-            shape: lp_shape,
-            stride: contiguous_stride(lp_shape),
-        },
+        log_probs: TensorRef::new(dev_lp.as_slice(), lp_shape, contiguous_stride(lp_shape))
+            .unwrap(),
         labels: host_labels,
         label_lengths: host_label_lens,
         input_lengths: host_input_lens,
-        costs: TensorMut {
-            data: dev_costs.as_slice_mut(),
-            shape: [n],
-            stride: [1],
-        },
-        grads: TensorMut {
-            data: dev_grads.as_slice_mut(),
-            shape: lp_shape,
-            stride: contiguous_stride(lp_shape),
-        },
+        costs: TensorMut::new(dev_costs.as_slice_mut(), [n], [1]).unwrap(),
+        grads: TensorMut::new(
+            dev_grads.as_slice_mut(),
+            lp_shape,
+            contiguous_stride(lp_shape),
+        )
+        .unwrap(),
     };
     let ws = if needed > 0 {
         Workspace::Borrowed(dev_ws.as_slice_mut())
@@ -149,36 +143,24 @@ fn run_bespoke_f32_fw(
         DeviceBuffer::zeros(ctx, aux_bytes.max(1)).expect("alloc ws");
 
     let args = CtcLossArgs::<f32> {
-        log_probs: TensorRef {
-            data: dev_lp.as_slice(),
-            shape: lp_shape,
-            stride: contiguous_stride(lp_shape),
-        },
-        targets: TensorRef {
-            data: dev_tgt.as_slice(),
-            shape: tgt_shape,
-            stride: contiguous_stride(tgt_shape),
-        },
-        input_lengths: TensorRef {
-            data: dev_in_lens.as_slice(),
-            shape: in_lens_shape,
-            stride: contiguous_stride(in_lens_shape),
-        },
-        target_lengths: TensorRef {
-            data: dev_tgt_lens.as_slice(),
-            shape: tgt_lens_shape,
-            stride: contiguous_stride(tgt_lens_shape),
-        },
-        loss: TensorMut {
-            data: dev_loss.as_slice_mut(),
-            shape: [n],
-            stride: [1],
-        },
-        alpha: TensorMut {
-            data: dev_alpha.as_slice_mut(),
-            shape: [alpha_bytes as i32],
-            stride: [1],
-        },
+        log_probs: TensorRef::new(dev_lp.as_slice(), lp_shape, contiguous_stride(lp_shape))
+            .unwrap(),
+        targets: TensorRef::new(dev_tgt.as_slice(), tgt_shape, contiguous_stride(tgt_shape))
+            .unwrap(),
+        input_lengths: TensorRef::new(
+            dev_in_lens.as_slice(),
+            in_lens_shape,
+            contiguous_stride(in_lens_shape),
+        )
+        .unwrap(),
+        target_lengths: TensorRef::new(
+            dev_tgt_lens.as_slice(),
+            tgt_lens_shape,
+            contiguous_stride(tgt_lens_shape),
+        )
+        .unwrap(),
+        loss: TensorMut::new(dev_loss.as_slice_mut(), [n], [1]).unwrap(),
+        alpha: TensorMut::new(dev_alpha.as_slice_mut(), [alpha_bytes as i32], [1]).unwrap(),
     };
     let ws = if aux_bytes > 0 {
         Workspace::Borrowed(dev_ws.as_slice_mut())
@@ -382,36 +364,18 @@ fn cudnn_ctc_f64_general_matches_bespoke() {
     let mut dev_ws: DeviceBuffer<u8> =
         DeviceBuffer::zeros(&ctx, aux_bytes.max(1)).expect("alloc ws");
     let bespoke_args = CtcLossArgs::<f64> {
-        log_probs: TensorRef {
-            data: dev_lp_f64.as_slice(),
-            shape: lp_shape,
-            stride: contiguous_stride(lp_shape),
-        },
-        targets: TensorRef {
-            data: dev_tgt.as_slice(),
-            shape: [n, s_max],
-            stride: contiguous_stride([n, s_max]),
-        },
-        input_lengths: TensorRef {
-            data: dev_in_lens.as_slice(),
-            shape: [n],
-            stride: [1],
-        },
-        target_lengths: TensorRef {
-            data: dev_tgt_lens.as_slice(),
-            shape: [n],
-            stride: [1],
-        },
-        loss: TensorMut {
-            data: dev_loss_f64.as_slice_mut(),
-            shape: [n],
-            stride: [1],
-        },
-        alpha: TensorMut {
-            data: dev_alpha.as_slice_mut(),
-            shape: [alpha_bytes as i32],
-            stride: [1],
-        },
+        log_probs: TensorRef::new(dev_lp_f64.as_slice(), lp_shape, contiguous_stride(lp_shape))
+            .unwrap(),
+        targets: TensorRef::new(
+            dev_tgt.as_slice(),
+            [n, s_max],
+            contiguous_stride([n, s_max]),
+        )
+        .unwrap(),
+        input_lengths: TensorRef::new(dev_in_lens.as_slice(), [n], [1]).unwrap(),
+        target_lengths: TensorRef::new(dev_tgt_lens.as_slice(), [n], [1]).unwrap(),
+        loss: TensorMut::new(dev_loss_f64.as_slice_mut(), [n], [1]).unwrap(),
+        alpha: TensorMut::new(dev_alpha.as_slice_mut(), [alpha_bytes as i32], [1]).unwrap(),
     };
     let ws = if aux_bytes > 0 {
         Workspace::Borrowed(dev_ws.as_slice_mut())
@@ -450,24 +414,18 @@ fn cudnn_ctc_f64_general_matches_bespoke() {
     let mut dev_cudnn_ws: DeviceBuffer<u8> =
         DeviceBuffer::zeros(&ctx, needed.max(1)).expect("alloc cudnn ws");
     let cudnn_args = CtcLossCudnnArgs::<f64> {
-        log_probs: TensorRef {
-            data: dev_lp.as_slice(),
-            shape: lp_shape,
-            stride: contiguous_stride(lp_shape),
-        },
+        log_probs: TensorRef::new(dev_lp.as_slice(), lp_shape, contiguous_stride(lp_shape))
+            .unwrap(),
         labels: &host_labels,
         label_lengths: &host_label_lens,
         input_lengths: &host_input_lens,
-        costs: TensorMut {
-            data: dev_costs.as_slice_mut(),
-            shape: [n],
-            stride: [1],
-        },
-        grads: TensorMut {
-            data: dev_grads.as_slice_mut(),
-            shape: lp_shape,
-            stride: contiguous_stride(lp_shape),
-        },
+        costs: TensorMut::new(dev_costs.as_slice_mut(), [n], [1]).unwrap(),
+        grads: TensorMut::new(
+            dev_grads.as_slice_mut(),
+            lp_shape,
+            contiguous_stride(lp_shape),
+        )
+        .unwrap(),
     };
     let cudnn_ws = if needed > 0 {
         Workspace::Borrowed(dev_cudnn_ws.as_slice_mut())

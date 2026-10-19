@@ -95,7 +95,9 @@ impl<T: Element> SortBackwardPlan<T> {
         crate::view_check::check_fits(&args.indices)?;
         crate::view_check::check_fits(&args.dx)?;
         let expected = [self.desc.batch, self.desc.row_len];
-        if args.dy.shape != expected || args.indices.shape != expected || args.dx.shape != expected
+        if args.dy.shape() != expected
+            || args.indices.shape() != expected
+            || args.dx.shape() != expected
         {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SortBackwardPlan: tensor shapes != [batch, row_len]",
@@ -133,9 +135,9 @@ impl<T: Element> SortBackwardPlan<T> {
         if self.desc.batch == 0 || self.desc.row_len == 0 {
             return Ok(());
         }
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let idx_ptr = args.indices.data.as_raw().0 as *const c_void;
-        let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let idx_ptr = args.indices.data().as_raw().0 as *const c_void;
+        let dx_ptr = args.dx.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
         let status = match T::KIND {

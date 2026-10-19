@@ -46,16 +46,9 @@ fn token_penalty_closed_form() {
         &stream,
         Workspace::None,
         TokenPenaltyArgs {
-            logits: TensorMut {
-                data: logits_dev.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            counts: TensorRef {
-                data: counts_dev.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            logits: TensorMut::new(logits_dev.as_slice_mut(), shape, contiguous_stride(shape))
+                .unwrap(),
+            counts: TensorRef::new(counts_dev.as_slice(), shape, contiguous_stride(shape)).unwrap(),
         },
     )
     .expect("token penalty run");

@@ -112,9 +112,9 @@ impl<T: Element> SegmentMeanPlan<T> {
         };
         validate_args(
             &proxy,
-            args.input.shape,
-            args.segment_ids.shape,
-            args.output.shape,
+            args.input.shape(),
+            args.segment_ids.shape(),
+            args.output.shape(),
             "SegmentMeanPlan",
         )
     }

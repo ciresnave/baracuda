@@ -140,10 +140,10 @@ impl<T: Element> TripletMarginLossPlan<T> {
         }
         let (ws_ptr, ws_bytes) = unpack_workspace(workspace, self.workspace_size())?;
         let stream_ptr = stream.as_raw();
-        let a_ptr = args.anchor.data.as_raw().0 as *const c_void;
-        let p_ptr = args.positive.data.as_raw().0 as *const c_void;
-        let n_ptr = args.negative.data.as_raw().0 as *const c_void;
-        let out_ptr = args.out.data.as_raw().0 as *mut c_void;
+        let a_ptr = args.anchor.data().as_raw().0 as *const c_void;
+        let p_ptr = args.positive.data().as_raw().0 as *const c_void;
+        let n_ptr = args.negative.data().as_raw().0 as *const c_void;
+        let out_ptr = args.out.data().as_raw().0 as *mut c_void;
         let mode = self.desc.reduction as i32;
         let margin = self.desc.margin;
         let p_norm = self.desc.p_norm;
@@ -327,13 +327,13 @@ impl<T: Element> TripletMarginLossBackwardPlan<T> {
         let margin = self.desc.margin;
         let p_norm = self.desc.p_norm;
         let stream_ptr = stream.as_raw();
-        let a_ptr = args.anchor.data.as_raw().0 as *const c_void;
-        let p_ptr = args.positive.data.as_raw().0 as *const c_void;
-        let n_ptr = args.negative.data.as_raw().0 as *const c_void;
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let da_ptr = args.d_anchor.data.as_raw().0 as *mut c_void;
-        let dp_ptr = args.d_positive.data.as_raw().0 as *mut c_void;
-        let dn_ptr = args.d_negative.data.as_raw().0 as *mut c_void;
+        let a_ptr = args.anchor.data().as_raw().0 as *const c_void;
+        let p_ptr = args.positive.data().as_raw().0 as *const c_void;
+        let n_ptr = args.negative.data().as_raw().0 as *const c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let da_ptr = args.d_anchor.data().as_raw().0 as *mut c_void;
+        let dp_ptr = args.d_positive.data().as_raw().0 as *mut c_void;
+        let dn_ptr = args.d_negative.data().as_raw().0 as *mut c_void;
         let row_stride: i64 = d_extent as i64;
         let status = match T::KIND {
             ElementKind::F32 => unsafe {

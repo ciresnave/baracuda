@@ -83,21 +83,9 @@ fn eigh_f32_symmetric_3x3() {
     let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_bytes).expect("alloc ws");
 
     let args = EighArgs::<f32, f32> {
-        a: TensorMut {
-            data: dev_a.as_slice_mut(),
-            shape: [n, n],
-            stride: contiguous_stride([n, n]),
-        },
-        w: TensorMut {
-            data: dev_w.as_slice_mut(),
-            shape: [n],
-            stride: [1],
-        },
-        info: TensorMut {
-            data: dev_info.as_slice_mut(),
-            shape: [1i32],
-            stride: [1],
-        },
+        a: TensorMut::new(dev_a.as_slice_mut(), [n, n], contiguous_stride([n, n])).unwrap(),
+        w: TensorMut::new(dev_w.as_slice_mut(), [n], [1]).unwrap(),
+        info: TensorMut::new(dev_info.as_slice_mut(), [1i32], [1]).unwrap(),
     };
     plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
         .expect("run eigh f32");
@@ -169,21 +157,9 @@ fn eigh_f64_symmetric_3x3() {
     let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_bytes).expect("alloc ws");
 
     let args = EighArgs::<f64, f64> {
-        a: TensorMut {
-            data: dev_a.as_slice_mut(),
-            shape: [n, n],
-            stride: contiguous_stride([n, n]),
-        },
-        w: TensorMut {
-            data: dev_w.as_slice_mut(),
-            shape: [n],
-            stride: [1],
-        },
-        info: TensorMut {
-            data: dev_info.as_slice_mut(),
-            shape: [1i32],
-            stride: [1],
-        },
+        a: TensorMut::new(dev_a.as_slice_mut(), [n, n], contiguous_stride([n, n])).unwrap(),
+        w: TensorMut::new(dev_w.as_slice_mut(), [n], [1]).unwrap(),
+        info: TensorMut::new(dev_info.as_slice_mut(), [1i32], [1]).unwrap(),
     };
     plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
         .expect("run eigh f64");

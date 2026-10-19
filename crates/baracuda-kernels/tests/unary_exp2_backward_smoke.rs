@@ -43,22 +43,10 @@ fn exp2_backward_f32_3d() {
     let plan = UnaryBackwardPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = UnaryBackwardArgs::<f32, 3> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape,
-            stride,
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), shape, stride).unwrap(),
         x: None,
-        y: Some(TensorRef {
-            data: dev_y.as_slice(),
-            shape,
-            stride,
-        }),
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape,
-            stride,
-        },
+        y: Some(TensorRef::new(dev_y.as_slice(), shape, stride).unwrap()),
+        dx: TensorMut::new(dev_dx.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -95,22 +83,10 @@ fn exp2_backward_f64_3d() {
     let plan = UnaryBackwardPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = UnaryBackwardArgs::<f64, 3> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape,
-            stride,
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), shape, stride).unwrap(),
         x: None,
-        y: Some(TensorRef {
-            data: dev_y.as_slice(),
-            shape,
-            stride,
-        }),
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape,
-            stride,
-        },
+        y: Some(TensorRef::new(dev_y.as_slice(), shape, stride).unwrap()),
+        dx: TensorMut::new(dev_dx.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -146,22 +122,10 @@ fn exp2_backward_f16_3d() {
     let plan = UnaryBackwardPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = UnaryBackwardArgs::<f16, 3> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape,
-            stride,
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), shape, stride).unwrap(),
         x: None,
-        y: Some(TensorRef {
-            data: dev_y.as_slice(),
-            shape,
-            stride,
-        }),
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape,
-            stride,
-        },
+        y: Some(TensorRef::new(dev_y.as_slice(), shape, stride).unwrap()),
+        dx: TensorMut::new(dev_dx.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -203,22 +167,10 @@ fn exp2_backward_bf16_3d() {
     let plan = UnaryBackwardPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = UnaryBackwardArgs::<bf16, 3> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape,
-            stride,
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), shape, stride).unwrap(),
         x: None,
-        y: Some(TensorRef {
-            data: dev_y.as_slice(),
-            shape,
-            stride,
-        }),
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape,
-            stride,
-        },
+        y: Some(TensorRef::new(dev_y.as_slice(), shape, stride).unwrap()),
+        dx: TensorMut::new(dev_dx.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

@@ -61,16 +61,8 @@ fn trace_f32() {
     };
     let plan = TracePlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = TraceArgs::<f32> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape: shape(),
-            stride: strides,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: [],
-            stride: [],
-        },
+        x: TensorRef::new(dev_x.as_slice(), shape(), strides).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), [], []).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -115,16 +107,8 @@ fn trace_f16() {
     };
     let plan = TracePlan::<f16>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = TraceArgs::<f16> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape: shape(),
-            stride: strides,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: [],
-            stride: [],
-        },
+        x: TensorRef::new(dev_x.as_slice(), shape(), strides).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), [], []).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -167,16 +151,8 @@ fn trace_bf16() {
     let plan =
         TracePlan::<bf16>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = TraceArgs::<bf16> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape: shape(),
-            stride: strides,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: [],
-            stride: [],
-        },
+        x: TensorRef::new(dev_x.as_slice(), shape(), strides).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), [], []).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -219,16 +195,8 @@ fn trace_f64() {
     };
     let plan = TracePlan::<f64>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = TraceArgs::<f64> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape: shape(),
-            stride: strides,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: [],
-            stride: [],
-        },
+        x: TensorRef::new(dev_x.as_slice(), shape(), strides).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), [], []).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

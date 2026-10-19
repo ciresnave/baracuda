@@ -220,34 +220,34 @@ impl<T: Element> EmbeddingBagPlan<T> {
 
     /// Validate args.
     pub fn can_implement<I: IndexElement>(&self, args: &EmbeddingBagArgs<'_, T, I>) -> Result<()> {
-        if args.weight.shape[0] != self.desc.num_embeddings
-            || args.weight.shape[1] != self.desc.embedding_dim
+        if args.weight.shape()[0] != self.desc.num_embeddings
+            || args.weight.shape()[1] != self.desc.embedding_dim
         {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::EmbeddingBagPlan: weight shape mismatch with descriptor",
             ));
         }
-        if args.indices.shape[0] != self.desc.total_indices {
+        if args.indices.shape()[0] != self.desc.total_indices {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::EmbeddingBagPlan: indices.shape[0] != total_indices",
             ));
         }
-        if args.offsets.shape[0] != self.desc.num_bags {
+        if args.offsets.shape()[0] != self.desc.num_bags {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::EmbeddingBagPlan: offsets.shape[0] != num_bags",
             ));
         }
-        if args.output.shape[0] != self.desc.num_bags
-            || args.output.shape[1] != self.desc.embedding_dim
+        if args.output.shape()[0] != self.desc.num_bags
+            || args.output.shape()[1] != self.desc.embedding_dim
         {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::EmbeddingBagPlan: output shape must be [num_bags, embedding_dim]",
             ));
         }
-        let weight_len = args.weight.data.len() as i64;
-        let idx_len = args.indices.data.len() as i64;
-        let off_len = args.offsets.data.len() as i64;
-        let out_len = args.output.data.len() as i64;
+        let weight_len = args.weight.data().len() as i64;
+        let idx_len = args.indices.data().len() as i64;
+        let off_len = args.offsets.data().len() as i64;
+        let out_len = args.output.data().len() as i64;
         let weight_numel = args.weight.numel();
         let idx_numel = args.indices.numel();
         let off_numel = args.offsets.numel();
@@ -310,10 +310,10 @@ impl<T: Element> EmbeddingBagPlan<T> {
         if self.desc.num_bags == 0 || self.desc.embedding_dim == 0 {
             return Ok(());
         }
-        let weight_ptr = args.weight.data.as_raw().0 as *const c_void;
-        let idx_ptr = args.indices.data.as_raw().0 as *const c_void;
-        let off_ptr = args.offsets.data.as_raw().0 as *const c_void;
-        let out_ptr = args.output.data.as_raw().0 as *mut c_void;
+        let weight_ptr = args.weight.data().as_raw().0 as *const c_void;
+        let idx_ptr = args.indices.data().as_raw().0 as *const c_void;
+        let off_ptr = args.offsets.data().as_raw().0 as *const c_void;
+        let out_ptr = args.output.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         // Phase 11.5: padding_idx widens to i64 across FFI.
         let padding_idx: i64 = self.desc.padding_idx.unwrap_or(PADDING_DISABLED) as i64;

@@ -45,26 +45,30 @@ fn roi_pool_full_image_f32_smoke() {
         &stream,
         Workspace::None,
         RoiPoolArgs {
-            input: TensorRef {
-                data: dev_in.as_slice(),
-                shape: [n, c, h, w],
-                stride: contiguous_stride([n, c, h, w]),
-            },
-            rois: TensorRef {
-                data: dev_rois.as_slice(),
-                shape: [num_rois, 5],
-                stride: contiguous_stride([num_rois, 5]),
-            },
-            output: TensorMut {
-                data: dev_out.as_slice_mut(),
-                shape: [num_rois, c, pooled, pooled],
-                stride: contiguous_stride([num_rois, c, pooled, pooled]),
-            },
-            argmax: TensorMut {
-                data: dev_arg.as_slice_mut(),
-                shape: [num_rois, c, pooled, pooled],
-                stride: contiguous_stride([num_rois, c, pooled, pooled]),
-            },
+            input: TensorRef::new(
+                dev_in.as_slice(),
+                [n, c, h, w],
+                contiguous_stride([n, c, h, w]),
+            )
+            .unwrap(),
+            rois: TensorRef::new(
+                dev_rois.as_slice(),
+                [num_rois, 5],
+                contiguous_stride([num_rois, 5]),
+            )
+            .unwrap(),
+            output: TensorMut::new(
+                dev_out.as_slice_mut(),
+                [num_rois, c, pooled, pooled],
+                contiguous_stride([num_rois, c, pooled, pooled]),
+            )
+            .unwrap(),
+            argmax: TensorMut::new(
+                dev_arg.as_slice_mut(),
+                [num_rois, c, pooled, pooled],
+                contiguous_stride([num_rois, c, pooled, pooled]),
+            )
+            .unwrap(),
         },
     )
     .expect("");
@@ -115,26 +119,30 @@ fn roi_pool_backward_smoke_f32() {
         &stream,
         Workspace::None,
         RoiPoolBackwardArgs {
-            dout: TensorRef {
-                data: dev_dout.as_slice(),
-                shape: [num_rois, c, pooled, pooled],
-                stride: contiguous_stride([num_rois, c, pooled, pooled]),
-            },
-            rois: TensorRef {
-                data: dev_rois.as_slice(),
-                shape: [num_rois, 5],
-                stride: contiguous_stride([num_rois, 5]),
-            },
-            argmax: TensorRef {
-                data: dev_arg.as_slice(),
-                shape: [num_rois, c, pooled, pooled],
-                stride: contiguous_stride([num_rois, c, pooled, pooled]),
-            },
-            dinput: TensorMut {
-                data: dev_din.as_slice_mut(),
-                shape: [n, c, h, w],
-                stride: contiguous_stride([n, c, h, w]),
-            },
+            dout: TensorRef::new(
+                dev_dout.as_slice(),
+                [num_rois, c, pooled, pooled],
+                contiguous_stride([num_rois, c, pooled, pooled]),
+            )
+            .unwrap(),
+            rois: TensorRef::new(
+                dev_rois.as_slice(),
+                [num_rois, 5],
+                contiguous_stride([num_rois, 5]),
+            )
+            .unwrap(),
+            argmax: TensorRef::new(
+                dev_arg.as_slice(),
+                [num_rois, c, pooled, pooled],
+                contiguous_stride([num_rois, c, pooled, pooled]),
+            )
+            .unwrap(),
+            dinput: TensorMut::new(
+                dev_din.as_slice_mut(),
+                [n, c, h, w],
+                contiguous_stride([n, c, h, w]),
+            )
+            .unwrap(),
         },
     )
     .expect("");

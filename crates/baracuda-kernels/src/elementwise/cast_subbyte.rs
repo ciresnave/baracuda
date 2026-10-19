@@ -211,16 +211,16 @@ impl<TIn: DeviceRepr + Copy + 'static, TOut: DeviceRepr + Copy + 'static>
             expected
         };
 
-        if (args.input.data.len() as i64) < needed_in {
+        if (args.input.data().len() as i64) < needed_in {
             return Err(Error::BufferTooSmall {
                 needed: needed_in as usize,
-                got: args.input.data.len(),
+                got: args.input.data().len(),
             });
         }
-        if (args.output.data.len() as i64) < needed_out {
+        if (args.output.data().len() as i64) < needed_out {
             return Err(Error::BufferTooSmall {
                 needed: needed_out as usize,
-                got: args.output.data.len(),
+                got: args.output.data().len(),
             });
         }
         Ok(())
@@ -256,8 +256,8 @@ impl<TIn: DeviceRepr + Copy + 'static, TOut: DeviceRepr + Copy + 'static>
         if numel == 0 {
             return Ok(());
         }
-        let x_ptr = args.input.data.as_raw().0 as *const c_void;
-        let y_ptr = args.output.data.as_raw().0 as *mut c_void;
+        let x_ptr = args.input.data().as_raw().0 as *const c_void;
+        let y_ptr = args.output.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
         let status = match (self.desc.input_element, self.desc.output_element) {

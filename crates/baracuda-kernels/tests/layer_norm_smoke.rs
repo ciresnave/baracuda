@@ -149,36 +149,22 @@ fn layer_norm_f32_full_affine() {
         &stream,
         Workspace::None,
         LayerNormArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            gamma: Some(TensorRef {
-                data: dev_gamma.as_slice(),
-                shape: [extent as i32],
-                stride: [1],
-            }),
-            beta: Some(TensorRef {
-                data: dev_beta.as_slice(),
-                shape: [extent as i32],
-                stride: [1],
-            }),
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            mean: TensorMut {
-                data: dev_mean.as_slice_mut(),
-                shape: save_shape,
-                stride: contiguous_stride(save_shape),
-            },
-            inv_std: TensorMut {
-                data: dev_std.as_slice_mut(),
-                shape: save_shape,
-                stride: contiguous_stride(save_shape),
-            },
+            x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            gamma: Some(TensorRef::new(dev_gamma.as_slice(), [extent as i32], [1]).unwrap()),
+            beta: Some(TensorRef::new(dev_beta.as_slice(), [extent as i32], [1]).unwrap()),
+            y: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
+            mean: TensorMut::new(
+                dev_mean.as_slice_mut(),
+                save_shape,
+                contiguous_stride(save_shape),
+            )
+            .unwrap(),
+            inv_std: TensorMut::new(
+                dev_std.as_slice_mut(),
+                save_shape,
+                contiguous_stride(save_shape),
+            )
+            .unwrap(),
         },
     )
     .expect("run");
@@ -269,28 +255,22 @@ fn layer_norm_f64_no_affine() {
         &stream,
         Workspace::None,
         LayerNormArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
             gamma: None,
             beta: None,
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            mean: TensorMut {
-                data: dev_mean.as_slice_mut(),
-                shape: save_shape,
-                stride: contiguous_stride(save_shape),
-            },
-            inv_std: TensorMut {
-                data: dev_std.as_slice_mut(),
-                shape: save_shape,
-                stride: contiguous_stride(save_shape),
-            },
+            y: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
+            mean: TensorMut::new(
+                dev_mean.as_slice_mut(),
+                save_shape,
+                contiguous_stride(save_shape),
+            )
+            .unwrap(),
+            inv_std: TensorMut::new(
+                dev_std.as_slice_mut(),
+                save_shape,
+                contiguous_stride(save_shape),
+            )
+            .unwrap(),
         },
     )
     .expect("run");
@@ -372,36 +352,22 @@ fn layer_norm_f16_full_affine() {
         &stream,
         Workspace::None,
         LayerNormArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            gamma: Some(TensorRef {
-                data: dev_gamma.as_slice(),
-                shape: [extent as i32],
-                stride: [1],
-            }),
-            beta: Some(TensorRef {
-                data: dev_beta.as_slice(),
-                shape: [extent as i32],
-                stride: [1],
-            }),
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            mean: TensorMut {
-                data: dev_mean.as_slice_mut(),
-                shape: save_shape,
-                stride: contiguous_stride(save_shape),
-            },
-            inv_std: TensorMut {
-                data: dev_std.as_slice_mut(),
-                shape: save_shape,
-                stride: contiguous_stride(save_shape),
-            },
+            x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            gamma: Some(TensorRef::new(dev_gamma.as_slice(), [extent as i32], [1]).unwrap()),
+            beta: Some(TensorRef::new(dev_beta.as_slice(), [extent as i32], [1]).unwrap()),
+            y: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
+            mean: TensorMut::new(
+                dev_mean.as_slice_mut(),
+                save_shape,
+                contiguous_stride(save_shape),
+            )
+            .unwrap(),
+            inv_std: TensorMut::new(
+                dev_std.as_slice_mut(),
+                save_shape,
+                contiguous_stride(save_shape),
+            )
+            .unwrap(),
         },
     )
     .expect("run");
@@ -450,28 +416,22 @@ fn layer_norm_bf16_no_affine() {
         &stream,
         Workspace::None,
         LayerNormArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
             gamma: None,
             beta: None,
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            mean: TensorMut {
-                data: dev_mean.as_slice_mut(),
-                shape: save_shape,
-                stride: contiguous_stride(save_shape),
-            },
-            inv_std: TensorMut {
-                data: dev_std.as_slice_mut(),
-                shape: save_shape,
-                stride: contiguous_stride(save_shape),
-            },
+            y: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
+            mean: TensorMut::new(
+                dev_mean.as_slice_mut(),
+                save_shape,
+                contiguous_stride(save_shape),
+            )
+            .unwrap(),
+            inv_std: TensorMut::new(
+                dev_std.as_slice_mut(),
+                save_shape,
+                contiguous_stride(save_shape),
+            )
+            .unwrap(),
         },
     )
     .expect("run");

@@ -163,7 +163,7 @@ impl<T: Element, const N: usize> GroupNormPlan<T, N> {
         crate::view_check::check_fits(&args.y)?;
         crate::view_check::check_fits(&args.saved_mean)?;
         crate::view_check::check_fits(&args.saved_rstd)?;
-        if args.x.shape != self.desc.input_shape || args.y.shape != self.desc.input_shape {
+        if args.x.shape() != self.desc.input_shape || args.y.shape() != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::GroupNormPlan: x / y shape mismatch",
             ));
@@ -172,22 +172,22 @@ impl<T: Element, const N: usize> GroupNormPlan<T, N> {
         let c = self.desc.num_channels() as i64;
         let g = self.desc.num_groups as i64;
         let group_count = n * g;
-        if args.saved_mean.shape[0] as i64 != group_count
-            || args.saved_rstd.shape[0] as i64 != group_count
+        if args.saved_mean.shape()[0] as i64 != group_count
+            || args.saved_rstd.shape()[0] as i64 != group_count
         {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::GroupNormPlan: saved buffers length != N * num_groups",
             ));
         }
         if let Some(gm) = &args.gamma {
-            if gm.shape[0] as i64 != c {
+            if gm.shape()[0] as i64 != c {
                 return Err(Error::InvalidProblem(
                     "baracuda-kernels::GroupNormPlan: gamma length != C",
                 ));
             }
         }
         if let Some(bt) = &args.beta {
-            if bt.shape[0] as i64 != c {
+            if bt.shape()[0] as i64 != c {
                 return Err(Error::InvalidProblem(
                     "baracuda-kernels::GroupNormPlan: beta length != C",
                 ));
@@ -244,19 +244,19 @@ impl<T: Element, const N: usize> GroupNormPlan<T, N> {
         let num_groups = self.desc.num_groups as i32;
 
         let stream_ptr = stream.as_raw();
-        let x_ptr = args.x.data.as_raw().0 as *const c_void;
-        let y_ptr = args.y.data.as_raw().0 as *mut c_void;
-        let mean_ptr = args.saved_mean.data.as_raw().0 as *mut c_void;
-        let rstd_ptr = args.saved_rstd.data.as_raw().0 as *mut c_void;
+        let x_ptr = args.x.data().as_raw().0 as *const c_void;
+        let y_ptr = args.y.data().as_raw().0 as *mut c_void;
+        let mean_ptr = args.saved_mean.data().as_raw().0 as *mut c_void;
+        let rstd_ptr = args.saved_rstd.data().as_raw().0 as *mut c_void;
         let gamma_ptr = args
             .gamma
             .as_ref()
-            .map(|g| g.data.as_raw().0 as *const c_void)
+            .map(|g| g.data().as_raw().0 as *const c_void)
             .unwrap_or(core::ptr::null());
         let beta_ptr = args
             .beta
             .as_ref()
-            .map(|b| b.data.as_raw().0 as *const c_void)
+            .map(|b| b.data().as_raw().0 as *const c_void)
             .unwrap_or(core::ptr::null());
 
         let status = match T::KIND {

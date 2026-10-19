@@ -282,8 +282,8 @@ impl<T: Element> MaxPool2dPlan<T> {
             self.pool_desc.get(),
             self.x_desc.get(),
             self.y_desc.get(),
-            args.x.data.as_raw().0,
-            args.y.data.as_raw().0,
+            args.x.data().as_raw().0,
+            args.y.data().as_raw().0,
         )
     }
 
@@ -303,10 +303,10 @@ impl<T: Element> MaxPool2dPlan<T> {
             self.pool_desc.get(),
             self.x_desc.get(),
             self.y_desc.get(),
-            args.y.data.as_raw().0,
-            args.dy.data.as_raw().0,
-            args.x.data.as_raw().0,
-            args.dx.data.as_raw().0,
+            args.y.data().as_raw().0,
+            args.dy.data().as_raw().0,
+            args.x.data().as_raw().0,
+            args.dx.data().as_raw().0,
         )
     }
 
@@ -483,12 +483,12 @@ pub(crate) fn check_fw_args<T: Element>(
     let (h_out, w_out) = compute_output_dims(desc);
     let x_shape = [desc.batch, desc.channels, desc.h_in, desc.w_in];
     let y_shape = [desc.batch, desc.channels, h_out, w_out];
-    if args.x.shape != x_shape {
+    if args.x.shape() != x_shape {
         return Err(Error::InvalidProblem(
             "baracuda-kernels::Pool2dPlan: x shape != [N, C, H_in, W_in]",
         ));
     }
-    if args.y.shape != y_shape {
+    if args.y.shape() != y_shape {
         return Err(Error::InvalidProblem(
             "baracuda-kernels::Pool2dPlan: y shape != [N, C, H_out, W_out]",
         ));
@@ -503,22 +503,22 @@ pub(crate) fn check_bw_args<T: Element>(
     let (h_out, w_out) = compute_output_dims(desc);
     let x_shape = [desc.batch, desc.channels, desc.h_in, desc.w_in];
     let y_shape = [desc.batch, desc.channels, h_out, w_out];
-    if args.x.shape != x_shape {
+    if args.x.shape() != x_shape {
         return Err(Error::InvalidProblem(
             "baracuda-kernels::Pool2dPlan: x shape != [N, C, H_in, W_in]",
         ));
     }
-    if args.dx.shape != x_shape {
+    if args.dx.shape() != x_shape {
         return Err(Error::InvalidProblem(
             "baracuda-kernels::Pool2dPlan: dx shape != [N, C, H_in, W_in]",
         ));
     }
-    if args.y.shape != y_shape {
+    if args.y.shape() != y_shape {
         return Err(Error::InvalidProblem(
             "baracuda-kernels::Pool2dPlan: y shape != [N, C, H_out, W_out]",
         ));
     }
-    if args.dy.shape != y_shape {
+    if args.dy.shape() != y_shape {
         return Err(Error::InvalidProblem(
             "baracuda-kernels::Pool2dPlan: dy shape != [N, C, H_out, W_out]",
         ));

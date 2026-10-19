@@ -94,7 +94,7 @@ impl TokenPenaltyPlan {
         crate::view_check::check_fits(&args.logits)?;
         crate::view_check::check_fits(&args.counts)?;
         let shape = [self.desc.batch_size, self.desc.vocab_size];
-        if args.logits.shape != shape || args.counts.shape != shape {
+        if args.logits.shape() != shape || args.counts.shape() != shape {
             return Err(Error::InvalidProblem(
                 "TokenPenaltyPlan: logits / counts shape must be [batch, vocab]",
             ));
@@ -134,8 +134,8 @@ impl TokenPenaltyPlan {
     ) -> Result<()> {
         self.can_implement(&args)?;
         let stream_ptr = stream.as_raw();
-        let logits_ptr = args.logits.data.as_raw().0 as *mut c_void;
-        let counts_ptr = args.counts.data.as_raw().0 as *const c_void;
+        let logits_ptr = args.logits.data().as_raw().0 as *mut c_void;
+        let counts_ptr = args.counts.data().as_raw().0 as *const c_void;
         let status = unsafe {
             baracuda_kernels_sys::baracuda_kernels_apply_token_penalty_f32_run(
                 self.desc.batch_size,

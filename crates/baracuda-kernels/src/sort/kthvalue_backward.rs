@@ -105,17 +105,17 @@ impl<T: Element> KthvalueBackwardPlan<T> {
         crate::view_check::check_fits(&args.dy)?;
         crate::view_check::check_fits(&args.indices)?;
         crate::view_check::check_fits(&args.dx)?;
-        if args.dy.shape != [self.desc.batch] {
+        if args.dy.shape() != [self.desc.batch] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::KthvalueBackwardPlan: dy shape != [batch]",
             ));
         }
-        if args.indices.shape != [self.desc.batch] {
+        if args.indices.shape() != [self.desc.batch] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::KthvalueBackwardPlan: indices shape != [batch]",
             ));
         }
-        if args.dx.shape != [self.desc.batch, self.desc.row_len] {
+        if args.dx.shape() != [self.desc.batch, self.desc.row_len] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::KthvalueBackwardPlan: dx shape != [batch, row_len]",
             ));
@@ -152,9 +152,9 @@ impl<T: Element> KthvalueBackwardPlan<T> {
         if self.desc.batch == 0 || self.desc.row_len == 0 {
             return Ok(());
         }
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let idx_ptr = args.indices.data.as_raw().0 as *const c_void;
-        let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let idx_ptr = args.indices.data().as_raw().0 as *const c_void;
+        let dx_ptr = args.dx.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         let k = 1i32;
 

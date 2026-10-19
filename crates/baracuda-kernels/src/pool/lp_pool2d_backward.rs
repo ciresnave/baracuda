@@ -88,10 +88,10 @@ impl<T: Element> LpPool2dBackwardPlan<T> {
         args: LpPool2dBwArgs<'_, T>,
     ) -> Result<()> {
         check_bw_args(&self.desc, self.h_out, self.w_out, &args)?;
-        let x_ptr = args.x.data.as_raw().0 as *const c_void;
-        let y_ptr = args.y.data.as_raw().0 as *const c_void;
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
+        let x_ptr = args.x.data().as_raw().0 as *const c_void;
+        let y_ptr = args.y.data().as_raw().0 as *const c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let dx_ptr = args.dx.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw() as *mut c_void;
         let ceil_flag = if self.desc.ceil_mode { 1 } else { 0 };
 
@@ -198,22 +198,22 @@ fn check_bw_args<T: Element>(
 ) -> Result<()> {
     let want_x = [d.batch, d.channels, d.h_in, d.w_in];
     let want_y = [d.batch, d.channels, h_out, w_out];
-    if args.x.shape != want_x {
+    if args.x.shape() != want_x {
         return Err(Error::InvalidProblem(
             "baracuda-kernels::LpPool2dBackwardPlan: x shape != [N, C, H_in, W_in]",
         ));
     }
-    if args.dx.shape != want_x {
+    if args.dx.shape() != want_x {
         return Err(Error::InvalidProblem(
             "baracuda-kernels::LpPool2dBackwardPlan: dx shape != [N, C, H_in, W_in]",
         ));
     }
-    if args.y.shape != want_y {
+    if args.y.shape() != want_y {
         return Err(Error::InvalidProblem(
             "baracuda-kernels::LpPool2dBackwardPlan: y shape != [N, C, H_out, W_out]",
         ));
     }
-    if args.dy.shape != want_y {
+    if args.dy.shape() != want_y {
         return Err(Error::InvalidProblem(
             "baracuda-kernels::LpPool2dBackwardPlan: dy shape != [N, C, H_out, W_out]",
         ));

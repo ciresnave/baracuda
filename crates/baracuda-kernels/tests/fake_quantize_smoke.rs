@@ -55,18 +55,10 @@ fn fake_quantize_f32_matches_quant_dequant_roundtrip() {
     let plan =
         FakeQuantizePlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = FakeQuantizeArgs::<f32> {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape: [numel],
-            stride: contiguous_stride([numel]),
-        },
+        input: TensorRef::new(dev_x.as_slice(), [numel], contiguous_stride([numel])).unwrap(),
         scale,
         zero_point,
-        output: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: [numel],
-            stride: contiguous_stride([numel]),
-        },
+        output: TensorMut::new(dev_y.as_slice_mut(), [numel], contiguous_stride([numel])).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

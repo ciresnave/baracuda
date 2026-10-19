@@ -149,51 +149,22 @@ fn run_prefill(
         stream,
         Workspace::None,
         BatchPagedPrefillArgs {
-            q: TensorRef {
-                data: fx.q.as_slice(),
-                shape: qo_shape,
-                stride: contiguous_stride(qo_shape),
-            },
-            q_indptr: TensorRef {
-                data: fx.q_indptr.as_slice(),
-                shape: [2],
-                stride: [1],
-            },
-            k_data: TensorRef {
-                data: fx.k.as_slice(),
-                shape: cache_shape,
-                stride: contiguous_stride(cache_shape),
-            },
-            v_data: TensorRef {
-                data: fx.v.as_slice(),
-                shape: cache_shape,
-                stride: contiguous_stride(cache_shape),
-            },
-            kv_indices: TensorRef {
-                data: fx.kv_indices.as_slice(),
-                shape: [1],
-                stride: [1],
-            },
-            kv_indptr: TensorRef {
-                data: fx.kv_indptr.as_slice(),
-                shape: [2],
-                stride: [1],
-            },
-            last_page_len: TensorRef {
-                data: fx.last_page_len.as_slice(),
-                shape: [1],
-                stride: [1],
-            },
-            o: TensorMut {
-                data: fx.o.as_slice_mut(),
-                shape: qo_shape,
-                stride: contiguous_stride(qo_shape),
-            },
-            lse: TensorMut {
-                data: fx.lse.as_slice_mut(),
-                shape: [qo_len as i32, 1],
-                stride: contiguous_stride([qo_len as i32, 1]),
-            },
+            q: TensorRef::new(fx.q.as_slice(), qo_shape, contiguous_stride(qo_shape)).unwrap(),
+            q_indptr: TensorRef::new(fx.q_indptr.as_slice(), [2], [1]).unwrap(),
+            k_data: TensorRef::new(fx.k.as_slice(), cache_shape, contiguous_stride(cache_shape))
+                .unwrap(),
+            v_data: TensorRef::new(fx.v.as_slice(), cache_shape, contiguous_stride(cache_shape))
+                .unwrap(),
+            kv_indices: TensorRef::new(fx.kv_indices.as_slice(), [1], [1]).unwrap(),
+            kv_indptr: TensorRef::new(fx.kv_indptr.as_slice(), [2], [1]).unwrap(),
+            last_page_len: TensorRef::new(fx.last_page_len.as_slice(), [1], [1]).unwrap(),
+            o: TensorMut::new(fx.o.as_slice_mut(), qo_shape, contiguous_stride(qo_shape)).unwrap(),
+            lse: TensorMut::new(
+                fx.lse.as_slice_mut(),
+                [qo_len as i32, 1],
+                contiguous_stride([qo_len as i32, 1]),
+            )
+            .unwrap(),
         },
     )
     .expect("prefill run");

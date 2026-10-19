@@ -175,8 +175,8 @@ impl<T: Element> LpPool1dPlan<T> {
         args: LpPool1dFwArgs<'_, T>,
     ) -> Result<()> {
         check_fw_args_lp1d(&self.desc, self.l_out, &args)?;
-        let x_ptr = args.x.data.as_raw().0 as *const c_void;
-        let y_ptr = args.y.data.as_raw().0 as *mut c_void;
+        let x_ptr = args.x.data().as_raw().0 as *const c_void;
+        let y_ptr = args.y.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw() as *mut c_void;
         let ceil_flag = if self.desc.ceil_mode { 1 } else { 0 };
         let status = match T::KIND {
@@ -314,12 +314,12 @@ pub(super) fn check_fw_args_lp1d<T: Element>(
 ) -> Result<()> {
     let want_x = [d.batch, d.channels, d.l_in];
     let want_y = [d.batch, d.channels, l_out];
-    if args.x.shape != want_x {
+    if args.x.shape() != want_x {
         return Err(Error::InvalidProblem(
             "baracuda-kernels::LpPool1dPlan: x shape != [N, C, L_in]",
         ));
     }
-    if args.y.shape != want_y {
+    if args.y.shape() != want_y {
         return Err(Error::InvalidProblem(
             "baracuda-kernels::LpPool1dPlan: y shape != [N, C, L_out]",
         ));

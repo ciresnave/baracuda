@@ -155,13 +155,13 @@ impl<T: Element, const N: usize> PermutePlan<T, N> {
     pub fn can_implement(&self, args: &PermuteArgs<'_, T, N>) -> Result<()> {
         crate::view_check::check_fits(&args.x)?;
         crate::view_check::check_fits(&args.y)?;
-        if args.x.shape != self.desc.input_shape {
+        if args.x.shape() != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::PermutePlan: X shape mismatch with descriptor input_shape",
             ));
         }
         let expected_out = self.desc.output_shape();
-        if args.y.shape != expected_out {
+        if args.y.shape() != expected_out {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::PermutePlan: Y shape mismatch with derived output shape \
                  (output[d] = input_shape[dims[d]])",
@@ -174,8 +174,8 @@ impl<T: Element, const N: usize> PermutePlan<T, N> {
         }
         let x_numel = args.x.numel();
         let y_numel = args.y.numel();
-        let x_len = args.x.data.len() as i64;
-        let y_len = args.y.data.len() as i64;
+        let x_len = args.x.data().len() as i64;
+        let y_len = args.y.data().len() as i64;
         if x_len < x_numel {
             return Err(Error::BufferTooSmall {
                 needed: x_numel as usize,
@@ -221,14 +221,14 @@ impl<T: Element, const N: usize> PermutePlan<T, N> {
         if input_numel == 0 {
             return Ok(());
         }
-        let x_ptr = args.x.data.as_raw().0 as *const c_void;
-        let y_ptr = args.y.data.as_raw().0 as *mut c_void;
+        let x_ptr = args.x.data().as_raw().0 as *const c_void;
+        let y_ptr = args.y.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
         let input_shape = self.desc.input_shape;
         let dims = self.desc.dims;
-        let stride_x = args.x.stride;
-        let stride_y = args.y.stride;
+        let stride_x = args.x.stride();
+        let stride_y = args.y.stride();
         let rank = N as i32;
 
         let status = match T::KIND {

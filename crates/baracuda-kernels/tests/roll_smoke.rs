@@ -39,16 +39,8 @@ fn roll_1d_positive() {
     let plan =
         RollPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = RollArgs::<f32, 1> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -83,16 +75,8 @@ fn roll_1d_negative() {
     let plan =
         RollPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = RollArgs::<f32, 1> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -130,16 +114,8 @@ fn roll_2d_mixed() {
     let plan =
         RollPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = RollArgs::<f32, 2> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -169,16 +145,8 @@ fn roll_zero_shifts_is_copy() {
     let plan =
         RollPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = RollArgs::<f32, 2> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

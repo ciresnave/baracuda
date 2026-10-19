@@ -54,21 +54,19 @@ fn nonzero_f32_2d() {
     let plan =
         NonzeroPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = NonzeroArgs::<f32, 2> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        out_coords: TensorMut {
-            data: dev_coords.as_slice_mut(),
-            shape: [coords_len as i32],
-            stride: contiguous_stride([coords_len as i32]),
-        },
-        counter: TensorMut {
-            data: dev_counter.as_slice_mut(),
-            shape: [1i32],
-            stride: contiguous_stride([1i32]),
-        },
+        x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        out_coords: TensorMut::new(
+            dev_coords.as_slice_mut(),
+            [coords_len as i32],
+            contiguous_stride([coords_len as i32]),
+        )
+        .unwrap(),
+        counter: TensorMut::new(
+            dev_counter.as_slice_mut(),
+            [1i32],
+            contiguous_stride([1i32]),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -120,21 +118,19 @@ fn nonzero_i32_1d() {
     let plan =
         NonzeroPlan::<i32, 1>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = NonzeroArgs::<i32, 1> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        out_coords: TensorMut {
-            data: dev_coords.as_slice_mut(),
-            shape: [coords_len as i32],
-            stride: contiguous_stride([coords_len as i32]),
-        },
-        counter: TensorMut {
-            data: dev_counter.as_slice_mut(),
-            shape: [1i32],
-            stride: contiguous_stride([1i32]),
-        },
+        x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        out_coords: TensorMut::new(
+            dev_coords.as_slice_mut(),
+            [coords_len as i32],
+            contiguous_stride([coords_len as i32]),
+        )
+        .unwrap(),
+        counter: TensorMut::new(
+            dev_counter.as_slice_mut(),
+            [1i32],
+            contiguous_stride([1i32]),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

@@ -158,28 +158,28 @@ impl<T: Element> BatchPagedDecodeFp8Plan<T> {
         crate::view_check::check_fits(&args.lse)?;
         let d = &self.desc;
         let q_shape = [d.batch_size, d.num_qo_heads, d.head_dim];
-        if args.q.shape != q_shape || args.o.shape != q_shape {
+        if args.q.shape() != q_shape || args.o.shape() != q_shape {
             return Err(Error::InvalidProblem(
                 "BatchPagedDecodeFp8Plan: q/o shape mismatch",
             ));
         }
         let cache_shape = [d.num_total_pages, d.num_kv_heads, d.page_size, d.head_dim];
-        if args.k_data.shape != cache_shape || args.v_data.shape != cache_shape {
+        if args.k_data.shape() != cache_shape || args.v_data.shape() != cache_shape {
             return Err(Error::InvalidProblem(
                 "BatchPagedDecodeFp8Plan: k_data/v_data shape mismatch",
             ));
         }
-        if args.indptr.shape != [d.batch_size + 1] {
+        if args.indptr.shape() != [d.batch_size + 1] {
             return Err(Error::InvalidProblem(
                 "BatchPagedDecodeFp8Plan: indptr shape must be [batch + 1]",
             ));
         }
-        if args.last_page_len.shape != [d.batch_size] {
+        if args.last_page_len.shape() != [d.batch_size] {
             return Err(Error::InvalidProblem(
                 "BatchPagedDecodeFp8Plan: last_page_len shape must be [batch]",
             ));
         }
-        if args.lse.shape != [d.batch_size, d.num_qo_heads] {
+        if args.lse.shape() != [d.batch_size, d.num_qo_heads] {
             return Err(Error::InvalidProblem(
                 "BatchPagedDecodeFp8Plan: lse shape must be [batch, num_qo_heads]",
             ));
@@ -252,14 +252,14 @@ impl<T: Element> BatchPagedDecodeFp8Plan<T> {
         {
             let d = &self.desc;
             let stream_ptr = stream.as_raw() as *mut c_void;
-            let q_ptr = args.q.data.as_raw().0 as *const c_void;
-            let k_ptr = args.k_data.data.as_raw().0 as *mut c_void;
-            let v_ptr = args.v_data.data.as_raw().0 as *mut c_void;
-            let indices_ptr = args.indices.data.as_raw().0 as *mut c_void;
-            let indptr_ptr = args.indptr.data.as_raw().0 as *mut c_void;
-            let last_page_len_ptr = args.last_page_len.data.as_raw().0 as *mut c_void;
-            let o_ptr = args.o.data.as_raw().0 as *mut c_void;
-            let lse_ptr = args.lse.data.as_raw().0 as *mut c_void;
+            let q_ptr = args.q.data().as_raw().0 as *const c_void;
+            let k_ptr = args.k_data.data().as_raw().0 as *mut c_void;
+            let v_ptr = args.v_data.data().as_raw().0 as *mut c_void;
+            let indices_ptr = args.indices.data().as_raw().0 as *mut c_void;
+            let indptr_ptr = args.indptr.data().as_raw().0 as *mut c_void;
+            let last_page_len_ptr = args.last_page_len.data().as_raw().0 as *mut c_void;
+            let o_ptr = args.o.data().as_raw().0 as *mut c_void;
+            let lse_ptr = args.lse.data().as_raw().0 as *mut c_void;
 
             macro_rules! call {
                 ($f:ident) => {{

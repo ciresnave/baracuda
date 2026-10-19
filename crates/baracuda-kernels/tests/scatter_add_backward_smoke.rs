@@ -54,21 +54,14 @@ fn scatter_add_backward_via_gather_f32_2d_dim1() {
     let plan = GatherPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select gather (acts as scatter_add BW)");
     let args = GatherArgs::<f32, 2> {
-        src: TensorRef {
-            data: dev_dout.as_slice(),
-            shape: out_shape,
-            stride: contiguous_stride(out_shape),
-        },
-        index: TensorRef {
-            data: dev_idx.as_slice(),
-            shape: upd_shape,
-            stride: contiguous_stride(upd_shape),
-        },
-        out: TensorMut {
-            data: dev_dupd.as_slice_mut(),
-            shape: upd_shape,
-            stride: contiguous_stride(upd_shape),
-        },
+        src: TensorRef::new(dev_dout.as_slice(), out_shape, contiguous_stride(out_shape)).unwrap(),
+        index: TensorRef::new(dev_idx.as_slice(), upd_shape, contiguous_stride(upd_shape)).unwrap(),
+        out: TensorMut::new(
+            dev_dupd.as_slice_mut(),
+            upd_shape,
+            contiguous_stride(upd_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

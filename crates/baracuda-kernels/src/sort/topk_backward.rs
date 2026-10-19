@@ -113,17 +113,17 @@ impl<T: Element> TopkBackwardPlan<T> {
         crate::view_check::check_fits(&args.dx)?;
         let dy_shape = [self.desc.batch, self.desc.k];
         let dx_shape = [self.desc.batch, self.desc.row_len];
-        if args.dy.shape != dy_shape {
+        if args.dy.shape() != dy_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::TopkBackwardPlan: dy shape != [batch, k]",
             ));
         }
-        if args.indices.shape != dy_shape {
+        if args.indices.shape() != dy_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::TopkBackwardPlan: indices shape != [batch, k]",
             ));
         }
-        if args.dx.shape != dx_shape {
+        if args.dx.shape() != dx_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::TopkBackwardPlan: dx shape != [batch, row_len]",
             ));
@@ -160,9 +160,9 @@ impl<T: Element> TopkBackwardPlan<T> {
         if self.desc.batch == 0 || self.desc.row_len == 0 {
             return Ok(());
         }
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let idx_ptr = args.indices.data.as_raw().0 as *const c_void;
-        let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let idx_ptr = args.indices.data().as_raw().0 as *const c_void;
+        let dx_ptr = args.dx.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
         let status = match T::KIND {

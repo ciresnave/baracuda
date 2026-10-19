@@ -139,10 +139,10 @@ impl<T: Element> FillPlan<T> {
                 "baracuda-kernels::FillPlan: output numel mismatch with descriptor",
             ));
         }
-        if (args.output.data.len() as i64) < expected {
+        if (args.output.data().len() as i64) < expected {
             return Err(Error::BufferTooSmall {
                 needed: expected as usize,
-                got: args.output.data.len(),
+                got: args.output.data().len(),
             });
         }
         Ok(())
@@ -178,7 +178,7 @@ impl<T: Element> FillPlan<T> {
         if numel == 0 {
             return Ok(());
         }
-        let y_ptr = args.output.data.as_raw().0 as *mut c_void;
+        let y_ptr = args.output.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
         // Dispatch by runtime element kind. The descriptor's `value`

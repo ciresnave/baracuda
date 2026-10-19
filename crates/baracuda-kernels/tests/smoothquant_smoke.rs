@@ -223,31 +223,11 @@ fn smoothquant_linear_f32_basic() {
         .expect("select SmoothQuantLinearPlan");
 
     let args = SmoothQuantLinearArgs::<f32, S8> {
-        act_q: TensorRef {
-            data: dev_a_q,
-            shape: [m, k],
-            stride: [k as i64, 1],
-        },
-        weight_q: TensorRef {
-            data: dev_w_q,
-            shape: [n, k],
-            stride: [k as i64, 1],
-        },
-        weight_scale: TensorRef {
-            data: dev_w_scale.as_slice(),
-            shape: [n],
-            stride: [1],
-        },
-        output: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: [m, n],
-            stride: [n as i64, 1],
-        },
-        act_scale_scratch: TensorMut {
-            data: dev_act_scratch.as_slice_mut(),
-            shape: [m],
-            stride: [1],
-        },
+        act_q: TensorRef::new(dev_a_q, [m, k], [k as i64, 1]).unwrap(),
+        weight_q: TensorRef::new(dev_w_q, [n, k], [k as i64, 1]).unwrap(),
+        weight_scale: TensorRef::new(dev_w_scale.as_slice(), [n], [1]).unwrap(),
+        output: TensorMut::new(dev_out.as_slice_mut(), [m, n], [n as i64, 1]).unwrap(),
+        act_scale_scratch: TensorMut::new(dev_act_scratch.as_slice_mut(), [m], [1]).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

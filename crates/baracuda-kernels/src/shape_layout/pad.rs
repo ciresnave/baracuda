@@ -173,13 +173,13 @@ impl<T: Element, const N: usize> PadPlan<T, N> {
     pub fn can_implement(&self, args: &PadArgs<'_, T, N>) -> Result<()> {
         crate::view_check::check_fits(&args.x)?;
         crate::view_check::check_fits(&args.y)?;
-        if args.x.shape != self.desc.input_shape {
+        if args.x.shape() != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::PadPlan: X shape mismatch with descriptor input_shape",
             ));
         }
         let expected_out = self.desc.output_shape();
-        if args.y.shape != expected_out {
+        if args.y.shape() != expected_out {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::PadPlan: Y shape mismatch with derived output shape \
                  (= input_shape + pad_low + pad_high per axis)",
@@ -192,8 +192,8 @@ impl<T: Element, const N: usize> PadPlan<T, N> {
         }
         let y_numel = args.y.numel();
         let x_numel = args.x.numel();
-        let x_len = args.x.data.len() as i64;
-        let y_len = args.y.data.len() as i64;
+        let x_len = args.x.data().len() as i64;
+        let y_len = args.y.data().len() as i64;
         if y_len < y_numel {
             return Err(Error::BufferTooSmall {
                 needed: y_numel as usize,
@@ -239,15 +239,15 @@ impl<T: Element, const N: usize> PadPlan<T, N> {
         if output_numel == 0 {
             return Ok(());
         }
-        let x_ptr = args.x.data.as_raw().0 as *const c_void;
-        let y_ptr = args.y.data.as_raw().0 as *mut c_void;
+        let x_ptr = args.x.data().as_raw().0 as *const c_void;
+        let y_ptr = args.y.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
         let input_shape = self.desc.input_shape;
         let output_shape = self.desc.output_shape();
         let pad_low = self.desc.pad_low;
-        let stride_x = args.x.stride;
-        let stride_y = args.y.stride;
+        let stride_x = args.x.stride();
+        let stride_y = args.y.stride();
         let rank = N as i32;
 
         // Non-constant pad modes share a parameter shape (no `value`).

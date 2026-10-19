@@ -142,12 +142,12 @@ impl<T: Element> RopeBackwardPlan<T> {
             self.desc.seq_len,
             self.desc.head_dim,
         ];
-        if args.dy.shape != want_shape {
+        if args.dy.shape() != want_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::RopeBackwardPlan: dy shape mismatch",
             ));
         }
-        if args.dx.shape != want_shape {
+        if args.dx.shape() != want_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::RopeBackwardPlan: dx shape mismatch",
             ));
@@ -155,14 +155,14 @@ impl<T: Element> RopeBackwardPlan<T> {
         // Phase 14.4: strided variant supports arbitrary outer strides
         // but the innermost head_dim axis MUST remain stride=1 because
         // RoPE rotates adjacent pairs (2i, 2i+1).
-        if args.dy.stride[3] != 1 || args.dx.stride[3] != 1 {
+        if args.dy.stride()[3] != 1 || args.dx.stride()[3] != 1 {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::RopeBackwardPlan: head_dim axis must have stride=1 \
                  (RoPE rotates adjacent pairs)",
             ));
         }
         if let Some(ref p) = args.positions {
-            if p.shape != [self.desc.seq_len] {
+            if p.shape() != [self.desc.seq_len] {
                 return Err(Error::InvalidProblem(
                     "baracuda-kernels::RopeBackwardPlan: positions shape must be [seq_len]",
                 ));
@@ -171,10 +171,10 @@ impl<T: Element> RopeBackwardPlan<T> {
         // Buffer-size check only for contig — strided views are caller-owned.
         if args.dy.is_contiguous() && args.dx.is_contiguous() {
             let numel = args.dy.numel();
-            if (args.dy.data.len() as i64) < numel || (args.dx.data.len() as i64) < numel {
+            if (args.dy.data().len() as i64) < numel || (args.dx.data().len() as i64) < numel {
                 return Err(Error::BufferTooSmall {
                     needed: numel as usize,
-                    got: args.dy.data.len().min(args.dx.data.len()),
+                    got: args.dy.data().len().min(args.dx.data().len()),
                 });
             }
         }
@@ -216,10 +216,10 @@ impl<T: Element> RopeBackwardPlan<T> {
             return Ok(());
         }
         let stream_ptr = stream.as_raw();
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let dx_ptr = args.dx.data().as_raw().0 as *mut c_void;
         let (pos_ptr, pos_default_flag) = match &args.positions {
-            Some(p) => (p.data.as_raw().0 as *const c_void, 0i32),
+            Some(p) => (p.data().as_raw().0 as *const c_void, 0i32),
             None => (core::ptr::null::<c_void>(), 1i32),
         };
 
@@ -300,12 +300,12 @@ impl<T: Element> RopeBackwardPlan<T> {
                 }
             } else {
                 // Strided sibling.
-                let sdyb = args.dy.stride[0];
-                let sdyh = args.dy.stride[1];
-                let sdys = args.dy.stride[2];
-                let sdxb = args.dx.stride[0];
-                let sdxh = args.dx.stride[1];
-                let sdxs = args.dx.stride[2];
+                let sdyb = args.dy.stride()[0];
+                let sdyh = args.dy.stride()[1];
+                let sdys = args.dy.stride()[2];
+                let sdxb = args.dx.stride()[0];
+                let sdxh = args.dx.stride()[1];
+                let sdxs = args.dx.stride()[2];
                 match T::KIND {
                     ElementKind::F32 => {
                         baracuda_kernels_sys::baracuda_kernels_rope_backward_f32_strided_run(

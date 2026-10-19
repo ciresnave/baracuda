@@ -91,26 +91,32 @@ fn mamba2_block_tiny_end_to_end() {
             &stream,
             Workspace::None,
             CausalConv1dArgs {
-                x: TensorRef {
-                    data: x_conv_dev.as_slice(),
-                    shape: shape_xconv,
-                    stride: contiguous_stride(shape_xconv),
-                },
-                weight: TensorRef {
-                    data: w_conv_dev.as_slice(),
-                    shape: shape_wconv,
-                    stride: contiguous_stride(shape_wconv),
-                },
-                bias: Some(TensorRef {
-                    data: b_conv_dev.as_slice(),
-                    shape: shape_bconv,
-                    stride: contiguous_stride(shape_bconv),
-                }),
-                y: TensorMut {
-                    data: u_dev.as_slice_mut(),
-                    shape: shape_xconv,
-                    stride: contiguous_stride(shape_xconv),
-                },
+                x: TensorRef::new(
+                    x_conv_dev.as_slice(),
+                    shape_xconv,
+                    contiguous_stride(shape_xconv),
+                )
+                .unwrap(),
+                weight: TensorRef::new(
+                    w_conv_dev.as_slice(),
+                    shape_wconv,
+                    contiguous_stride(shape_wconv),
+                )
+                .unwrap(),
+                bias: Some(
+                    TensorRef::new(
+                        b_conv_dev.as_slice(),
+                        shape_bconv,
+                        contiguous_stride(shape_bconv),
+                    )
+                    .unwrap(),
+                ),
+                y: TensorMut::new(
+                    u_dev.as_slice_mut(),
+                    shape_xconv,
+                    contiguous_stride(shape_xconv),
+                )
+                .unwrap(),
             },
         )
         .expect("conv run");
@@ -160,36 +166,21 @@ fn mamba2_block_tiny_end_to_end() {
             &stream,
             Workspace::None,
             SsdChunkScanArgs {
-                x: TensorRef {
-                    data: u_ssd_dev.as_slice(),
-                    shape: shape_x,
-                    stride: contiguous_stride(shape_x),
-                },
-                dt: TensorRef {
-                    data: dt_dev.as_slice(),
-                    shape: shape_dt,
-                    stride: contiguous_stride(shape_dt),
-                },
-                a: TensorRef {
-                    data: a_dev.as_slice(),
-                    shape: shape_a,
-                    stride: contiguous_stride(shape_a),
-                },
-                b: TensorRef {
-                    data: b_proj_dev.as_slice(),
-                    shape: shape_bn,
-                    stride: contiguous_stride(shape_bn),
-                },
-                c: TensorRef {
-                    data: c_proj_dev.as_slice(),
-                    shape: shape_bn,
-                    stride: contiguous_stride(shape_bn),
-                },
-                y: TensorMut {
-                    data: y_ssm_dev.as_slice_mut(),
-                    shape: shape_x,
-                    stride: contiguous_stride(shape_x),
-                },
+                x: TensorRef::new(u_ssd_dev.as_slice(), shape_x, contiguous_stride(shape_x))
+                    .unwrap(),
+                dt: TensorRef::new(dt_dev.as_slice(), shape_dt, contiguous_stride(shape_dt))
+                    .unwrap(),
+                a: TensorRef::new(a_dev.as_slice(), shape_a, contiguous_stride(shape_a)).unwrap(),
+                b: TensorRef::new(b_proj_dev.as_slice(), shape_bn, contiguous_stride(shape_bn))
+                    .unwrap(),
+                c: TensorRef::new(c_proj_dev.as_slice(), shape_bn, contiguous_stride(shape_bn))
+                    .unwrap(),
+                y: TensorMut::new(
+                    y_ssm_dev.as_slice_mut(),
+                    shape_x,
+                    contiguous_stride(shape_x),
+                )
+                .unwrap(),
             },
         )
         .expect("ssd run");

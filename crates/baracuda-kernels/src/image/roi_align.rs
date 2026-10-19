@@ -157,17 +157,17 @@ impl<T: Element> RoiAlignPlan<T> {
         crate::view_check::check_fits(&args.input)?;
         crate::view_check::check_fits(&args.rois)?;
         crate::view_check::check_fits(&args.output)?;
-        if args.input.shape != [self.desc.n, self.desc.c, self.desc.h, self.desc.w] {
+        if args.input.shape() != [self.desc.n, self.desc.c, self.desc.h, self.desc.w] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::RoiAlignPlan: input shape mismatch",
             ));
         }
-        if args.rois.shape != [self.desc.num_rois, 5] {
+        if args.rois.shape() != [self.desc.num_rois, 5] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::RoiAlignPlan: rois must be [num_rois, 5]",
             ));
         }
-        if args.output.shape
+        if args.output.shape()
             != [
                 self.desc.num_rois,
                 self.desc.c,
@@ -211,9 +211,9 @@ impl<T: Element> RoiAlignPlan<T> {
         if args.output.numel() == 0 {
             return Ok(());
         }
-        let input_ptr = args.input.data.as_raw().0 as *const c_void;
-        let rois_ptr = args.rois.data.as_raw().0 as *const c_void;
-        let out_ptr = args.output.data.as_raw().0 as *mut c_void;
+        let input_ptr = args.input.data().as_raw().0 as *const c_void;
+        let rois_ptr = args.rois.data().as_raw().0 as *const c_void;
+        let out_ptr = args.output.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         let aligned = if self.desc.aligned { 1 } else { 0 };
         let status = match T::KIND {

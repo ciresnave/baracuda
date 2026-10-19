@@ -105,21 +105,9 @@ mod cudnn_impl {
                         Workspace::Borrowed(dev_ws.as_slice_mut())
                     };
                     let args = Conv2dArgs::<T> {
-                        x: TensorRef {
-                            data: dev_x.as_slice(),
-                            shape: x_shape,
-                            stride: stx,
-                        },
-                        w: TensorRef {
-                            data: dev_w.as_slice(),
-                            shape: w_shape,
-                            stride: stw,
-                        },
-                        y: TensorMut {
-                            data: dev_y.as_slice_mut(),
-                            shape: y_shape,
-                            stride: sty,
-                        },
+                        x: TensorRef::new(dev_x.as_slice(), x_shape, stx).unwrap(),
+                        w: TensorRef::new(dev_w.as_slice(), w_shape, stw).unwrap(),
+                        y: TensorMut::new(dev_y.as_slice_mut(), y_shape, sty).unwrap(),
                     };
                     plan.run_fw(&stream, workspace, args)
                         .expect("conv2d warmup");
@@ -133,21 +121,9 @@ mod cudnn_impl {
                             Workspace::Borrowed(dev_ws.as_slice_mut())
                         };
                         let args = Conv2dArgs::<T> {
-                            x: TensorRef {
-                                data: dev_x.as_slice(),
-                                shape: x_shape,
-                                stride: stx,
-                            },
-                            w: TensorRef {
-                                data: dev_w.as_slice(),
-                                shape: w_shape,
-                                stride: stw,
-                            },
-                            y: TensorMut {
-                                data: dev_y.as_slice_mut(),
-                                shape: y_shape,
-                                stride: sty,
-                            },
+                            x: TensorRef::new(dev_x.as_slice(), x_shape, stx).unwrap(),
+                            w: TensorRef::new(dev_w.as_slice(), w_shape, stw).unwrap(),
+                            y: TensorMut::new(dev_y.as_slice_mut(), y_shape, sty).unwrap(),
                         };
                         plan.run_fw(&stream, workspace, args).expect("conv2d run");
                     })

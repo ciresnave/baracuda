@@ -310,13 +310,13 @@ impl<T: Element> CtcLossCudnnPlan<T> {
             cudnnCTCLoss(
                 h,
                 self.probs_desc.get(),
-                args.log_probs.data.as_raw().0 as *const c_void,
+                args.log_probs.data().as_raw().0 as *const c_void,
                 args.labels.as_ptr(),
                 args.label_lengths.as_ptr(),
                 args.input_lengths.as_ptr(),
-                args.costs.data.as_raw().0 as *mut c_void,
+                args.costs.data().as_raw().0 as *mut c_void,
                 self.grads_desc.get(),
-                args.grads.data.as_raw().0 as *mut c_void,
+                args.grads.data().as_raw().0 as *mut c_void,
                 algo,
                 self.ctc_desc.get(),
                 ws_ptr,
@@ -460,18 +460,18 @@ impl<T: Element> CtcLossCudnnPlan<T> {
             self.desc.batch,
             self.desc.num_classes,
         ];
-        if args.log_probs.shape != probs_shape {
+        if args.log_probs.shape() != probs_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::CtcLossCudnnPlan: log_probs shape != \
                  [max_input_length, batch, num_classes]",
             ));
         }
-        if args.grads.shape != probs_shape {
+        if args.grads.shape() != probs_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::CtcLossCudnnPlan: grads shape != log_probs shape",
             ));
         }
-        if args.costs.shape != [self.desc.batch] {
+        if args.costs.shape() != [self.desc.batch] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::CtcLossCudnnPlan: costs shape != [batch]",
             ));

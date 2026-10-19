@@ -113,32 +113,12 @@ fn run_f32(is_causal: bool) {
             &stream,
             Workspace::None,
             SdpaArgs {
-                q: TensorRef {
-                    data: dq.as_slice(),
-                    shape: sq,
-                    stride: contiguous_stride(sq),
-                },
-                k: TensorRef {
-                    data: dk.as_slice(),
-                    shape: sk,
-                    stride: contiguous_stride(sk),
-                },
-                v: TensorRef {
-                    data: dv.as_slice(),
-                    shape: sv,
-                    stride: contiguous_stride(sv),
-                },
+                q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+                k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+                v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
                 mask: None,
-                y: TensorMut {
-                    data: dy_ref.as_slice_mut(),
-                    shape: sy,
-                    stride: contiguous_stride(sy),
-                },
-                attn: TensorMut {
-                    data: dattn_ref.as_slice_mut(),
-                    shape: sa,
-                    stride: contiguous_stride(sa),
-                },
+                y: TensorMut::new(dy_ref.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
+                attn: TensorMut::new(dattn_ref.as_slice_mut(), sa, contiguous_stride(sa)).unwrap(),
             },
         )
         .expect("ref run");
@@ -157,31 +137,11 @@ fn run_f32(is_causal: bool) {
         &stream,
         Workspace::None,
         FlashSdpaArgs {
-            q: TensorRef {
-                data: dq.as_slice(),
-                shape: sq,
-                stride: contiguous_stride(sq),
-            },
-            k: TensorRef {
-                data: dk.as_slice(),
-                shape: sk,
-                stride: contiguous_stride(sk),
-            },
-            v: TensorRef {
-                data: dv.as_slice(),
-                shape: sv,
-                stride: contiguous_stride(sv),
-            },
-            y: TensorMut {
-                data: dy_flash.as_slice_mut(),
-                shape: sy,
-                stride: contiguous_stride(sy),
-            },
-            lse: TensorMut {
-                data: dlse.as_slice_mut(),
-                shape: sl,
-                stride: contiguous_stride(sl),
-            },
+            q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+            k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+            v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
+            y: TensorMut::new(dy_flash.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
+            lse: TensorMut::new(dlse.as_slice_mut(), sl, contiguous_stride(sl)).unwrap(),
             mask: None,
             alibi_slopes: None,
         },
@@ -266,32 +226,12 @@ fn flash_sdpa_f64_basic() {
             &stream,
             Workspace::None,
             SdpaArgs {
-                q: TensorRef {
-                    data: dq.as_slice(),
-                    shape: sq,
-                    stride: contiguous_stride(sq),
-                },
-                k: TensorRef {
-                    data: dk.as_slice(),
-                    shape: sk,
-                    stride: contiguous_stride(sk),
-                },
-                v: TensorRef {
-                    data: dv.as_slice(),
-                    shape: sv,
-                    stride: contiguous_stride(sv),
-                },
+                q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+                k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+                v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
                 mask: None,
-                y: TensorMut {
-                    data: dy_ref.as_slice_mut(),
-                    shape: sy,
-                    stride: contiguous_stride(sy),
-                },
-                attn: TensorMut {
-                    data: dattn_ref.as_slice_mut(),
-                    shape: sa,
-                    stride: contiguous_stride(sa),
-                },
+                y: TensorMut::new(dy_ref.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
+                attn: TensorMut::new(dattn_ref.as_slice_mut(), sa, contiguous_stride(sa)).unwrap(),
             },
         )
         .expect("ref run");
@@ -309,31 +249,11 @@ fn flash_sdpa_f64_basic() {
         &stream,
         Workspace::None,
         FlashSdpaArgs {
-            q: TensorRef {
-                data: dq.as_slice(),
-                shape: sq,
-                stride: contiguous_stride(sq),
-            },
-            k: TensorRef {
-                data: dk.as_slice(),
-                shape: sk,
-                stride: contiguous_stride(sk),
-            },
-            v: TensorRef {
-                data: dv.as_slice(),
-                shape: sv,
-                stride: contiguous_stride(sv),
-            },
-            y: TensorMut {
-                data: dy_flash.as_slice_mut(),
-                shape: sy,
-                stride: contiguous_stride(sy),
-            },
-            lse: TensorMut {
-                data: dlse.as_slice_mut(),
-                shape: sl,
-                stride: contiguous_stride(sl),
-            },
+            q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+            k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+            v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
+            y: TensorMut::new(dy_flash.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
+            lse: TensorMut::new(dlse.as_slice_mut(), sl, contiguous_stride(sl)).unwrap(),
             mask: None,
             alibi_slopes: None,
         },
@@ -404,32 +324,12 @@ fn flash_sdpa_f16_basic() {
             &stream,
             Workspace::None,
             SdpaArgs {
-                q: TensorRef {
-                    data: dq.as_slice(),
-                    shape: sq,
-                    stride: contiguous_stride(sq),
-                },
-                k: TensorRef {
-                    data: dk.as_slice(),
-                    shape: sk,
-                    stride: contiguous_stride(sk),
-                },
-                v: TensorRef {
-                    data: dv.as_slice(),
-                    shape: sv,
-                    stride: contiguous_stride(sv),
-                },
+                q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+                k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+                v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
                 mask: None,
-                y: TensorMut {
-                    data: dy_ref.as_slice_mut(),
-                    shape: sy,
-                    stride: contiguous_stride(sy),
-                },
-                attn: TensorMut {
-                    data: dattn_ref.as_slice_mut(),
-                    shape: sa,
-                    stride: contiguous_stride(sa),
-                },
+                y: TensorMut::new(dy_ref.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
+                attn: TensorMut::new(dattn_ref.as_slice_mut(), sa, contiguous_stride(sa)).unwrap(),
             },
         )
         .expect("ref run");
@@ -447,31 +347,11 @@ fn flash_sdpa_f16_basic() {
         &stream,
         Workspace::None,
         FlashSdpaArgs {
-            q: TensorRef {
-                data: dq.as_slice(),
-                shape: sq,
-                stride: contiguous_stride(sq),
-            },
-            k: TensorRef {
-                data: dk.as_slice(),
-                shape: sk,
-                stride: contiguous_stride(sk),
-            },
-            v: TensorRef {
-                data: dv.as_slice(),
-                shape: sv,
-                stride: contiguous_stride(sv),
-            },
-            y: TensorMut {
-                data: dy_flash.as_slice_mut(),
-                shape: sy,
-                stride: contiguous_stride(sy),
-            },
-            lse: TensorMut {
-                data: dlse.as_slice_mut(),
-                shape: sl,
-                stride: contiguous_stride(sl),
-            },
+            q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+            k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+            v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
+            y: TensorMut::new(dy_flash.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
+            lse: TensorMut::new(dlse.as_slice_mut(), sl, contiguous_stride(sl)).unwrap(),
             mask: None,
             alibi_slopes: None,
         },
@@ -549,32 +429,12 @@ fn flash_sdpa_bf16_basic() {
             &stream,
             Workspace::None,
             SdpaArgs {
-                q: TensorRef {
-                    data: dq.as_slice(),
-                    shape: sq,
-                    stride: contiguous_stride(sq),
-                },
-                k: TensorRef {
-                    data: dk.as_slice(),
-                    shape: sk,
-                    stride: contiguous_stride(sk),
-                },
-                v: TensorRef {
-                    data: dv.as_slice(),
-                    shape: sv,
-                    stride: contiguous_stride(sv),
-                },
+                q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+                k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+                v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
                 mask: None,
-                y: TensorMut {
-                    data: dy_ref.as_slice_mut(),
-                    shape: sy,
-                    stride: contiguous_stride(sy),
-                },
-                attn: TensorMut {
-                    data: dattn_ref.as_slice_mut(),
-                    shape: sa,
-                    stride: contiguous_stride(sa),
-                },
+                y: TensorMut::new(dy_ref.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
+                attn: TensorMut::new(dattn_ref.as_slice_mut(), sa, contiguous_stride(sa)).unwrap(),
             },
         )
         .expect("ref run");
@@ -592,31 +452,11 @@ fn flash_sdpa_bf16_basic() {
         &stream,
         Workspace::None,
         FlashSdpaArgs {
-            q: TensorRef {
-                data: dq.as_slice(),
-                shape: sq,
-                stride: contiguous_stride(sq),
-            },
-            k: TensorRef {
-                data: dk.as_slice(),
-                shape: sk,
-                stride: contiguous_stride(sk),
-            },
-            v: TensorRef {
-                data: dv.as_slice(),
-                shape: sv,
-                stride: contiguous_stride(sv),
-            },
-            y: TensorMut {
-                data: dy_flash.as_slice_mut(),
-                shape: sy,
-                stride: contiguous_stride(sy),
-            },
-            lse: TensorMut {
-                data: dlse.as_slice_mut(),
-                shape: sl,
-                stride: contiguous_stride(sl),
-            },
+            q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+            k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+            v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
+            y: TensorMut::new(dy_flash.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
+            lse: TensorMut::new(dlse.as_slice_mut(), sl, contiguous_stride(sl)).unwrap(),
             mask: None,
             alibi_slopes: None,
         },
@@ -725,31 +565,11 @@ fn run_broadcast_route_case(b: i32, h: i32, q: i32, k: i32, d: i32, tol_mul: f32
             None => Workspace::None,
         };
         let args = FlashSdpaArgs::<f16> {
-            q: TensorRef {
-                data: dq.as_slice(),
-                shape: sq,
-                stride: stq,
-            },
-            k: TensorRef {
-                data: dk.as_slice(),
-                shape: sk,
-                stride: stk,
-            },
-            v: TensorRef {
-                data: dv.as_slice(),
-                shape: sk,
-                stride: stk,
-            },
-            y: TensorMut {
-                data: dy.as_slice_mut(),
-                shape: sy,
-                stride: sty,
-            },
-            lse: TensorMut {
-                data: dlse.as_slice_mut(),
-                shape: sl,
-                stride: stl,
-            },
+            q: TensorRef::new(dq.as_slice(), sq, stq).unwrap(),
+            k: TensorRef::new(dk.as_slice(), sk, stk).unwrap(),
+            v: TensorRef::new(dv.as_slice(), sk, stk).unwrap(),
+            y: TensorMut::new(dy.as_slice_mut(), sy, sty).unwrap(),
+            lse: TensorMut::new(dlse.as_slice_mut(), sl, stl).unwrap(),
             mask: None,
             alibi_slopes: None,
         };
@@ -781,31 +601,11 @@ fn run_broadcast_route_case(b: i32, h: i32, q: i32, k: i32, d: i32, tol_mul: f32
             None => Workspace::None,
         };
         let args_rep = FlashSdpaArgs::<f16> {
-            q: TensorRef {
-                data: dq.as_slice(),
-                shape: sq,
-                stride: stq,
-            },
-            k: TensorRef {
-                data: dk_rep.as_slice(),
-                shape: sk,
-                stride: contiguous_stride(sk),
-            },
-            v: TensorRef {
-                data: dv_rep.as_slice(),
-                shape: sk,
-                stride: contiguous_stride(sk),
-            },
-            y: TensorMut {
-                data: dy_rep.as_slice_mut(),
-                shape: sy,
-                stride: sty,
-            },
-            lse: TensorMut {
-                data: dlse_rep.as_slice_mut(),
-                shape: sl,
-                stride: stl,
-            },
+            q: TensorRef::new(dq.as_slice(), sq, stq).unwrap(),
+            k: TensorRef::new(dk_rep.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+            v: TensorRef::new(dv_rep.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+            y: TensorMut::new(dy_rep.as_slice_mut(), sy, sty).unwrap(),
+            lse: TensorMut::new(dlse_rep.as_slice_mut(), sl, stl).unwrap(),
             mask: None,
             alibi_slopes: None,
         };

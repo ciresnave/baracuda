@@ -208,21 +208,9 @@ fn conv1d_f32_fw_bw() {
             Workspace::Borrowed(dev_ws_fw.as_slice_mut())
         },
         Conv1dArgs::<f32> {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape: x_shape,
-                stride: contiguous_stride(x_shape),
-            },
-            w: TensorRef {
-                data: dev_w.as_slice(),
-                shape: w_shape,
-                stride: contiguous_stride(w_shape),
-            },
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
+            x: TensorRef::new(dev_x.as_slice(), x_shape, contiguous_stride(x_shape)).unwrap(),
+            w: TensorRef::new(dev_w.as_slice(), w_shape, contiguous_stride(w_shape)).unwrap(),
+            y: TensorMut::new(dev_y.as_slice_mut(), y_shape, contiguous_stride(y_shape)).unwrap(),
         },
     )
     .expect("run_fw");
@@ -256,21 +244,10 @@ fn conv1d_f32_fw_bw() {
             Workspace::Borrowed(dev_ws_bd.as_slice_mut())
         },
         Conv1dBwArgs::<f32> {
-            w: TensorRef {
-                data: dev_w.as_slice(),
-                shape: w_shape,
-                stride: contiguous_stride(w_shape),
-            },
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
-            dx: TensorMut {
-                data: dev_dx.as_slice_mut(),
-                shape: dx_shape,
-                stride: contiguous_stride(dx_shape),
-            },
+            w: TensorRef::new(dev_w.as_slice(), w_shape, contiguous_stride(w_shape)).unwrap(),
+            dy: TensorRef::new(dev_dy.as_slice(), y_shape, contiguous_stride(y_shape)).unwrap(),
+            dx: TensorMut::new(dev_dx.as_slice_mut(), dx_shape, contiguous_stride(dx_shape))
+                .unwrap(),
         },
     )
     .expect("run_bw_data");
@@ -302,21 +279,9 @@ fn conv1d_f32_fw_bw() {
             Workspace::Borrowed(dev_ws_bf.as_slice_mut())
         },
         Conv1dDwArgs::<f32> {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape: x_shape,
-                stride: contiguous_stride(x_shape),
-            },
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
-            dw: TensorMut {
-                data: dev_dw.as_slice_mut(),
-                shape: w_shape,
-                stride: contiguous_stride(w_shape),
-            },
+            x: TensorRef::new(dev_x.as_slice(), x_shape, contiguous_stride(x_shape)).unwrap(),
+            dy: TensorRef::new(dev_dy.as_slice(), y_shape, contiguous_stride(y_shape)).unwrap(),
+            dw: TensorMut::new(dev_dw.as_slice_mut(), w_shape, contiguous_stride(w_shape)).unwrap(),
         },
     )
     .expect("run_dw");

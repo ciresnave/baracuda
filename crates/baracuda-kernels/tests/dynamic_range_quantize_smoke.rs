@@ -92,21 +92,9 @@ fn dynamic_range_quantize_f32_s8_per_token_symmetric_basic() {
         DynamicRangeQuantizePlan::<f32, S8>::select(&stream, &desc, PlanPreference::default())
             .expect("select");
     let args = DynamicRangeQuantizeArgs::<f32, S8> {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape: [n, d],
-            stride: contiguous_stride([n, d]),
-        },
-        scale_out: TensorMut {
-            data: dev_scale.as_slice_mut(),
-            shape: [n],
-            stride: contiguous_stride([n]),
-        },
-        output: TensorMut {
-            data: dev_q.as_slice_mut(),
-            shape: [n, d],
-            stride: contiguous_stride([n, d]),
-        },
+        input: TensorRef::new(dev_x.as_slice(), [n, d], contiguous_stride([n, d])).unwrap(),
+        scale_out: TensorMut::new(dev_scale.as_slice_mut(), [n], contiguous_stride([n])).unwrap(),
+        output: TensorMut::new(dev_q.as_slice_mut(), [n, d], contiguous_stride([n, d])).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

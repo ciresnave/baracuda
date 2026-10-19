@@ -52,21 +52,10 @@ fn segment_mean_backward_f32_basic() {
     let plan = SegmentMeanBackwardPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = SegmentMeanBackwardArgs::<f32> {
-        d_output: TensorRef {
-            data: dev_dout.as_slice(),
-            shape: [ns, d],
-            stride: contiguous_stride([ns, d]),
-        },
-        segment_ids: TensorRef {
-            data: dev_seg.as_slice(),
-            shape: [n],
-            stride: contiguous_stride([n]),
-        },
-        d_input: TensorMut {
-            data: dev_dinput.as_slice_mut(),
-            shape: [n, d],
-            stride: contiguous_stride([n, d]),
-        },
+        d_output: TensorRef::new(dev_dout.as_slice(), [ns, d], contiguous_stride([ns, d])).unwrap(),
+        segment_ids: TensorRef::new(dev_seg.as_slice(), [n], contiguous_stride([n])).unwrap(),
+        d_input: TensorMut::new(dev_dinput.as_slice_mut(), [n, d], contiguous_stride([n, d]))
+            .unwrap(),
     };
     plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
         .expect("run");

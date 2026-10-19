@@ -111,36 +111,12 @@ fn run_once(
         stream,
         Workspace::None,
         HyperConnectionArgs {
-            x_expanded: TensorRef {
-                data: dx.as_slice(),
-                shape: sx,
-                stride: contiguous_stride(sx),
-            },
-            rmsnorm_weight: TensorRef {
-                data: dgamma.as_slice(),
-                shape: sg,
-                stride: contiguous_stride(sg),
-            },
-            h_pre: TensorRef {
-                data: dh_pre.as_slice(),
-                shape: sh,
-                stride: contiguous_stride(sh),
-            },
-            h_post: TensorRef {
-                data: dh_post.as_slice(),
-                shape: sh,
-                stride: contiguous_stride(sh),
-            },
-            h_res: TensorRef {
-                data: dh_res.as_slice(),
-                shape: sr,
-                stride: contiguous_stride(sr),
-            },
-            out: TensorMut {
-                data: dout.as_slice_mut(),
-                shape: sx,
-                stride: contiguous_stride(sx),
-            },
+            x_expanded: TensorRef::new(dx.as_slice(), sx, contiguous_stride(sx)).unwrap(),
+            rmsnorm_weight: TensorRef::new(dgamma.as_slice(), sg, contiguous_stride(sg)).unwrap(),
+            h_pre: TensorRef::new(dh_pre.as_slice(), sh, contiguous_stride(sh)).unwrap(),
+            h_post: TensorRef::new(dh_post.as_slice(), sh, contiguous_stride(sh)).unwrap(),
+            h_res: TensorRef::new(dh_res.as_slice(), sr, contiguous_stride(sr)).unwrap(),
+            out: TensorMut::new(dout.as_slice_mut(), sx, contiguous_stride(sx)).unwrap(),
         },
     )
     .expect("plan run");

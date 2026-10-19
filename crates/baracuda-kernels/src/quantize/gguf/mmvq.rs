@@ -210,12 +210,12 @@ impl<T: GgufMmvqActivation> GgufMmvqPlan<T> {
         crate::view_check::check_fits(&args.weight)?;
         crate::view_check::check_fits(&args.activation)?;
         crate::view_check::check_fits(&args.output)?;
-        if args.activation.shape != [self.desc.ncols] {
+        if args.activation.shape() != [self.desc.ncols] {
             return Err(Error::InvalidProblem(
                 "GgufMmvqPlan: activation shape != [ncols]",
             ));
         }
-        if args.output.shape != [self.desc.nrows] {
+        if args.output.shape() != [self.desc.nrows] {
             return Err(Error::InvalidProblem(
                 "GgufMmvqPlan: output shape != [nrows]",
             ));
@@ -230,7 +230,7 @@ impl<T: GgufMmvqActivation> GgufMmvqPlan<T> {
         // Require the slice to start at the matrix's first byte (i.e.
         // shape[0] == matrix_bytes when offset == 0) and otherwise to
         // simply contain enough bytes after the offset.
-        let weight_len_bytes = args.weight.shape[0] as i64;
+        let weight_len_bytes = args.weight.shape()[0] as i64;
         if self.desc.w_start_byte_offset < 0 {
             return Err(Error::InvalidProblem(
                 "GgufMmvqPlan: w_start_byte_offset must be non-negative",
@@ -282,14 +282,14 @@ impl<T: GgufMmvqActivation> GgufMmvqPlan<T> {
         if self.desc.nrows == 0 || self.desc.ncols == 0 {
             return Ok(());
         }
-        let w_ptr = args.weight.data.as_raw().0 as *const c_void;
-        let y_ptr = args.activation.data.as_raw().0 as *const c_void;
-        let dst_ptr = args.output.data.as_raw().0 as *mut c_void;
+        let w_ptr = args.weight.data().as_raw().0 as *const c_void;
+        let y_ptr = args.activation.data().as_raw().0 as *const c_void;
+        let dst_ptr = args.output.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         let ncols = self.desc.ncols;
         let nrows = self.desc.nrows;
         let w_off = self.desc.w_start_byte_offset;
-        let stride_y = args.activation.stride[0];
+        let stride_y = args.activation.stride()[0];
 
         let use_strided = w_off != 0 || stride_y != 1;
 

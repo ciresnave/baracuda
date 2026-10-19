@@ -83,23 +83,11 @@ fn eig_f32_pm_i() {
     let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_alloc).expect("alloc ws");
 
     let args = EigArgs::<f32> {
-        a: TensorMut {
-            data: dev_a.as_slice_mut(),
-            shape: [n, n],
-            stride: contiguous_stride([n, n]),
-        },
-        w: TensorMut {
-            data: dev_w.as_slice_mut(),
-            shape: [2 * n],
-            stride: [1],
-        },
+        a: TensorMut::new(dev_a.as_slice_mut(), [n, n], contiguous_stride([n, n])).unwrap(),
+        w: TensorMut::new(dev_w.as_slice_mut(), [2 * n], [1]).unwrap(),
         vl: None,
         vr: None,
-        info: TensorMut {
-            data: dev_info.as_slice_mut(),
-            shape: [1i32],
-            stride: [1],
-        },
+        info: TensorMut::new(dev_info.as_slice_mut(), [1i32], [1]).unwrap(),
     };
     plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
         .expect("run eig f32");
@@ -155,23 +143,11 @@ fn eig_f64_pm_i() {
     let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_alloc).expect("alloc ws");
 
     let args = EigArgs::<f64> {
-        a: TensorMut {
-            data: dev_a.as_slice_mut(),
-            shape: [n, n],
-            stride: contiguous_stride([n, n]),
-        },
-        w: TensorMut {
-            data: dev_w.as_slice_mut(),
-            shape: [2 * n],
-            stride: [1],
-        },
+        a: TensorMut::new(dev_a.as_slice_mut(), [n, n], contiguous_stride([n, n])).unwrap(),
+        w: TensorMut::new(dev_w.as_slice_mut(), [2 * n], [1]).unwrap(),
         vl: None,
         vr: None,
-        info: TensorMut {
-            data: dev_info.as_slice_mut(),
-            shape: [1i32],
-            stride: [1],
-        },
+        info: TensorMut::new(dev_info.as_slice_mut(), [1i32], [1]).unwrap(),
     };
     plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
         .expect("run eig f64");
@@ -225,23 +201,11 @@ fn eig_complex32_pm_i() {
     let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_alloc).expect("alloc ws");
 
     let args = EigArgs::<Complex64> {
-        a: TensorMut {
-            data: dev_a.as_slice_mut(),
-            shape: [n, n],
-            stride: contiguous_stride([n, n]),
-        },
-        w: TensorMut {
-            data: dev_w.as_slice_mut(),
-            shape: [n],
-            stride: [1],
-        },
+        a: TensorMut::new(dev_a.as_slice_mut(), [n, n], contiguous_stride([n, n])).unwrap(),
+        w: TensorMut::new(dev_w.as_slice_mut(), [n], [1]).unwrap(),
         vl: None,
         vr: None,
-        info: TensorMut {
-            data: dev_info.as_slice_mut(),
-            shape: [1i32],
-            stride: [1],
-        },
+        info: TensorMut::new(dev_info.as_slice_mut(), [1i32], [1]).unwrap(),
     };
     plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
         .expect("run eig Complex64");
@@ -295,23 +259,11 @@ fn eig_complex64_pm_i() {
     let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_alloc).expect("alloc ws");
 
     let args = EigArgs::<Complex128> {
-        a: TensorMut {
-            data: dev_a.as_slice_mut(),
-            shape: [n, n],
-            stride: contiguous_stride([n, n]),
-        },
-        w: TensorMut {
-            data: dev_w.as_slice_mut(),
-            shape: [n],
-            stride: [1],
-        },
+        a: TensorMut::new(dev_a.as_slice_mut(), [n, n], contiguous_stride([n, n])).unwrap(),
+        w: TensorMut::new(dev_w.as_slice_mut(), [n], [1]).unwrap(),
         vl: None,
         vr: None,
-        info: TensorMut {
-            data: dev_info.as_slice_mut(),
-            shape: [1i32],
-            stride: [1],
-        },
+        info: TensorMut::new(dev_info.as_slice_mut(), [1i32], [1]).unwrap(),
     };
     plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
         .expect("run eig Complex128");

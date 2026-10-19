@@ -78,21 +78,9 @@ fn minimum_f32_contig() {
         &stream,
         Workspace::None,
         BinaryArgs {
-            a: TensorRef {
-                data: dev_a.as_slice(),
-                shape,
-                stride,
-            },
-            b: TensorRef {
-                data: dev_b.as_slice(),
-                shape,
-                stride,
-            },
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape,
-                stride,
-            },
+            a: TensorRef::new(dev_a.as_slice(), shape, stride).unwrap(),
+            b: TensorRef::new(dev_b.as_slice(), shape, stride).unwrap(),
+            y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
         },
     )
     .expect("run");
@@ -143,21 +131,9 @@ fn minimum_f64_contig() {
         &stream,
         Workspace::None,
         BinaryArgs {
-            a: TensorRef {
-                data: dev_a.as_slice(),
-                shape,
-                stride,
-            },
-            b: TensorRef {
-                data: dev_b.as_slice(),
-                shape,
-                stride,
-            },
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape,
-                stride,
-            },
+            a: TensorRef::new(dev_a.as_slice(), shape, stride).unwrap(),
+            b: TensorRef::new(dev_b.as_slice(), shape, stride).unwrap(),
+            y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
         },
     )
     .expect("run");
@@ -212,21 +188,9 @@ fn minimum_f16_contig() {
         &stream,
         Workspace::None,
         BinaryArgs {
-            a: TensorRef {
-                data: dev_a.as_slice(),
-                shape,
-                stride,
-            },
-            b: TensorRef {
-                data: dev_b.as_slice(),
-                shape,
-                stride,
-            },
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape,
-                stride,
-            },
+            a: TensorRef::new(dev_a.as_slice(), shape, stride).unwrap(),
+            b: TensorRef::new(dev_b.as_slice(), shape, stride).unwrap(),
+            y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
         },
     )
     .expect("run");
@@ -282,21 +246,9 @@ fn minimum_bf16_contig() {
         &stream,
         Workspace::None,
         BinaryArgs {
-            a: TensorRef {
-                data: dev_a.as_slice(),
-                shape,
-                stride,
-            },
-            b: TensorRef {
-                data: dev_b.as_slice(),
-                shape,
-                stride,
-            },
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape,
-                stride,
-            },
+            a: TensorRef::new(dev_a.as_slice(), shape, stride).unwrap(),
+            b: TensorRef::new(dev_b.as_slice(), shape, stride).unwrap(),
+            y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
         },
     )
     .expect("run");

@@ -252,12 +252,12 @@ impl<T: Element, const N: usize> FftShiftNdPlan<T, N> {
         let mut expected_shape = [0i32; N];
         // Copy the leading `ndim` entries (guaranteed == N by `select`).
         expected_shape[..ndim].copy_from_slice(&self.desc.shape[..ndim]);
-        if args.input.shape != expected_shape {
+        if args.input.shape() != expected_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FftShiftNdPlan: input shape != descriptor.shape",
             ));
         }
-        if args.output.shape != expected_shape {
+        if args.output.shape() != expected_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FftShiftNdPlan: output shape != descriptor.shape",
             ));
@@ -265,19 +265,19 @@ impl<T: Element, const N: usize> FftShiftNdPlan<T, N> {
         // Kernel decomposes flat indices using contiguous strides — both
         // operands must be dense / contiguous.
         let contig = contiguous_stride(expected_shape);
-        if args.input.stride != contig {
+        if args.input.stride() != contig {
             return Err(Error::Unsupported(
                 "baracuda-kernels::FftShiftNdPlan: input must be contiguous",
             ));
         }
-        if args.output.stride != contig {
+        if args.output.stride() != contig {
             return Err(Error::Unsupported(
                 "baracuda-kernels::FftShiftNdPlan: output must be contiguous",
             ));
         }
         let numel = args.output.numel();
-        let x_len = args.input.data.len() as i64;
-        let y_len = args.output.data.len() as i64;
+        let x_len = args.input.data().len() as i64;
+        let y_len = args.output.data().len() as i64;
         if x_len < numel || y_len < numel {
             return Err(Error::BufferTooSmall {
                 needed: numel as usize,
@@ -309,7 +309,7 @@ impl<T: Element, const N: usize> FftShiftNdPlan<T, N> {
         shape_arr[..ndim].copy_from_slice(&self.desc.shape[..ndim]);
         // Stride layout matches the kernel's expectation
         // (`stride[d] = product(shape[d+1..ndim])` — dense row-major).
-        stride_arr[..ndim].copy_from_slice(&args.output.stride[..ndim]);
+        stride_arr[..ndim].copy_from_slice(&args.output.stride()[..ndim]);
         // Build the per-axis shift map from the shifted-axes set.
         let num_shift_axes = self.desc.num_shift_axes as usize;
         for &axis in &self.desc.shift_axes[..num_shift_axes] {
@@ -319,8 +319,8 @@ impl<T: Element, const N: usize> FftShiftNdPlan<T, N> {
             shift_amt_arr[a] = if self.desc.inverse { n - half } else { half };
         }
 
-        let x_ptr = args.input.data.as_raw().0 as *const c_void;
-        let y_ptr = args.output.data.as_raw().0 as *mut c_void;
+        let x_ptr = args.input.data().as_raw().0 as *const c_void;
+        let y_ptr = args.output.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         let rank = ndim as i32;
 

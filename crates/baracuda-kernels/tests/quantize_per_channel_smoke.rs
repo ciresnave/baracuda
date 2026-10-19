@@ -82,26 +82,16 @@ fn quantize_per_channel_f32_s8_rank3_axis1() {
     let plan = QuantizePerChannelPlan::<f32, S8>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = QuantizePerChannelArgs::<f32, S8> {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape: shape4,
-            stride: contiguous_stride(shape4),
-        },
-        scale: TensorRef {
-            data: dev_scale.as_slice(),
-            shape: [c as i32],
-            stride: contiguous_stride([c as i32]),
-        },
-        zero_point: TensorRef {
-            data: dev_zp.as_slice(),
-            shape: [c as i32],
-            stride: contiguous_stride([c as i32]),
-        },
-        output: TensorMut {
-            data: dev_q.as_slice_mut(),
-            shape: shape4,
-            stride: contiguous_stride(shape4),
-        },
+        input: TensorRef::new(dev_x.as_slice(), shape4, contiguous_stride(shape4)).unwrap(),
+        scale: TensorRef::new(
+            dev_scale.as_slice(),
+            [c as i32],
+            contiguous_stride([c as i32]),
+        )
+        .unwrap(),
+        zero_point: TensorRef::new(dev_zp.as_slice(), [c as i32], contiguous_stride([c as i32]))
+            .unwrap(),
+        output: TensorMut::new(dev_q.as_slice_mut(), shape4, contiguous_stride(shape4)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

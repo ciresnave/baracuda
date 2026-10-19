@@ -102,21 +102,14 @@ fn run_case_3d(concat_dim: usize) {
     let plan =
         ConcatPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = ConcatArgs::<f32, 3> {
-        a: TensorRef {
-            data: dev_a.as_slice(),
-            shape: a_shape,
-            stride: contiguous_stride(a_shape),
-        },
-        b: TensorRef {
-            data: dev_b.as_slice(),
-            shape: b_shape,
-            stride: contiguous_stride(b_shape),
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: output_shape,
-            stride: contiguous_stride(output_shape),
-        },
+        a: TensorRef::new(dev_a.as_slice(), a_shape, contiguous_stride(a_shape)).unwrap(),
+        b: TensorRef::new(dev_b.as_slice(), b_shape, contiguous_stride(b_shape)).unwrap(),
+        y: TensorMut::new(
+            dev_y.as_slice_mut(),
+            output_shape,
+            contiguous_stride(output_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -174,21 +167,14 @@ fn concat_1d() {
     let plan =
         ConcatPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = ConcatArgs::<f32, 1> {
-        a: TensorRef {
-            data: dev_a.as_slice(),
-            shape: a_shape,
-            stride: contiguous_stride(a_shape),
-        },
-        b: TensorRef {
-            data: dev_b.as_slice(),
-            shape: b_shape,
-            stride: contiguous_stride(b_shape),
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: output_shape,
-            stride: contiguous_stride(output_shape),
-        },
+        a: TensorRef::new(dev_a.as_slice(), a_shape, contiguous_stride(a_shape)).unwrap(),
+        b: TensorRef::new(dev_b.as_slice(), b_shape, contiguous_stride(b_shape)).unwrap(),
+        y: TensorMut::new(
+            dev_y.as_slice_mut(),
+            output_shape,
+            contiguous_stride(output_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -238,21 +224,14 @@ fn concat_2d_feature_dim() {
     let plan =
         ConcatPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = ConcatArgs::<f32, 2> {
-        a: TensorRef {
-            data: dev_a.as_slice(),
-            shape: a_shape,
-            stride: contiguous_stride(a_shape),
-        },
-        b: TensorRef {
-            data: dev_b.as_slice(),
-            shape: b_shape,
-            stride: contiguous_stride(b_shape),
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: output_shape,
-            stride: contiguous_stride(output_shape),
-        },
+        a: TensorRef::new(dev_a.as_slice(), a_shape, contiguous_stride(a_shape)).unwrap(),
+        b: TensorRef::new(dev_b.as_slice(), b_shape, contiguous_stride(b_shape)).unwrap(),
+        y: TensorMut::new(
+            dev_y.as_slice_mut(),
+            output_shape,
+            contiguous_stride(output_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

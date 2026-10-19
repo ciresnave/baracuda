@@ -132,12 +132,12 @@ impl<T: Element> PixelShufflePlan<T> {
         crate::view_check::check_fits(&args.output)?;
         let r = self.desc.upscale_factor;
         let cin = self.desc.c * r * r;
-        if args.input.shape != [self.desc.n, cin, self.desc.h, self.desc.w] {
+        if args.input.shape() != [self.desc.n, cin, self.desc.h, self.desc.w] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::PixelShufflePlan: input shape must be [N, C*r*r, H, W]",
             ));
         }
-        if args.output.shape != [self.desc.n, self.desc.c, self.desc.h * r, self.desc.w * r] {
+        if args.output.shape() != [self.desc.n, self.desc.c, self.desc.h * r, self.desc.w * r] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::PixelShufflePlan: output shape must be [N, C, H*r, W*r]",
             ));
@@ -174,8 +174,8 @@ impl<T: Element> PixelShufflePlan<T> {
         if args.output.numel() == 0 {
             return Ok(());
         }
-        let input_ptr = args.input.data.as_raw().0 as *const c_void;
-        let out_ptr = args.output.data.as_raw().0 as *mut c_void;
+        let input_ptr = args.input.data().as_raw().0 as *const c_void;
+        let out_ptr = args.output.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         let (n, c, h, w, r) = (
             self.desc.n,

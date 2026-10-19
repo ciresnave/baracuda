@@ -151,13 +151,13 @@ impl<T: Element, const N: usize> IndexSelectPlan<T, N> {
         &self,
         args: &IndexSelectArgs<'_, T, N, I>,
     ) -> Result<()> {
-        if args.out.shape != self.desc.out_shape {
+        if args.out.shape() != self.desc.out_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::IndexSelectPlan: out shape mismatch with descriptor",
             ));
         }
         let expected_idx = self.desc.out_shape[self.desc.select_dim as usize];
-        if args.idx.shape[0] != expected_idx {
+        if args.idx.shape()[0] != expected_idx {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::IndexSelectPlan: idx.shape[0] must equal \
                  out_shape[select_dim]",
@@ -170,8 +170,8 @@ impl<T: Element, const N: usize> IndexSelectPlan<T, N> {
         }
         let out_numel = args.out.numel();
         let idx_numel = args.idx.numel();
-        let out_len = args.out.data.len() as i64;
-        let idx_len = args.idx.data.len() as i64;
+        let out_len = args.out.data().len() as i64;
+        let idx_len = args.idx.data().len() as i64;
         if out_len < out_numel {
             return Err(Error::BufferTooSmall {
                 needed: out_numel as usize,
@@ -220,14 +220,14 @@ impl<T: Element, const N: usize> IndexSelectPlan<T, N> {
         if out_numel == 0 {
             return Ok(());
         }
-        let src_ptr = args.src.data.as_raw().0 as *const c_void;
-        let idx_ptr = args.idx.data.as_raw().0 as *const c_void;
-        let out_ptr = args.out.data.as_raw().0 as *mut c_void;
+        let src_ptr = args.src.data().as_raw().0 as *const c_void;
+        let idx_ptr = args.idx.data().as_raw().0 as *const c_void;
+        let out_ptr = args.out.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
         let out_shape = self.desc.out_shape;
-        let stride_src = args.src.stride;
-        let stride_out = args.out.stride;
+        let stride_src = args.src.stride();
+        let stride_out = args.out.stride();
         let rank = N as i32;
 
         let status = match (T::KIND, I::KIND) {

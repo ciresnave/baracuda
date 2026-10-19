@@ -37,21 +37,24 @@ fn sort_backward_f32_basic() {
         &stream,
         Workspace::None,
         SortArgs::<f32> {
-            input: TensorRef {
-                data: dev_in.as_slice(),
-                shape: [batch, row_len],
-                stride: contiguous_stride([batch, row_len]),
-            },
-            values: TensorMut {
-                data: dev_vals.as_slice_mut(),
-                shape: [batch, row_len],
-                stride: contiguous_stride([batch, row_len]),
-            },
-            indices: TensorMut {
-                data: dev_idx.as_slice_mut(),
-                shape: [batch, row_len],
-                stride: contiguous_stride([batch, row_len]),
-            },
+            input: TensorRef::new(
+                dev_in.as_slice(),
+                [batch, row_len],
+                contiguous_stride([batch, row_len]),
+            )
+            .unwrap(),
+            values: TensorMut::new(
+                dev_vals.as_slice_mut(),
+                [batch, row_len],
+                contiguous_stride([batch, row_len]),
+            )
+            .unwrap(),
+            indices: TensorMut::new(
+                dev_idx.as_slice_mut(),
+                [batch, row_len],
+                contiguous_stride([batch, row_len]),
+            )
+            .unwrap(),
         },
     )
     .expect("fw");
@@ -76,21 +79,24 @@ fn sort_backward_f32_basic() {
             &stream,
             Workspace::None,
             SortBackwardArgs::<f32> {
-                dy: TensorRef {
-                    data: dev_dy.as_slice(),
-                    shape: [batch, row_len],
-                    stride: contiguous_stride([batch, row_len]),
-                },
-                indices: TensorRef {
-                    data: dev_idx.as_slice(),
-                    shape: [batch, row_len],
-                    stride: contiguous_stride([batch, row_len]),
-                },
-                dx: TensorMut {
-                    data: dev_dx.as_slice_mut(),
-                    shape: [batch, row_len],
-                    stride: contiguous_stride([batch, row_len]),
-                },
+                dy: TensorRef::new(
+                    dev_dy.as_slice(),
+                    [batch, row_len],
+                    contiguous_stride([batch, row_len]),
+                )
+                .unwrap(),
+                indices: TensorRef::new(
+                    dev_idx.as_slice(),
+                    [batch, row_len],
+                    contiguous_stride([batch, row_len]),
+                )
+                .unwrap(),
+                dx: TensorMut::new(
+                    dev_dx.as_slice_mut(),
+                    [batch, row_len],
+                    contiguous_stride([batch, row_len]),
+                )
+                .unwrap(),
             },
         )
         .expect("bw");

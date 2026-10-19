@@ -204,27 +204,27 @@ impl<T: Element> KvCacheAppendPlan<T> {
             self.desc.max_cache_len,
             self.desc.d_v,
         ];
-        if args.k_new.shape != shape_k_new {
+        if args.k_new.shape() != shape_k_new {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::KvCacheAppendPlan: k_new shape mismatch",
             ));
         }
-        if args.v_new.shape != shape_v_new {
+        if args.v_new.shape() != shape_v_new {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::KvCacheAppendPlan: v_new shape mismatch",
             ));
         }
-        if args.k_cache.shape != shape_k_cache {
+        if args.k_cache.shape() != shape_k_cache {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::KvCacheAppendPlan: k_cache shape mismatch",
             ));
         }
-        if args.v_cache.shape != shape_v_cache {
+        if args.v_cache.shape() != shape_v_cache {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::KvCacheAppendPlan: v_cache shape mismatch",
             ));
         }
-        if args.cache_offsets.shape != [self.desc.batch_size] {
+        if args.cache_offsets.shape() != [self.desc.batch_size] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::KvCacheAppendPlan: cache_offsets shape must be [batch_size]",
             ));
@@ -238,7 +238,7 @@ impl<T: Element> KvCacheAppendPlan<T> {
                 "baracuda-kernels::KvCacheAppendPlan: trailblazer requires contiguous K/V tensors",
             ));
         }
-        if args.cache_offsets.stride != [1] {
+        if args.cache_offsets.stride() != [1] {
             return Err(Error::Unsupported(
                 "baracuda-kernels::KvCacheAppendPlan: cache_offsets must be unit-stride",
             ));
@@ -247,20 +247,20 @@ impl<T: Element> KvCacheAppendPlan<T> {
         let v_new_n = args.v_new.numel();
         let k_cache_n = args.k_cache.numel();
         let v_cache_n = args.v_cache.numel();
-        if (args.k_new.data.len() as i64) < k_new_n
-            || (args.v_new.data.len() as i64) < v_new_n
-            || (args.k_cache.data.len() as i64) < k_cache_n
-            || (args.v_cache.data.len() as i64) < v_cache_n
+        if (args.k_new.data().len() as i64) < k_new_n
+            || (args.v_new.data().len() as i64) < v_new_n
+            || (args.k_cache.data().len() as i64) < k_cache_n
+            || (args.v_cache.data().len() as i64) < v_cache_n
         {
             return Err(Error::BufferTooSmall {
                 needed: k_new_n.max(v_new_n).max(k_cache_n).max(v_cache_n) as usize,
                 got: 0,
             });
         }
-        if (args.cache_offsets.data.len() as i64) < self.desc.batch_size as i64 {
+        if (args.cache_offsets.data().len() as i64) < self.desc.batch_size as i64 {
             return Err(Error::BufferTooSmall {
                 needed: self.desc.batch_size as usize,
-                got: args.cache_offsets.data.len(),
+                got: args.cache_offsets.data().len(),
             });
         }
         Ok(())
@@ -297,11 +297,11 @@ impl<T: Element> KvCacheAppendPlan<T> {
             return Ok(());
         }
         let stream_ptr = stream.as_raw();
-        let k_new_ptr = args.k_new.data.as_raw().0 as *const c_void;
-        let v_new_ptr = args.v_new.data.as_raw().0 as *const c_void;
-        let offsets_ptr = args.cache_offsets.data.as_raw().0 as *const c_void;
-        let k_cache_ptr = args.k_cache.data.as_raw().0 as *mut c_void;
-        let v_cache_ptr = args.v_cache.data.as_raw().0 as *mut c_void;
+        let k_new_ptr = args.k_new.data().as_raw().0 as *const c_void;
+        let v_new_ptr = args.v_new.data().as_raw().0 as *const c_void;
+        let offsets_ptr = args.cache_offsets.data().as_raw().0 as *const c_void;
+        let k_cache_ptr = args.k_cache.data().as_raw().0 as *mut c_void;
+        let v_cache_ptr = args.v_cache.data().as_raw().0 as *mut c_void;
 
         let status = match T::KIND {
             ElementKind::F32 => unsafe {

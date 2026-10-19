@@ -315,12 +315,12 @@ impl<T: Element> BatchedSvdaPlan<T> {
         let m = self.desc.m;
         let n = self.desc.n;
         let rank = self.desc.rank;
-        if args.a.shape != [b, m, n] {
+        if args.a.shape() != [b, m, n] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::BatchedSvdaPlan: A shape != [batch, M, N]",
             ));
         }
-        if args.s.shape != [b, rank] {
+        if args.s.shape() != [b, rank] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::BatchedSvdaPlan: S shape != [batch, rank]",
             ));
@@ -328,7 +328,7 @@ impl<T: Element> BatchedSvdaPlan<T> {
         if self.desc.compute_vectors {
             match args.u.as_ref() {
                 Some(u) => {
-                    if u.shape != [b, m, rank] {
+                    if u.shape() != [b, m, rank] {
                         return Err(Error::InvalidProblem(
                             "baracuda-kernels::BatchedSvdaPlan: U shape != [batch, M, rank]",
                         ));
@@ -342,7 +342,7 @@ impl<T: Element> BatchedSvdaPlan<T> {
             }
             match args.v.as_ref() {
                 Some(v) => {
-                    if v.shape != [b, n, rank] {
+                    if v.shape() != [b, n, rank] {
                         return Err(Error::InvalidProblem(
                             "baracuda-kernels::BatchedSvdaPlan: V shape != [batch, N, rank]",
                         ));
@@ -355,7 +355,7 @@ impl<T: Element> BatchedSvdaPlan<T> {
                 }
             }
         }
-        if args.info.shape != [b] {
+        if args.info.shape() != [b] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::BatchedSvdaPlan: info shape != [batch]",
             ));
@@ -412,11 +412,11 @@ macro_rules! impl_batched_svda_run {
                 // unpacked from the Workspace.
                 let lwork = (ws_bytes / core::mem::size_of::<$T>()) as i32;
 
-                let a_ptr = args.a.data.as_raw().0 as *const $T;
-                let s_ptr = args.s.data.as_raw().0 as *mut $T;
+                let a_ptr = args.a.data().as_raw().0 as *const $T;
+                let s_ptr = args.s.data().as_raw().0 as *mut $T;
                 let (u_ptr, ldu) = if self.desc.compute_vectors {
                     let u_ref = args.u.as_mut().expect("check_args ensures U is Some");
-                    (u_ref.data.as_raw().0 as *mut $T, m)
+                    (u_ref.data().as_raw().0 as *mut $T, m)
                 } else {
                     // cuSOLVER tolerates null U / V when jobz == NOVECTOR;
                     // pass a benign `ldu` (>= max(1, m)) since the API
@@ -425,11 +425,11 @@ macro_rules! impl_batched_svda_run {
                 };
                 let (v_ptr, ldv) = if self.desc.compute_vectors {
                     let v_ref = args.v.as_mut().expect("check_args ensures V is Some");
-                    (v_ref.data.as_raw().0 as *mut $T, n)
+                    (v_ref.data().as_raw().0 as *mut $T, n)
                 } else {
                     (core::ptr::null_mut(), n)
                 };
-                let info_ptr = args.info.data.as_raw().0 as *mut i32;
+                let info_ptr = args.info.data().as_raw().0 as *mut i32;
 
                 // Per-slot residual norms — caller buffer or local scratch.
                 let mut local_scratch: Vec<f64>;

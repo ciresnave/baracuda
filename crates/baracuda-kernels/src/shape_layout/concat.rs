@@ -157,18 +157,18 @@ impl<T: Element, const N: usize> ConcatPlan<T, N> {
         crate::view_check::check_fits(&args.a)?;
         crate::view_check::check_fits(&args.b)?;
         crate::view_check::check_fits(&args.y)?;
-        if args.a.shape != self.desc.a_shape {
+        if args.a.shape() != self.desc.a_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::ConcatPlan: A shape mismatch with descriptor a_shape",
             ));
         }
-        if args.b.shape != self.desc.b_shape {
+        if args.b.shape() != self.desc.b_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::ConcatPlan: B shape mismatch with descriptor b_shape",
             ));
         }
         let expected_out = self.desc.output_shape();
-        if args.y.shape != expected_out {
+        if args.y.shape() != expected_out {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::ConcatPlan: Y shape mismatch with derived output \
                  shape (= a_shape with [concat_dim] = a + b extents)",
@@ -182,9 +182,9 @@ impl<T: Element, const N: usize> ConcatPlan<T, N> {
         let a_numel = args.a.numel();
         let b_numel = args.b.numel();
         let y_numel = args.y.numel();
-        let a_len = args.a.data.len() as i64;
-        let b_len = args.b.data.len() as i64;
-        let y_len = args.y.data.len() as i64;
+        let a_len = args.a.data().len() as i64;
+        let b_len = args.b.data().len() as i64;
+        let y_len = args.y.data().len() as i64;
         if a_len < a_numel {
             return Err(Error::BufferTooSmall {
                 needed: a_numel as usize,
@@ -236,15 +236,15 @@ impl<T: Element, const N: usize> ConcatPlan<T, N> {
         if output_numel == 0 {
             return Ok(());
         }
-        let a_ptr = args.a.data.as_raw().0 as *const c_void;
-        let b_ptr = args.b.data.as_raw().0 as *const c_void;
-        let y_ptr = args.y.data.as_raw().0 as *mut c_void;
+        let a_ptr = args.a.data().as_raw().0 as *const c_void;
+        let b_ptr = args.b.data().as_raw().0 as *const c_void;
+        let y_ptr = args.y.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
         let output_shape = self.desc.output_shape();
-        let stride_a = args.a.stride;
-        let stride_b = args.b.stride;
-        let stride_y = args.y.stride;
+        let stride_a = args.a.stride();
+        let stride_b = args.b.stride();
+        let stride_y = args.y.stride();
         let rank = N as i32;
         let concat_dim = self.desc.concat_dim as i32;
         let split_offset = self.desc.a_shape[self.desc.concat_dim as usize];

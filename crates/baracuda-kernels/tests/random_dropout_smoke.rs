@@ -47,21 +47,9 @@ fn run_case_f32(p: f32, seed: u64) {
     let plan = DropoutPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default())
         .expect("select DropoutPlan<f32>");
     let args = DropoutArgs::<f32, 1> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
-        mask: TensorMut {
-            data: dev_mask.as_slice_mut(),
-            shape,
-            stride,
-        },
+        x: TensorRef::new(dev_x.as_slice(), shape, stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
+        mask: TensorMut::new(dev_mask.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
         .expect("dropout f32 run");
@@ -138,21 +126,9 @@ fn dropout_f64_p_half() {
     };
     let plan = DropoutPlan::<f64, 1>::select(&stream, &desc, PlanPreference::default()).unwrap();
     let args = DropoutArgs::<f64, 1> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
-        mask: TensorMut {
-            data: dev_mask.as_slice_mut(),
-            shape,
-            stride,
-        },
+        x: TensorRef::new(dev_x.as_slice(), shape, stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
+        mask: TensorMut::new(dev_mask.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
         .unwrap();

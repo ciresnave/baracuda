@@ -98,26 +98,10 @@ fn qr_f32_basic() {
     let r_shape = [m, n];
     let r_stride = contiguous_stride(r_shape);
     let args = QrArgs::<f32> {
-        a: TensorMut {
-            data: dev_a.as_slice_mut(),
-            shape: a_shape,
-            stride: a_stride,
-        },
-        q: TensorMut {
-            data: dev_q.as_slice_mut(),
-            shape: q_shape,
-            stride: q_stride,
-        },
-        r: TensorMut {
-            data: dev_r.as_slice_mut(),
-            shape: r_shape,
-            stride: r_stride,
-        },
-        info: TensorMut {
-            data: dev_info.as_slice_mut(),
-            shape: [1i32],
-            stride: [1],
-        },
+        a: TensorMut::new(dev_a.as_slice_mut(), a_shape, a_stride).unwrap(),
+        q: TensorMut::new(dev_q.as_slice_mut(), q_shape, q_stride).unwrap(),
+        r: TensorMut::new(dev_r.as_slice_mut(), r_shape, r_stride).unwrap(),
+        info: TensorMut::new(dev_info.as_slice_mut(), [1i32], [1]).unwrap(),
     };
     plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
         .expect("run QR f32");
@@ -205,26 +189,10 @@ fn qr_f64_basic() {
     let q_shape = [m, m];
     let r_shape = [m, n];
     let args = QrArgs::<f64> {
-        a: TensorMut {
-            data: dev_a.as_slice_mut(),
-            shape: a_shape,
-            stride: contiguous_stride(a_shape),
-        },
-        q: TensorMut {
-            data: dev_q.as_slice_mut(),
-            shape: q_shape,
-            stride: contiguous_stride(q_shape),
-        },
-        r: TensorMut {
-            data: dev_r.as_slice_mut(),
-            shape: r_shape,
-            stride: contiguous_stride(r_shape),
-        },
-        info: TensorMut {
-            data: dev_info.as_slice_mut(),
-            shape: [1i32],
-            stride: [1],
-        },
+        a: TensorMut::new(dev_a.as_slice_mut(), a_shape, contiguous_stride(a_shape)).unwrap(),
+        q: TensorMut::new(dev_q.as_slice_mut(), q_shape, contiguous_stride(q_shape)).unwrap(),
+        r: TensorMut::new(dev_r.as_slice_mut(), r_shape, contiguous_stride(r_shape)).unwrap(),
+        info: TensorMut::new(dev_info.as_slice_mut(), [1i32], [1]).unwrap(),
     };
     plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
         .expect("run QR f64");

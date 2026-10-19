@@ -143,36 +143,12 @@ mod bench_impl_inner {
 
             warmup(&stream, || {
                 let args = HyperConnectionArgs::<f32> {
-                    x_expanded: TensorRef {
-                        data: dev_x.as_slice(),
-                        shape: xs,
-                        stride: stx,
-                    },
-                    rmsnorm_weight: TensorRef {
-                        data: dev_gamma.as_slice(),
-                        shape: gs,
-                        stride: stg,
-                    },
-                    h_pre: TensorRef {
-                        data: dev_h_pre.as_slice(),
-                        shape: hs,
-                        stride: sth,
-                    },
-                    h_post: TensorRef {
-                        data: dev_h_post.as_slice(),
-                        shape: hs,
-                        stride: sth,
-                    },
-                    h_res: TensorRef {
-                        data: dev_h_res.as_slice(),
-                        shape: rs,
-                        stride: str_,
-                    },
-                    out: TensorMut {
-                        data: dev_out.as_slice_mut(),
-                        shape: xs,
-                        stride: stx,
-                    },
+                    x_expanded: TensorRef::new(dev_x.as_slice(), xs, stx).unwrap(),
+                    rmsnorm_weight: TensorRef::new(dev_gamma.as_slice(), gs, stg).unwrap(),
+                    h_pre: TensorRef::new(dev_h_pre.as_slice(), hs, sth).unwrap(),
+                    h_post: TensorRef::new(dev_h_post.as_slice(), hs, sth).unwrap(),
+                    h_res: TensorRef::new(dev_h_res.as_slice(), rs, str_).unwrap(),
+                    out: TensorMut::new(dev_out.as_slice_mut(), xs, stx).unwrap(),
                 };
                 plan.run(&stream, Workspace::None, args)
                     .expect("baracuda hyper_connection");
@@ -180,36 +156,12 @@ mod bench_impl_inner {
 
             let mhc_ns = measure_median_ns(&ctx, &stream, 11, 50, || {
                 let args = HyperConnectionArgs::<f32> {
-                    x_expanded: TensorRef {
-                        data: dev_x.as_slice(),
-                        shape: xs,
-                        stride: stx,
-                    },
-                    rmsnorm_weight: TensorRef {
-                        data: dev_gamma.as_slice(),
-                        shape: gs,
-                        stride: stg,
-                    },
-                    h_pre: TensorRef {
-                        data: dev_h_pre.as_slice(),
-                        shape: hs,
-                        stride: sth,
-                    },
-                    h_post: TensorRef {
-                        data: dev_h_post.as_slice(),
-                        shape: hs,
-                        stride: sth,
-                    },
-                    h_res: TensorRef {
-                        data: dev_h_res.as_slice(),
-                        shape: rs,
-                        stride: str_,
-                    },
-                    out: TensorMut {
-                        data: dev_out.as_slice_mut(),
-                        shape: xs,
-                        stride: stx,
-                    },
+                    x_expanded: TensorRef::new(dev_x.as_slice(), xs, stx).unwrap(),
+                    rmsnorm_weight: TensorRef::new(dev_gamma.as_slice(), gs, stg).unwrap(),
+                    h_pre: TensorRef::new(dev_h_pre.as_slice(), hs, sth).unwrap(),
+                    h_post: TensorRef::new(dev_h_post.as_slice(), hs, sth).unwrap(),
+                    h_res: TensorRef::new(dev_h_res.as_slice(), rs, str_).unwrap(),
+                    out: TensorMut::new(dev_out.as_slice_mut(), xs, stx).unwrap(),
                 };
                 plan.run(&stream, Workspace::None, args)
                     .expect("baracuda hyper_connection");
@@ -245,22 +197,10 @@ mod bench_impl_inner {
                 let str_rms = contiguous_stride(rs2);
                 warmup(&stream, || {
                     let args = RMSNormArgs::<f32, 2> {
-                        x: TensorRef {
-                            data: dev_x.as_slice(),
-                            shape: xs2,
-                            stride: stx2,
-                        },
+                        x: TensorRef::new(dev_x.as_slice(), xs2, stx2).unwrap(),
                         gamma: None,
-                        y: TensorMut {
-                            data: naive_y.as_slice_mut(),
-                            shape: xs2,
-                            stride: stx2,
-                        },
-                        rms: TensorMut {
-                            data: naive_rms.as_slice_mut(),
-                            shape: rs2,
-                            stride: str_rms,
-                        },
+                        y: TensorMut::new(naive_y.as_slice_mut(), xs2, stx2).unwrap(),
+                        rms: TensorMut::new(naive_rms.as_slice_mut(), rs2, str_rms).unwrap(),
                     };
                     naive_plan
                         .run(&stream, Workspace::None, args)
@@ -268,22 +208,10 @@ mod bench_impl_inner {
                 });
                 Some(measure_median_ns(&ctx, &stream, 11, 50, || {
                     let args = RMSNormArgs::<f32, 2> {
-                        x: TensorRef {
-                            data: dev_x.as_slice(),
-                            shape: xs2,
-                            stride: stx2,
-                        },
+                        x: TensorRef::new(dev_x.as_slice(), xs2, stx2).unwrap(),
                         gamma: None,
-                        y: TensorMut {
-                            data: naive_y.as_slice_mut(),
-                            shape: xs2,
-                            stride: stx2,
-                        },
-                        rms: TensorMut {
-                            data: naive_rms.as_slice_mut(),
-                            shape: rs2,
-                            stride: str_rms,
-                        },
+                        y: TensorMut::new(naive_y.as_slice_mut(), xs2, stx2).unwrap(),
+                        rms: TensorMut::new(naive_rms.as_slice_mut(), rs2, str_rms).unwrap(),
                     };
                     naive_plan
                         .run(&stream, Workspace::None, args)
@@ -310,36 +238,12 @@ mod bench_impl_inner {
                 bb.iter_custom(|iters| {
                     time_with_events(&ctx, &stream, iters, || {
                         let args = HyperConnectionArgs::<f32> {
-                            x_expanded: TensorRef {
-                                data: dev_x.as_slice(),
-                                shape: xs,
-                                stride: stx,
-                            },
-                            rmsnorm_weight: TensorRef {
-                                data: dev_gamma.as_slice(),
-                                shape: gs,
-                                stride: stg,
-                            },
-                            h_pre: TensorRef {
-                                data: dev_h_pre.as_slice(),
-                                shape: hs,
-                                stride: sth,
-                            },
-                            h_post: TensorRef {
-                                data: dev_h_post.as_slice(),
-                                shape: hs,
-                                stride: sth,
-                            },
-                            h_res: TensorRef {
-                                data: dev_h_res.as_slice(),
-                                shape: rs,
-                                stride: str_,
-                            },
-                            out: TensorMut {
-                                data: dev_out.as_slice_mut(),
-                                shape: xs,
-                                stride: stx,
-                            },
+                            x_expanded: TensorRef::new(dev_x.as_slice(), xs, stx).unwrap(),
+                            rmsnorm_weight: TensorRef::new(dev_gamma.as_slice(), gs, stg).unwrap(),
+                            h_pre: TensorRef::new(dev_h_pre.as_slice(), hs, sth).unwrap(),
+                            h_post: TensorRef::new(dev_h_post.as_slice(), hs, sth).unwrap(),
+                            h_res: TensorRef::new(dev_h_res.as_slice(), rs, str_).unwrap(),
+                            out: TensorMut::new(dev_out.as_slice_mut(), xs, stx).unwrap(),
                         };
                         plan.run(&stream, Workspace::None, args)
                             .expect("baracuda hyper_connection");

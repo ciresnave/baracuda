@@ -40,21 +40,24 @@ fn sort_f32_ascending_basic() {
     };
     let plan = SortPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = SortArgs::<f32> {
-        input: TensorRef {
-            data: dev_in.as_slice(),
-            shape: [batch, row_len],
-            stride: contiguous_stride([batch, row_len]),
-        },
-        values: TensorMut {
-            data: dev_vals.as_slice_mut(),
-            shape: [batch, row_len],
-            stride: contiguous_stride([batch, row_len]),
-        },
-        indices: TensorMut {
-            data: dev_idx.as_slice_mut(),
-            shape: [batch, row_len],
-            stride: contiguous_stride([batch, row_len]),
-        },
+        input: TensorRef::new(
+            dev_in.as_slice(),
+            [batch, row_len],
+            contiguous_stride([batch, row_len]),
+        )
+        .unwrap(),
+        values: TensorMut::new(
+            dev_vals.as_slice_mut(),
+            [batch, row_len],
+            contiguous_stride([batch, row_len]),
+        )
+        .unwrap(),
+        indices: TensorMut::new(
+            dev_idx.as_slice_mut(),
+            [batch, row_len],
+            contiguous_stride([batch, row_len]),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -113,21 +116,24 @@ fn sort_i32_descending_basic() {
     };
     let plan = SortPlan::<i32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = SortArgs::<i32> {
-        input: TensorRef {
-            data: dev_in.as_slice(),
-            shape: [batch, row_len],
-            stride: contiguous_stride([batch, row_len]),
-        },
-        values: TensorMut {
-            data: dev_vals.as_slice_mut(),
-            shape: [batch, row_len],
-            stride: contiguous_stride([batch, row_len]),
-        },
-        indices: TensorMut {
-            data: dev_idx.as_slice_mut(),
-            shape: [batch, row_len],
-            stride: contiguous_stride([batch, row_len]),
-        },
+        input: TensorRef::new(
+            dev_in.as_slice(),
+            [batch, row_len],
+            contiguous_stride([batch, row_len]),
+        )
+        .unwrap(),
+        values: TensorMut::new(
+            dev_vals.as_slice_mut(),
+            [batch, row_len],
+            contiguous_stride([batch, row_len]),
+        )
+        .unwrap(),
+        indices: TensorMut::new(
+            dev_idx.as_slice_mut(),
+            [batch, row_len],
+            contiguous_stride([batch, row_len]),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

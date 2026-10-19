@@ -60,16 +60,18 @@ fn run_arg_reduce_f16(kind: ArgReduceKind, host_x_f32: &[f32; 16]) -> i64 {
         .expect("select f16");
     let output_shape = [1i32];
     let args = ArgReduceArgs::<f16, 1> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: output_shape,
-            stride: contiguous_stride(output_shape),
-        },
+        x: TensorRef::new(
+            dev_x.as_slice(),
+            input_shape,
+            contiguous_stride(input_shape),
+        )
+        .unwrap(),
+        y: TensorMut::new(
+            dev_y.as_slice_mut(),
+            output_shape,
+            contiguous_stride(output_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run f16");
     stream.synchronize().expect("sync");
@@ -96,16 +98,18 @@ fn run_arg_reduce_bf16(kind: ArgReduceKind, host_x_f32: &[f32; 16]) -> i64 {
         .expect("select bf16");
     let output_shape = [1i32];
     let args = ArgReduceArgs::<bf16, 1> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: output_shape,
-            stride: contiguous_stride(output_shape),
-        },
+        x: TensorRef::new(
+            dev_x.as_slice(),
+            input_shape,
+            contiguous_stride(input_shape),
+        )
+        .unwrap(),
+        y: TensorMut::new(
+            dev_y.as_slice_mut(),
+            output_shape,
+            contiguous_stride(output_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run bf16");
     stream.synchronize().expect("sync");
@@ -132,16 +136,18 @@ fn run_arg_reduce_f64(kind: ArgReduceKind, host_x_f32: &[f32; 16]) -> i64 {
         .expect("select f64");
     let output_shape = [1i32];
     let args = ArgReduceArgs::<f64, 1> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: output_shape,
-            stride: contiguous_stride(output_shape),
-        },
+        x: TensorRef::new(
+            dev_x.as_slice(),
+            input_shape,
+            contiguous_stride(input_shape),
+        )
+        .unwrap(),
+        y: TensorMut::new(
+            dev_y.as_slice_mut(),
+            output_shape,
+            contiguous_stride(output_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run f64");
     stream.synchronize().expect("sync");

@@ -264,27 +264,27 @@ impl<TIn: Element, TWQ: IntElement> SmoothQuantLinearPlan<TIn, TWQ> {
         crate::view_check::check_fits(&args.weight_scale)?;
         crate::view_check::check_fits(&args.output)?;
         crate::view_check::check_fits(&args.act_scale_scratch)?;
-        if args.act_q.shape != [self.desc.m, self.desc.k] {
+        if args.act_q.shape() != [self.desc.m, self.desc.k] {
             return Err(Error::InvalidProblem(
                 "SmoothQuantLinearPlan: act_q shape != [M, K]",
             ));
         }
-        if args.weight_q.shape != [self.desc.n, self.desc.k] {
+        if args.weight_q.shape() != [self.desc.n, self.desc.k] {
             return Err(Error::InvalidProblem(
                 "SmoothQuantLinearPlan: weight_q shape != [N, K]",
             ));
         }
-        if args.weight_scale.shape != [self.desc.n] {
+        if args.weight_scale.shape() != [self.desc.n] {
             return Err(Error::InvalidProblem(
                 "SmoothQuantLinearPlan: weight_scale shape != [N]",
             ));
         }
-        if args.output.shape != [self.desc.m, self.desc.n] {
+        if args.output.shape() != [self.desc.m, self.desc.n] {
             return Err(Error::InvalidProblem(
                 "SmoothQuantLinearPlan: output shape != [M, N]",
             ));
         }
-        if args.act_scale_scratch.shape != [self.desc.m] {
+        if args.act_scale_scratch.shape() != [self.desc.m] {
             return Err(Error::InvalidProblem(
                 "SmoothQuantLinearPlan: act_scale_scratch shape != [M]",
             ));
@@ -338,7 +338,7 @@ impl<TIn: Element, TWQ: IntElement> SmoothQuantLinearPlan<TIn, TWQ> {
         // and the direct call sidesteps the FillPlan's Element trait
         // bound which would force us through transmute_copy gymnastics
         // (the descriptor knows the scale as f32; the scratch is TIn).
-        let fill_ptr = args.act_scale_scratch.data.as_raw().0 as *mut c_void;
+        let fill_ptr = args.act_scale_scratch.data().as_raw().0 as *mut c_void;
         let fill_status = match TIn::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_fill_f32_run(
@@ -370,11 +370,11 @@ impl<TIn: Element, TWQ: IntElement> SmoothQuantLinearPlan<TIn, TWQ> {
         map_status(fill_status)?;
 
         // ---- Pass 2: fused quantized-linear (int8 GEMM + dequant + FP store). ----
-        let weight_ptr = args.weight_q.data.as_raw().0 as *const c_void;
-        let act_q_ptr = args.act_q.data.as_raw().0 as *const c_void;
-        let act_scale_const = args.act_scale_scratch.data.as_raw().0 as *const c_void;
-        let w_scale_ptr = args.weight_scale.data.as_raw().0 as *const c_void;
-        let out_ptr = args.output.data.as_raw().0 as *mut c_void;
+        let weight_ptr = args.weight_q.data().as_raw().0 as *const c_void;
+        let act_q_ptr = args.act_q.data().as_raw().0 as *const c_void;
+        let act_scale_const = args.act_scale_scratch.data().as_raw().0 as *const c_void;
+        let w_scale_ptr = args.weight_scale.data().as_raw().0 as *const c_void;
+        let out_ptr = args.output.data().as_raw().0 as *mut c_void;
         let ql_status = match TIn::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_quantized_linear_w8a8_f32_run(

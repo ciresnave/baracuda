@@ -189,32 +189,17 @@ fn sdpa_strided_contig_f32() {
         &stream,
         Workspace::None,
         SdpaArgs {
-            q: TensorRef {
-                data: dev_q.as_slice(),
-                shape: shape_q,
-                stride: contiguous_stride(shape_q),
-            },
-            k: TensorRef {
-                data: dev_k.as_slice(),
-                shape: shape_k,
-                stride: contiguous_stride(shape_k),
-            },
-            v: TensorRef {
-                data: dev_v.as_slice(),
-                shape: shape_v,
-                stride: contiguous_stride(shape_v),
-            },
+            q: TensorRef::new(dev_q.as_slice(), shape_q, contiguous_stride(shape_q)).unwrap(),
+            k: TensorRef::new(dev_k.as_slice(), shape_k, contiguous_stride(shape_k)).unwrap(),
+            v: TensorRef::new(dev_v.as_slice(), shape_v, contiguous_stride(shape_v)).unwrap(),
             mask: None,
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: shape_y,
-                stride: contiguous_stride(shape_y),
-            },
-            attn: TensorMut {
-                data: dev_attn.as_slice_mut(),
-                shape: shape_attn,
-                stride: contiguous_stride(shape_attn),
-            },
+            y: TensorMut::new(dev_y.as_slice_mut(), shape_y, contiguous_stride(shape_y)).unwrap(),
+            attn: TensorMut::new(
+                dev_attn.as_slice_mut(),
+                shape_attn,
+                contiguous_stride(shape_attn),
+            )
+            .unwrap(),
         },
     )
     .expect("run");
@@ -325,32 +310,17 @@ fn sdpa_strided_gqa_broadcast_f32() {
         &stream,
         Workspace::None,
         SdpaArgs {
-            q: TensorRef {
-                data: dev_q.as_slice(),
-                shape: shape_q,
-                stride: contiguous_stride(shape_q),
-            },
-            k: TensorRef {
-                data: dev_k.as_slice(),
-                shape: shape_k,
-                stride: stride_k,
-            },
-            v: TensorRef {
-                data: dev_v.as_slice(),
-                shape: shape_v,
-                stride: stride_v,
-            },
+            q: TensorRef::new(dev_q.as_slice(), shape_q, contiguous_stride(shape_q)).unwrap(),
+            k: TensorRef::new(dev_k.as_slice(), shape_k, stride_k).unwrap(),
+            v: TensorRef::new(dev_v.as_slice(), shape_v, stride_v).unwrap(),
             mask: None,
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: shape_y,
-                stride: contiguous_stride(shape_y),
-            },
-            attn: TensorMut {
-                data: dev_attn.as_slice_mut(),
-                shape: shape_attn,
-                stride: contiguous_stride(shape_attn),
-            },
+            y: TensorMut::new(dev_y.as_slice_mut(), shape_y, contiguous_stride(shape_y)).unwrap(),
+            attn: TensorMut::new(
+                dev_attn.as_slice_mut(),
+                shape_attn,
+                contiguous_stride(shape_attn),
+            )
+            .unwrap(),
         },
     )
     .expect("run");
@@ -452,32 +422,17 @@ fn sdpa_strided_causal_transposed_q_f32() {
         &stream,
         Workspace::None,
         SdpaArgs {
-            q: TensorRef {
-                data: dev_q.as_slice(),
-                shape: shape_q,
-                stride: stride_q_view,
-            },
-            k: TensorRef {
-                data: dev_k.as_slice(),
-                shape: shape_k,
-                stride: contiguous_stride(shape_k),
-            },
-            v: TensorRef {
-                data: dev_v.as_slice(),
-                shape: shape_v,
-                stride: contiguous_stride(shape_v),
-            },
+            q: TensorRef::new(dev_q.as_slice(), shape_q, stride_q_view).unwrap(),
+            k: TensorRef::new(dev_k.as_slice(), shape_k, contiguous_stride(shape_k)).unwrap(),
+            v: TensorRef::new(dev_v.as_slice(), shape_v, contiguous_stride(shape_v)).unwrap(),
             mask: None,
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: shape_y,
-                stride: contiguous_stride(shape_y),
-            },
-            attn: TensorMut {
-                data: dev_attn.as_slice_mut(),
-                shape: shape_attn,
-                stride: contiguous_stride(shape_attn),
-            },
+            y: TensorMut::new(dev_y.as_slice_mut(), shape_y, contiguous_stride(shape_y)).unwrap(),
+            attn: TensorMut::new(
+                dev_attn.as_slice_mut(),
+                shape_attn,
+                contiguous_stride(shape_attn),
+            )
+            .unwrap(),
         },
     )
     .expect("run");
@@ -590,32 +545,17 @@ fn sdpa_strided_gqa_broadcast_f16() {
         &stream,
         Workspace::None,
         SdpaArgs {
-            q: TensorRef {
-                data: dev_q.as_slice(),
-                shape: shape_q,
-                stride: contiguous_stride(shape_q),
-            },
-            k: TensorRef {
-                data: dev_k.as_slice(),
-                shape: shape_k,
-                stride: stride_k,
-            },
-            v: TensorRef {
-                data: dev_v.as_slice(),
-                shape: shape_v,
-                stride: stride_v,
-            },
+            q: TensorRef::new(dev_q.as_slice(), shape_q, contiguous_stride(shape_q)).unwrap(),
+            k: TensorRef::new(dev_k.as_slice(), shape_k, stride_k).unwrap(),
+            v: TensorRef::new(dev_v.as_slice(), shape_v, stride_v).unwrap(),
             mask: None,
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: shape_y,
-                stride: contiguous_stride(shape_y),
-            },
-            attn: TensorMut {
-                data: dev_attn.as_slice_mut(),
-                shape: shape_attn,
-                stride: contiguous_stride(shape_attn),
-            },
+            y: TensorMut::new(dev_y.as_slice_mut(), shape_y, contiguous_stride(shape_y)).unwrap(),
+            attn: TensorMut::new(
+                dev_attn.as_slice_mut(),
+                shape_attn,
+                contiguous_stride(shape_attn),
+            )
+            .unwrap(),
         },
     )
     .expect("run");

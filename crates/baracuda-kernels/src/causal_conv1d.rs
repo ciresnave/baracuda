@@ -184,18 +184,18 @@ impl<T: Element> CausalConv1dPlan<T> {
         crate::view_check::check_fits(&args.y)?;
         let shape_x = [self.desc.batch_size, self.desc.channels, self.desc.seq_len];
         let shape_w = [self.desc.channels, self.desc.width];
-        if args.x.shape != shape_x || args.y.shape != shape_x {
+        if args.x.shape() != shape_x || args.y.shape() != shape_x {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::CausalConv1dPlan: x / y shape must be [B, C, L]",
             ));
         }
-        if args.weight.shape != shape_w {
+        if args.weight.shape() != shape_w {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::CausalConv1dPlan: weight shape must be [C, W]",
             ));
         }
         if let Some(b) = &args.bias {
-            if b.shape != [self.desc.channels] {
+            if b.shape() != [self.desc.channels] {
                 return Err(Error::InvalidProblem(
                     "baracuda-kernels::CausalConv1dPlan: bias shape must be [C]",
                 ));
@@ -244,14 +244,14 @@ impl<T: Element> CausalConv1dPlan<T> {
             return Ok(());
         }
         let stream_ptr = stream.as_raw() as *mut c_void;
-        let x_ptr = args.x.data.as_raw().0 as *const c_void;
-        let w_ptr = args.weight.data.as_raw().0 as *const c_void;
+        let x_ptr = args.x.data().as_raw().0 as *const c_void;
+        let w_ptr = args.weight.data().as_raw().0 as *const c_void;
         let b_ptr = args
             .bias
             .as_ref()
-            .map(|b| b.data.as_raw().0 as *const c_void)
+            .map(|b| b.data().as_raw().0 as *const c_void)
             .unwrap_or(core::ptr::null());
-        let y_ptr = args.y.data.as_raw().0 as *mut c_void;
+        let y_ptr = args.y.data().as_raw().0 as *mut c_void;
         let use_silu = if self.desc.use_silu { 1 } else { 0 };
 
         let status = match T::KIND {
@@ -468,20 +468,20 @@ impl<T: Element> CausalConv1dBackwardPlan<T> {
             return Ok(());
         }
         let stream_ptr = stream.as_raw() as *mut c_void;
-        let x_ptr = args.x.data.as_raw().0 as *const c_void;
-        let w_ptr = args.weight.data.as_raw().0 as *const c_void;
+        let x_ptr = args.x.data().as_raw().0 as *const c_void;
+        let w_ptr = args.weight.data().as_raw().0 as *const c_void;
         let b_ptr = args
             .bias
             .as_ref()
-            .map(|b| b.data.as_raw().0 as *const c_void)
+            .map(|b| b.data().as_raw().0 as *const c_void)
             .unwrap_or(core::ptr::null());
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
-        let dw_ptr = args.dw.data.as_raw().0 as *mut c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let dx_ptr = args.dx.data().as_raw().0 as *mut c_void;
+        let dw_ptr = args.dw.data().as_raw().0 as *mut c_void;
         let db_ptr = args
             .db
             .as_ref()
-            .map(|b| b.data.as_raw().0 as *mut c_void)
+            .map(|b| b.data().as_raw().0 as *mut c_void)
             .unwrap_or(core::ptr::null_mut());
         let use_silu = if self.desc.use_silu { 1 } else { 0 };
 

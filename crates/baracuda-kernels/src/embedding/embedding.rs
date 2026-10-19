@@ -148,20 +148,20 @@ impl<T: Element> EmbeddingPlan<T> {
 
     /// Validate args.
     pub fn can_implement<I: IndexElement>(&self, args: &EmbeddingArgs<'_, T, I>) -> Result<()> {
-        if args.weight.shape[0] != self.desc.num_embeddings
-            || args.weight.shape[1] != self.desc.embedding_dim
+        if args.weight.shape()[0] != self.desc.num_embeddings
+            || args.weight.shape()[1] != self.desc.embedding_dim
         {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::EmbeddingPlan: weight shape mismatch with descriptor",
             ));
         }
-        if args.indices.shape[0] != self.desc.num_indices {
+        if args.indices.shape()[0] != self.desc.num_indices {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::EmbeddingPlan: indices.shape[0] mismatch with descriptor",
             ));
         }
-        if args.output.shape[0] != self.desc.num_indices
-            || args.output.shape[1] != self.desc.embedding_dim
+        if args.output.shape()[0] != self.desc.num_indices
+            || args.output.shape()[1] != self.desc.embedding_dim
         {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::EmbeddingPlan: output shape must be [num_indices, embedding_dim]",
@@ -170,9 +170,9 @@ impl<T: Element> EmbeddingPlan<T> {
         let weight_numel = args.weight.numel();
         let indices_numel = args.indices.numel();
         let out_numel = args.output.numel();
-        let weight_len = args.weight.data.len() as i64;
-        let indices_len = args.indices.data.len() as i64;
-        let out_len = args.output.data.len() as i64;
+        let weight_len = args.weight.data().len() as i64;
+        let indices_len = args.indices.data().len() as i64;
+        let out_len = args.output.data().len() as i64;
         if weight_len < weight_numel {
             return Err(Error::BufferTooSmall {
                 needed: weight_numel as usize,
@@ -226,9 +226,9 @@ impl<T: Element> EmbeddingPlan<T> {
         if num_indices == 0 || self.desc.embedding_dim == 0 {
             return Ok(());
         }
-        let weight_ptr = args.weight.data.as_raw().0 as *const c_void;
-        let indices_ptr = args.indices.data.as_raw().0 as *const c_void;
-        let out_ptr = args.output.data.as_raw().0 as *mut c_void;
+        let weight_ptr = args.weight.data().as_raw().0 as *const c_void;
+        let indices_ptr = args.indices.data().as_raw().0 as *const c_void;
+        let out_ptr = args.output.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         // Phase 11.5: `padding_idx` widens to i64 across the FFI to
         // share the same parameter slot with the i64-index variants

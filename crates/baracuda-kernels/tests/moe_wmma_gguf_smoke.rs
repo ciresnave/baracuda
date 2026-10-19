@@ -143,56 +143,46 @@ fn moe_wmma_gguf_q8_0_small_fixture() {
         DeviceBuffer::zeros(&ctx, (T * DE * 2) as usize).expect("alloc out typed");
 
     let args = MoeArgs::<f16> {
-        activations: TensorRef {
-            data: acts_dev.as_slice(),
-            shape: [T, DM],
-            stride: contiguous_stride([T, DM]),
-        },
-        expert_indices: TensorRef {
-            data: eids_dev.as_slice(),
-            shape: [T, K],
-            stride: contiguous_stride([T, K]),
-        },
-        expert_weights: TensorRef {
-            data: ew_dev.as_slice(),
-            shape: [T, K],
-            stride: contiguous_stride([T, K]),
-        },
-        sorted_token_ids: TensorRef {
-            data: sorted_dev.as_slice(),
-            shape: [m_total],
-            stride: contiguous_stride([m_total]),
-        },
-        flat_expert_ids: TensorRef {
-            data: eids_dev.as_slice(),
-            shape: [m_total],
-            stride: contiguous_stride([m_total]),
-        },
-        topk_weight_flat: Some(TensorRef {
-            data: tk_dev.as_slice(),
-            shape: [m_total],
-            stride: contiguous_stride([m_total]),
-        }),
-        expert_matrices: TensorRef {
-            data: weights_dev.as_slice(),
-            shape: [weights_bytes_len],
-            stride: contiguous_stride([weights_bytes_len]),
-        },
-        output: TensorMut {
-            data: out_dev_typed.as_slice_mut(),
-            shape: [T, DE * 2], // 2x f16 slots == T*DE f32 slots
-            stride: contiguous_stride([T, DE * 2]),
-        },
-        expert_counts_scratch: Some(TensorMut {
-            data: ec_dev.as_slice_mut(),
-            shape: [NE],
-            stride: contiguous_stride([NE]),
-        }),
-        expert_offsets_scratch: Some(TensorMut {
-            data: eo_dev.as_slice_mut(),
-            shape: [NE + 1],
-            stride: contiguous_stride([NE + 1]),
-        }),
+        activations: TensorRef::new(acts_dev.as_slice(), [T, DM], contiguous_stride([T, DM]))
+            .unwrap(),
+        expert_indices: TensorRef::new(eids_dev.as_slice(), [T, K], contiguous_stride([T, K]))
+            .unwrap(),
+        expert_weights: TensorRef::new(ew_dev.as_slice(), [T, K], contiguous_stride([T, K]))
+            .unwrap(),
+        sorted_token_ids: TensorRef::new(
+            sorted_dev.as_slice(),
+            [m_total],
+            contiguous_stride([m_total]),
+        )
+        .unwrap(),
+        flat_expert_ids: TensorRef::new(
+            eids_dev.as_slice(),
+            [m_total],
+            contiguous_stride([m_total]),
+        )
+        .unwrap(),
+        topk_weight_flat: Some(
+            TensorRef::new(tk_dev.as_slice(), [m_total], contiguous_stride([m_total])).unwrap(),
+        ),
+        expert_matrices: TensorRef::new(
+            weights_dev.as_slice(),
+            [weights_bytes_len],
+            contiguous_stride([weights_bytes_len]),
+        )
+        .unwrap(),
+        // 2x f16 slots == T*DE f32 slots
+        output: TensorMut::new(
+            out_dev_typed.as_slice_mut(),
+            [T, DE * 2],
+            contiguous_stride([T, DE * 2]),
+        )
+        .unwrap(),
+        expert_counts_scratch: Some(
+            TensorMut::new(ec_dev.as_slice_mut(), [NE], contiguous_stride([NE])).unwrap(),
+        ),
+        expert_offsets_scratch: Some(
+            TensorMut::new(eo_dev.as_slice_mut(), [NE + 1], contiguous_stride([NE + 1])).unwrap(),
+        ),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

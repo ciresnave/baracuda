@@ -40,16 +40,18 @@ fn cast_f32_to_f64_bit_exact() {
     let plan =
         CastPlan::<f32, f64>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = CastArgs {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape: [numel as i32],
-            stride: contiguous_stride([numel as i32]),
-        },
-        output: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: [numel as i32],
-            stride: contiguous_stride([numel as i32]),
-        },
+        input: TensorRef::new(
+            dev_x.as_slice(),
+            [numel as i32],
+            contiguous_stride([numel as i32]),
+        )
+        .unwrap(),
+        output: TensorMut::new(
+            dev_y.as_slice_mut(),
+            [numel as i32],
+            contiguous_stride([numel as i32]),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -79,16 +81,18 @@ fn cast_f64_to_f32_bit_exact() {
     let plan =
         CastPlan::<f64, f32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = CastArgs {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape: [numel as i32],
-            stride: contiguous_stride([numel as i32]),
-        },
-        output: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: [numel as i32],
-            stride: contiguous_stride([numel as i32]),
-        },
+        input: TensorRef::new(
+            dev_x.as_slice(),
+            [numel as i32],
+            contiguous_stride([numel as i32]),
+        )
+        .unwrap(),
+        output: TensorMut::new(
+            dev_y.as_slice_mut(),
+            [numel as i32],
+            contiguous_stride([numel as i32]),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -121,16 +125,18 @@ fn cast_f32_to_i32_truncates_toward_zero() {
     let plan =
         CastPlan::<f32, i32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = CastArgs {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape: [numel as i32],
-            stride: contiguous_stride([numel as i32]),
-        },
-        output: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: [numel as i32],
-            stride: contiguous_stride([numel as i32]),
-        },
+        input: TensorRef::new(
+            dev_x.as_slice(),
+            [numel as i32],
+            contiguous_stride([numel as i32]),
+        )
+        .unwrap(),
+        output: TensorMut::new(
+            dev_y.as_slice_mut(),
+            [numel as i32],
+            contiguous_stride([numel as i32]),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -159,16 +165,18 @@ fn cast_i32_to_f32_lossless_in_24bit_range() {
     let plan =
         CastPlan::<i32, f32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = CastArgs {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape: [numel as i32],
-            stride: contiguous_stride([numel as i32]),
-        },
-        output: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: [numel as i32],
-            stride: contiguous_stride([numel as i32]),
-        },
+        input: TensorRef::new(
+            dev_x.as_slice(),
+            [numel as i32],
+            contiguous_stride([numel as i32]),
+        )
+        .unwrap(),
+        output: TensorMut::new(
+            dev_y.as_slice_mut(),
+            [numel as i32],
+            contiguous_stride([numel as i32]),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -201,16 +209,18 @@ fn cast_f32_to_f16_round_to_nearest_even() {
     let plan =
         CastPlan::<f32, f16>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = CastArgs {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape: [numel as i32],
-            stride: contiguous_stride([numel as i32]),
-        },
-        output: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: [numel as i32],
-            stride: contiguous_stride([numel as i32]),
-        },
+        input: TensorRef::new(
+            dev_x.as_slice(),
+            [numel as i32],
+            contiguous_stride([numel as i32]),
+        )
+        .unwrap(),
+        output: TensorMut::new(
+            dev_y.as_slice_mut(),
+            [numel as i32],
+            contiguous_stride([numel as i32]),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -243,16 +253,18 @@ fn cast_bf16_to_f32_lossless() {
     let plan =
         CastPlan::<bf16, f32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = CastArgs {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape: [numel as i32],
-            stride: contiguous_stride([numel as i32]),
-        },
-        output: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: [numel as i32],
-            stride: contiguous_stride([numel as i32]),
-        },
+        input: TensorRef::new(
+            dev_x.as_slice(),
+            [numel as i32],
+            contiguous_stride([numel as i32]),
+        )
+        .unwrap(),
+        output: TensorMut::new(
+            dev_y.as_slice_mut(),
+            [numel as i32],
+            contiguous_stride([numel as i32]),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

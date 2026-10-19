@@ -163,32 +163,32 @@ impl<T: Element> EmbeddingBagMaxPlan<T> {
         &self,
         args: &EmbeddingBagMaxArgs<'_, T, I>,
     ) -> Result<()> {
-        if args.weight.shape[0] != self.desc.num_embeddings
-            || args.weight.shape[1] != self.desc.embedding_dim
+        if args.weight.shape()[0] != self.desc.num_embeddings
+            || args.weight.shape()[1] != self.desc.embedding_dim
         {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::EmbeddingBagMaxPlan: weight shape mismatch with descriptor",
             ));
         }
-        if args.indices.shape[0] != self.desc.total_indices {
+        if args.indices.shape()[0] != self.desc.total_indices {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::EmbeddingBagMaxPlan: indices.shape[0] != total_indices",
             ));
         }
-        if args.offsets.shape[0] != self.desc.num_bags {
+        if args.offsets.shape()[0] != self.desc.num_bags {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::EmbeddingBagMaxPlan: offsets.shape[0] != num_bags",
             ));
         }
-        if args.output.shape[0] != self.desc.num_bags
-            || args.output.shape[1] != self.desc.embedding_dim
+        if args.output.shape()[0] != self.desc.num_bags
+            || args.output.shape()[1] != self.desc.embedding_dim
         {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::EmbeddingBagMaxPlan: output shape must be [num_bags, embedding_dim]",
             ));
         }
-        if args.output_index.shape[0] != self.desc.num_bags
-            || args.output_index.shape[1] != self.desc.embedding_dim
+        if args.output_index.shape()[0] != self.desc.num_bags
+            || args.output_index.shape()[1] != self.desc.embedding_dim
         {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::EmbeddingBagMaxPlan: output_index shape must be [num_bags, embedding_dim]",
@@ -226,11 +226,11 @@ impl<T: Element> EmbeddingBagMaxPlan<T> {
         if self.desc.num_bags == 0 || self.desc.embedding_dim == 0 {
             return Ok(());
         }
-        let weight_ptr = args.weight.data.as_raw().0 as *const c_void;
-        let idx_ptr = args.indices.data.as_raw().0 as *const c_void;
-        let off_ptr = args.offsets.data.as_raw().0 as *const c_void;
-        let out_ptr = args.output.data.as_raw().0 as *mut c_void;
-        let out_idx_ptr = args.output_index.data.as_raw().0 as *mut c_void;
+        let weight_ptr = args.weight.data().as_raw().0 as *const c_void;
+        let idx_ptr = args.indices.data().as_raw().0 as *const c_void;
+        let off_ptr = args.offsets.data().as_raw().0 as *const c_void;
+        let out_ptr = args.output.data().as_raw().0 as *mut c_void;
+        let out_idx_ptr = args.output_index.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         let padding_idx: i64 = self.desc.padding_idx.unwrap_or(PADDING_DISABLED) as i64;
 

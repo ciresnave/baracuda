@@ -162,7 +162,7 @@ impl<T: Element, const N: usize> OneHotPlan<T, N> {
     /// Phase 15.2: generic over `I: IndexElement` so both i32 (legacy)
     /// and i64 (PyTorch default) class-index buffers are accepted.
     pub fn can_implement<I: IndexElement>(&self, args: &OneHotArgs<'_, T, N, I>) -> Result<()> {
-        if args.out.shape != self.desc.out_shape {
+        if args.out.shape() != self.desc.out_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::OneHotPlan: out shape mismatch with descriptor",
             ));
@@ -184,8 +184,8 @@ impl<T: Element, const N: usize> OneHotPlan<T, N> {
                 "baracuda-kernels::OneHotPlan: output rank > 8 not supported",
             ));
         }
-        let out_len = args.out.data.len() as i64;
-        let src_len = args.src.data.len() as i64;
+        let out_len = args.out.data().len() as i64;
+        let src_len = args.src.data().len() as i64;
         if out_len < out_numel {
             return Err(Error::BufferTooSmall {
                 needed: out_numel as usize,
@@ -235,8 +235,8 @@ impl<T: Element, const N: usize> OneHotPlan<T, N> {
         if out_numel == 0 {
             return Ok(());
         }
-        let src_ptr = args.src.data.as_raw().0 as *const c_void;
-        let out_ptr = args.out.data.as_raw().0 as *mut c_void;
+        let src_ptr = args.src.data().as_raw().0 as *const c_void;
+        let out_ptr = args.out.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
         let status = match (T::KIND, I::KIND) {

@@ -335,16 +335,8 @@ fn bench_cholesky_f32(c: &mut Criterion, cell: &Cell<'_>, n: i32, host: &[f32]) 
         || {
             let mut w = work.borrow_mut();
             let args = CholeskyArgs::<f32> {
-                a: TensorMut {
-                    data: w.as_slice_mut(),
-                    shape: sh,
-                    stride: st,
-                },
-                info: TensorMut {
-                    data: info.as_slice_mut(),
-                    shape: [1],
-                    stride: [1],
-                },
+                a: TensorMut::new(w.as_slice_mut(), sh, st).unwrap(),
+                info: TensorMut::new(info.as_slice_mut(), [1], [1]).unwrap(),
             };
             plan.run(stream, Workspace::Borrowed(ws.as_slice_mut()), args)
                 .expect("cholesky");
@@ -389,21 +381,10 @@ fn bench_lu_f32(c: &mut Criterion, cell: &Cell<'_>, n: i32, host: &[f32]) {
         || {
             let mut w = work.borrow_mut();
             let args = LuArgs::<f32> {
-                a: TensorMut {
-                    data: w.as_slice_mut(),
-                    shape: sh,
-                    stride: st,
-                },
-                pivot: TensorMut {
-                    data: pivot.as_slice_mut(),
-                    shape: [1, n],
-                    stride: contiguous_stride([1, n]),
-                },
-                info: TensorMut {
-                    data: info.as_slice_mut(),
-                    shape: [1],
-                    stride: [1],
-                },
+                a: TensorMut::new(w.as_slice_mut(), sh, st).unwrap(),
+                pivot: TensorMut::new(pivot.as_slice_mut(), [1, n], contiguous_stride([1, n]))
+                    .unwrap(),
+                info: TensorMut::new(info.as_slice_mut(), [1], [1]).unwrap(),
             };
             plan.run(stream, Workspace::Borrowed(ws.as_slice_mut()), args)
                 .expect("lu");

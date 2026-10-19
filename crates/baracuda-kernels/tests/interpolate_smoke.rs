@@ -174,16 +174,18 @@ fn interpolate_bilinear_2d_f32_upsample_2x() {
     let plan =
         InterpolatePlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = InterpolateArgs {
-        input: TensorRef {
-            data: dev_in.as_slice(),
-            shape: [n, c, ih, iw],
-            stride: contiguous_stride([n, c, ih, iw]),
-        },
-        output: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: [n, c, oh, ow],
-            stride: contiguous_stride([n, c, oh, ow]),
-        },
+        input: TensorRef::new(
+            dev_in.as_slice(),
+            [n, c, ih, iw],
+            contiguous_stride([n, c, ih, iw]),
+        )
+        .unwrap(),
+        output: TensorMut::new(
+            dev_out.as_slice_mut(),
+            [n, c, oh, ow],
+            contiguous_stride([n, c, oh, ow]),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -248,16 +250,18 @@ fn interpolate_bilinear_2d_f64_upsample_2x() {
     let plan =
         InterpolatePlan::<f64>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = InterpolateArgs {
-        input: TensorRef {
-            data: dev_in.as_slice(),
-            shape: [n, c, ih, iw],
-            stride: contiguous_stride([n, c, ih, iw]),
-        },
-        output: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: [n, c, oh, ow],
-            stride: contiguous_stride([n, c, oh, ow]),
-        },
+        input: TensorRef::new(
+            dev_in.as_slice(),
+            [n, c, ih, iw],
+            contiguous_stride([n, c, ih, iw]),
+        )
+        .unwrap(),
+        output: TensorMut::new(
+            dev_out.as_slice_mut(),
+            [n, c, oh, ow],
+            contiguous_stride([n, c, oh, ow]),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -296,16 +300,18 @@ fn interpolate_bilinear_2d_backward_f32_smoke() {
     let plan = InterpolateBackwardPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = InterpolateBackwardArgs {
-        dout: TensorRef {
-            data: dev_dout.as_slice(),
-            shape: [n, c, oh, ow],
-            stride: contiguous_stride([n, c, oh, ow]),
-        },
-        dinput: TensorMut {
-            data: dev_din.as_slice_mut(),
-            shape: [n, c, ih, iw],
-            stride: contiguous_stride([n, c, ih, iw]),
-        },
+        dout: TensorRef::new(
+            dev_dout.as_slice(),
+            [n, c, oh, ow],
+            contiguous_stride([n, c, oh, ow]),
+        )
+        .unwrap(),
+        dinput: TensorMut::new(
+            dev_din.as_slice_mut(),
+            [n, c, ih, iw],
+            contiguous_stride([n, c, ih, iw]),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -376,16 +382,18 @@ fn run_fw_f32_case(
     let plan =
         InterpolatePlan::<f32>::select(stream, &desc, PlanPreference::default()).expect("select");
     let args = InterpolateArgs {
-        input: TensorRef {
-            data: dev_in.as_slice(),
-            shape: [n, c, ih, iw],
-            stride: contiguous_stride([n, c, ih, iw]),
-        },
-        output: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: [n, c, oh, ow],
-            stride: contiguous_stride([n, c, oh, ow]),
-        },
+        input: TensorRef::new(
+            dev_in.as_slice(),
+            [n, c, ih, iw],
+            contiguous_stride([n, c, ih, iw]),
+        )
+        .unwrap(),
+        output: TensorMut::new(
+            dev_out.as_slice_mut(),
+            [n, c, oh, ow],
+            contiguous_stride([n, c, oh, ow]),
+        )
+        .unwrap(),
     };
     plan.run(stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -515,16 +523,18 @@ fn interpolate_bilinear_2d_f16_fw_matches_f32_ref() {
     let plan = InterpolatePlan::<f16>::select(&stream, &desc, PlanPreference::default())
         .expect("select f16");
     let args = InterpolateArgs {
-        input: TensorRef {
-            data: dev_in.as_slice(),
-            shape: [n, c, ih, iw],
-            stride: contiguous_stride([n, c, ih, iw]),
-        },
-        output: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: [n, c, oh, ow],
-            stride: contiguous_stride([n, c, oh, ow]),
-        },
+        input: TensorRef::new(
+            dev_in.as_slice(),
+            [n, c, ih, iw],
+            contiguous_stride([n, c, ih, iw]),
+        )
+        .unwrap(),
+        output: TensorMut::new(
+            dev_out.as_slice_mut(),
+            [n, c, oh, ow],
+            contiguous_stride([n, c, oh, ow]),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -572,16 +582,18 @@ fn interpolate_bilinear_2d_bf16_fw_matches_f32_ref() {
     let plan = InterpolatePlan::<bf16>::select(&stream, &desc, PlanPreference::default())
         .expect("select bf16");
     let args = InterpolateArgs {
-        input: TensorRef {
-            data: dev_in.as_slice(),
-            shape: [n, c, ih, iw],
-            stride: contiguous_stride([n, c, ih, iw]),
-        },
-        output: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: [n, c, oh, ow],
-            stride: contiguous_stride([n, c, oh, ow]),
-        },
+        input: TensorRef::new(
+            dev_in.as_slice(),
+            [n, c, ih, iw],
+            contiguous_stride([n, c, ih, iw]),
+        )
+        .unwrap(),
+        output: TensorMut::new(
+            dev_out.as_slice_mut(),
+            [n, c, oh, ow],
+            contiguous_stride([n, c, oh, ow]),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -726,16 +738,18 @@ fn run_bw_f32_case(
     let plan = InterpolateBackwardPlan::<f32>::select(stream, &desc, PlanPreference::default())
         .expect("select");
     let args = InterpolateBackwardArgs {
-        dout: TensorRef {
-            data: dev_dout.as_slice(),
-            shape: [n, c, oh, ow],
-            stride: contiguous_stride([n, c, oh, ow]),
-        },
-        dinput: TensorMut {
-            data: dev_din.as_slice_mut(),
-            shape: [n, c, ih, iw],
-            stride: contiguous_stride([n, c, ih, iw]),
-        },
+        dout: TensorRef::new(
+            dev_dout.as_slice(),
+            [n, c, oh, ow],
+            contiguous_stride([n, c, oh, ow]),
+        )
+        .unwrap(),
+        dinput: TensorMut::new(
+            dev_din.as_slice_mut(),
+            [n, c, ih, iw],
+            contiguous_stride([n, c, ih, iw]),
+        )
+        .unwrap(),
     };
     plan.run(stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

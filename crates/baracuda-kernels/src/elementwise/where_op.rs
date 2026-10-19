@@ -149,7 +149,7 @@ impl<T: Element, const N: usize> WherePlan<T, N> {
         crate::view_check::check_fits(&args.a)?;
         crate::view_check::check_fits(&args.b)?;
         crate::view_check::check_fits(&args.y)?;
-        if args.y.shape != self.desc.shape {
+        if args.y.shape() != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::WherePlan: Y shape mismatch with descriptor",
             ));
@@ -159,9 +159,9 @@ impl<T: Element, const N: usize> WherePlan<T, N> {
         for d in 0..N {
             let y_dim = self.desc.shape[d];
             let checks = [
-                (args.cond.shape[d], args.cond.stride[d]),
-                (args.a.shape[d], args.a.stride[d]),
-                (args.b.shape[d], args.b.stride[d]),
+                (args.cond.shape()[d], args.cond.stride()[d]),
+                (args.a.shape()[d], args.a.stride()[d]),
+                (args.b.shape()[d], args.b.stride()[d]),
             ];
             for (op_dim, op_stride) in checks {
                 if op_dim != y_dim && !(op_dim == 1 && op_stride == 0) {
@@ -184,10 +184,10 @@ impl<T: Element, const N: usize> WherePlan<T, N> {
         let cond_numel = args.cond.numel();
         let a_numel = args.a.numel();
         let b_numel = args.b.numel();
-        let cond_len = args.cond.data.len() as i64;
-        let a_len = args.a.data.len() as i64;
-        let b_len = args.b.data.len() as i64;
-        let y_len = args.y.data.len() as i64;
+        let cond_len = args.cond.data().len() as i64;
+        let a_len = args.a.data().len() as i64;
+        let b_len = args.b.data().len() as i64;
+        let y_len = args.y.data().len() as i64;
         if y_len < y_numel {
             return Err(Error::BufferTooSmall {
                 needed: y_numel as usize,
@@ -245,15 +245,15 @@ impl<T: Element, const N: usize> WherePlan<T, N> {
         if numel == 0 {
             return Ok(());
         }
-        let cond_ptr = args.cond.data.as_raw().0 as *const c_void;
-        let a_ptr = args.a.data.as_raw().0 as *const c_void;
-        let b_ptr = args.b.data.as_raw().0 as *const c_void;
-        let y_ptr = args.y.data.as_raw().0 as *mut c_void;
+        let cond_ptr = args.cond.data().as_raw().0 as *const c_void;
+        let a_ptr = args.a.data().as_raw().0 as *const c_void;
+        let b_ptr = args.b.data().as_raw().0 as *const c_void;
+        let y_ptr = args.y.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
-        let all_contig_same_shape = args.cond.shape == args.y.shape
-            && args.a.shape == args.y.shape
-            && args.b.shape == args.y.shape
+        let all_contig_same_shape = args.cond.shape() == args.y.shape()
+            && args.a.shape() == args.y.shape()
+            && args.b.shape() == args.y.shape()
             && args.cond.is_contiguous()
             && args.a.is_contiguous()
             && args.b.is_contiguous()
@@ -333,11 +333,11 @@ impl<T: Element, const N: usize> WherePlan<T, N> {
         numel: i64,
         args: &WhereArgs<'_, T, N>,
     ) -> Result<()> {
-        let shape = args.y.shape;
-        let stride_cond = args.cond.stride;
-        let stride_a = args.a.stride;
-        let stride_b = args.b.stride;
-        let stride_y = args.y.stride;
+        let shape = args.y.shape();
+        let stride_cond = args.cond.stride();
+        let stride_a = args.a.stride();
+        let stride_b = args.b.stride();
+        let stride_y = args.y.stride();
         let rank = N as i32;
 
         let status = match T::KIND {

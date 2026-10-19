@@ -126,31 +126,13 @@ fn fa2_gqa_f16_vs_dense_bespoke() {
             &stream,
             Workspace::None,
             FlashSdpaArgs {
-                q: TensorRef {
-                    data: dq.as_slice(),
-                    shape: sq,
-                    stride: contiguous_stride(sq),
-                },
-                k: TensorRef {
-                    data: dk_dense.as_slice(),
-                    shape: sk_dense,
-                    stride: contiguous_stride(sk_dense),
-                },
-                v: TensorRef {
-                    data: dv_dense.as_slice(),
-                    shape: sv_dense,
-                    stride: contiguous_stride(sv_dense),
-                },
-                y: TensorMut {
-                    data: dy_ref.as_slice_mut(),
-                    shape: sy,
-                    stride: contiguous_stride(sy),
-                },
-                lse: TensorMut {
-                    data: dlse_ref.as_slice_mut(),
-                    shape: sl,
-                    stride: contiguous_stride(sl),
-                },
+                q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+                k: TensorRef::new(dk_dense.as_slice(), sk_dense, contiguous_stride(sk_dense))
+                    .unwrap(),
+                v: TensorRef::new(dv_dense.as_slice(), sv_dense, contiguous_stride(sv_dense))
+                    .unwrap(),
+                y: TensorMut::new(dy_ref.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
+                lse: TensorMut::new(dlse_ref.as_slice_mut(), sl, contiguous_stride(sl)).unwrap(),
                 mask: None,
                 alibi_slopes: None,
             },
@@ -175,31 +157,11 @@ fn fa2_gqa_f16_vs_dense_bespoke() {
             &stream,
             Workspace::Borrowed(ws_buf.as_slice_mut()),
             FlashSdpaArgs {
-                q: TensorRef {
-                    data: dq.as_slice(),
-                    shape: sq,
-                    stride: contiguous_stride(sq),
-                },
-                k: TensorRef {
-                    data: dk_gqa.as_slice(),
-                    shape: sk_gqa,
-                    stride: contiguous_stride(sk_gqa),
-                },
-                v: TensorRef {
-                    data: dv_gqa.as_slice(),
-                    shape: sv_gqa,
-                    stride: contiguous_stride(sv_gqa),
-                },
-                y: TensorMut {
-                    data: dy_fa2.as_slice_mut(),
-                    shape: sy,
-                    stride: contiguous_stride(sy),
-                },
-                lse: TensorMut {
-                    data: dlse_fa2.as_slice_mut(),
-                    shape: sl,
-                    stride: contiguous_stride(sl),
-                },
+                q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+                k: TensorRef::new(dk_gqa.as_slice(), sk_gqa, contiguous_stride(sk_gqa)).unwrap(),
+                v: TensorRef::new(dv_gqa.as_slice(), sv_gqa, contiguous_stride(sv_gqa)).unwrap(),
+                y: TensorMut::new(dy_fa2.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
+                lse: TensorMut::new(dlse_fa2.as_slice_mut(), sl, contiguous_stride(sl)).unwrap(),
                 mask: None,
                 alibi_slopes: None,
             },

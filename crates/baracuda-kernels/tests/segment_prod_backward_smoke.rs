@@ -65,31 +65,11 @@ fn segment_prod_backward_f32_basic() {
     let plan = SegmentProdBackwardPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = SegmentProdBackwardArgs::<f32> {
-        d_output: TensorRef {
-            data: dev_dout.as_slice(),
-            shape: [ns, d],
-            stride: contiguous_stride([ns, d]),
-        },
-        input: TensorRef {
-            data: dev_in.as_slice(),
-            shape: [n, d],
-            stride: contiguous_stride([n, d]),
-        },
-        output: TensorRef {
-            data: dev_out.as_slice(),
-            shape: [ns, d],
-            stride: contiguous_stride([ns, d]),
-        },
-        segment_ids: TensorRef {
-            data: dev_seg.as_slice(),
-            shape: [n],
-            stride: contiguous_stride([n]),
-        },
-        d_input: TensorMut {
-            data: dev_din.as_slice_mut(),
-            shape: [n, d],
-            stride: contiguous_stride([n, d]),
-        },
+        d_output: TensorRef::new(dev_dout.as_slice(), [ns, d], contiguous_stride([ns, d])).unwrap(),
+        input: TensorRef::new(dev_in.as_slice(), [n, d], contiguous_stride([n, d])).unwrap(),
+        output: TensorRef::new(dev_out.as_slice(), [ns, d], contiguous_stride([ns, d])).unwrap(),
+        segment_ids: TensorRef::new(dev_seg.as_slice(), [n], contiguous_stride([n])).unwrap(),
+        d_input: TensorMut::new(dev_din.as_slice_mut(), [n, d], contiguous_stride([n, d])).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -148,31 +128,11 @@ fn segment_prod_backward_f64_basic() {
     let plan = SegmentProdBackwardPlan::<f64>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = SegmentProdBackwardArgs::<f64> {
-        d_output: TensorRef {
-            data: dev_dout.as_slice(),
-            shape: [ns, d],
-            stride: contiguous_stride([ns, d]),
-        },
-        input: TensorRef {
-            data: dev_in.as_slice(),
-            shape: [n, d],
-            stride: contiguous_stride([n, d]),
-        },
-        output: TensorRef {
-            data: dev_out.as_slice(),
-            shape: [ns, d],
-            stride: contiguous_stride([ns, d]),
-        },
-        segment_ids: TensorRef {
-            data: dev_seg.as_slice(),
-            shape: [n],
-            stride: contiguous_stride([n]),
-        },
-        d_input: TensorMut {
-            data: dev_din.as_slice_mut(),
-            shape: [n, d],
-            stride: contiguous_stride([n, d]),
-        },
+        d_output: TensorRef::new(dev_dout.as_slice(), [ns, d], contiguous_stride([ns, d])).unwrap(),
+        input: TensorRef::new(dev_in.as_slice(), [n, d], contiguous_stride([n, d])).unwrap(),
+        output: TensorRef::new(dev_out.as_slice(), [ns, d], contiguous_stride([ns, d])).unwrap(),
+        segment_ids: TensorRef::new(dev_seg.as_slice(), [n], contiguous_stride([n])).unwrap(),
+        d_input: TensorMut::new(dev_din.as_slice_mut(), [n, d], contiguous_stride([n, d])).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

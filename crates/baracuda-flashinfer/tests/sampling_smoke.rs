@@ -142,11 +142,7 @@ fn sampling_one_hot_is_deterministic() {
         let mut valid_dev: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, 1).expect("alloc valid");
         let use_valid = i % 2 == 1;
         let valid = if use_valid {
-            Some(TensorMut {
-                data: valid_dev.as_slice_mut(),
-                shape: [1],
-                stride: [1],
-            })
+            Some(TensorMut::new(valid_dev.as_slice_mut(), [1], [1]).unwrap())
         } else {
             None // exercises the null-success scratch path
         };
@@ -155,16 +151,13 @@ fn sampling_one_hot_is_deterministic() {
             &stream,
             Workspace::None,
             TopKTopPSamplingArgs {
-                probs: TensorRef {
-                    data: probs_dev.as_slice(),
-                    shape: probs_shape,
-                    stride: contiguous_stride(probs_shape),
-                },
-                output: TensorMut {
-                    data: out_dev.as_slice_mut(),
-                    shape: [1],
-                    stride: [1],
-                },
+                probs: TensorRef::new(
+                    probs_dev.as_slice(),
+                    probs_shape,
+                    contiguous_stride(probs_shape),
+                )
+                .unwrap(),
+                output: TensorMut::new(out_dev.as_slice_mut(), [1], [1]).unwrap(),
                 valid,
                 seed_val: 0x1234_5678,
                 offset_val: 0,

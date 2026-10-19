@@ -221,28 +221,28 @@ impl RfftPlan<f32> {
         let batch = self.desc.batch;
         let in_shape = [batch, n];
         let out_shape = [batch, n / 2 + 1];
-        if args.x.shape != in_shape {
+        if args.x.shape() != in_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::RfftPlan<f32>: x shape != [batch, n]",
             ));
         }
-        if args.y.shape != out_shape {
+        if args.y.shape() != out_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::RfftPlan<f32>: y shape != [batch, n/2 + 1]",
             ));
         }
         let in_numel = (batch as i64) * (n as i64);
         let out_numel = (batch as i64) * ((n / 2 + 1) as i64);
-        if (args.x.data.len() as i64) < in_numel {
+        if (args.x.data().len() as i64) < in_numel {
             return Err(Error::BufferTooSmall {
                 needed: in_numel as usize,
-                got: args.x.data.len(),
+                got: args.x.data().len(),
             });
         }
-        if (args.y.data.len() as i64) < out_numel {
+        if (args.y.data().len() as i64) < out_numel {
             return Err(Error::BufferTooSmall {
                 needed: out_numel as usize,
-                got: args.y.data.len(),
+                got: args.y.data().len(),
             });
         }
         if in_numel == 0 {
@@ -252,8 +252,8 @@ impl RfftPlan<f32> {
         let handle = self.ensure_handle()?;
         self.bind_stream(handle, stream)?;
 
-        let idata = args.x.data.as_raw().0 as *mut f32;
-        let odata = args.y.data.as_raw().0 as *mut cufftComplex;
+        let idata = args.x.data().as_raw().0 as *mut f32;
+        let odata = args.y.data().as_raw().0 as *mut cufftComplex;
         let status = unsafe { cufftExecR2C(handle, idata, odata) };
         if status != 0 {
             return Err(Error::CutlassInternal(cufft_to_status(status)));
@@ -276,28 +276,28 @@ impl RfftPlan<f64> {
         let batch = self.desc.batch;
         let in_shape = [batch, n];
         let out_shape = [batch, n / 2 + 1];
-        if args.x.shape != in_shape {
+        if args.x.shape() != in_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::RfftPlan<f64>: x shape != [batch, n]",
             ));
         }
-        if args.y.shape != out_shape {
+        if args.y.shape() != out_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::RfftPlan<f64>: y shape != [batch, n/2 + 1]",
             ));
         }
         let in_numel = (batch as i64) * (n as i64);
         let out_numel = (batch as i64) * ((n / 2 + 1) as i64);
-        if (args.x.data.len() as i64) < in_numel {
+        if (args.x.data().len() as i64) < in_numel {
             return Err(Error::BufferTooSmall {
                 needed: in_numel as usize,
-                got: args.x.data.len(),
+                got: args.x.data().len(),
             });
         }
-        if (args.y.data.len() as i64) < out_numel {
+        if (args.y.data().len() as i64) < out_numel {
             return Err(Error::BufferTooSmall {
                 needed: out_numel as usize,
-                got: args.y.data.len(),
+                got: args.y.data().len(),
             });
         }
         if in_numel == 0 {
@@ -307,8 +307,8 @@ impl RfftPlan<f64> {
         let handle = self.ensure_handle()?;
         self.bind_stream(handle, stream)?;
 
-        let idata = args.x.data.as_raw().0 as *mut f64;
-        let odata = args.y.data.as_raw().0 as *mut cufftDoubleComplex;
+        let idata = args.x.data().as_raw().0 as *mut f64;
+        let odata = args.y.data().as_raw().0 as *mut cufftDoubleComplex;
         let status = unsafe { cufftExecD2Z(handle, idata, odata) };
         if status != 0 {
             return Err(Error::CutlassInternal(cufft_to_status(status)));
@@ -519,28 +519,28 @@ impl IrfftPlan<f32> {
         let batch = self.desc.batch;
         let in_shape = [batch, n / 2 + 1];
         let out_shape = [batch, n];
-        if args.x.shape != in_shape {
+        if args.x.shape() != in_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::IrfftPlan<f32>: x shape != [batch, n/2 + 1]",
             ));
         }
-        if args.y.shape != out_shape {
+        if args.y.shape() != out_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::IrfftPlan<f32>: y shape != [batch, n]",
             ));
         }
         let in_numel = (batch as i64) * ((n / 2 + 1) as i64);
         let out_numel = (batch as i64) * (n as i64);
-        if (args.x.data.len() as i64) < in_numel {
+        if (args.x.data().len() as i64) < in_numel {
             return Err(Error::BufferTooSmall {
                 needed: in_numel as usize,
-                got: args.x.data.len(),
+                got: args.x.data().len(),
             });
         }
-        if (args.y.data.len() as i64) < out_numel {
+        if (args.y.data().len() as i64) < out_numel {
             return Err(Error::BufferTooSmall {
                 needed: out_numel as usize,
-                got: args.y.data.len(),
+                got: args.y.data().len(),
             });
         }
         if out_numel == 0 {
@@ -550,8 +550,8 @@ impl IrfftPlan<f32> {
         let handle = self.ensure_handle()?;
         self.bind_stream(handle, stream)?;
 
-        let idata = args.x.data.as_raw().0 as *mut cufftComplex;
-        let odata = args.y.data.as_raw().0 as *mut f32;
+        let idata = args.x.data().as_raw().0 as *mut cufftComplex;
+        let odata = args.y.data().as_raw().0 as *mut f32;
         let status = unsafe { cufftExecC2R(handle, idata, odata) };
         if status != 0 {
             return Err(Error::CutlassInternal(cufft_to_status(status)));
@@ -588,28 +588,28 @@ impl IrfftPlan<f64> {
         let batch = self.desc.batch;
         let in_shape = [batch, n / 2 + 1];
         let out_shape = [batch, n];
-        if args.x.shape != in_shape {
+        if args.x.shape() != in_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::IrfftPlan<f64>: x shape != [batch, n/2 + 1]",
             ));
         }
-        if args.y.shape != out_shape {
+        if args.y.shape() != out_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::IrfftPlan<f64>: y shape != [batch, n]",
             ));
         }
         let in_numel = (batch as i64) * ((n / 2 + 1) as i64);
         let out_numel = (batch as i64) * (n as i64);
-        if (args.x.data.len() as i64) < in_numel {
+        if (args.x.data().len() as i64) < in_numel {
             return Err(Error::BufferTooSmall {
                 needed: in_numel as usize,
-                got: args.x.data.len(),
+                got: args.x.data().len(),
             });
         }
-        if (args.y.data.len() as i64) < out_numel {
+        if (args.y.data().len() as i64) < out_numel {
             return Err(Error::BufferTooSmall {
                 needed: out_numel as usize,
-                got: args.y.data.len(),
+                got: args.y.data().len(),
             });
         }
         if out_numel == 0 {
@@ -619,8 +619,8 @@ impl IrfftPlan<f64> {
         let handle = self.ensure_handle()?;
         self.bind_stream(handle, stream)?;
 
-        let idata = args.x.data.as_raw().0 as *mut cufftDoubleComplex;
-        let odata = args.y.data.as_raw().0 as *mut f64;
+        let idata = args.x.data().as_raw().0 as *mut cufftDoubleComplex;
+        let odata = args.y.data().as_raw().0 as *mut f64;
         let status = unsafe { cufftExecZ2D(handle, idata, odata) };
         if status != 0 {
             return Err(Error::CutlassInternal(cufft_to_status(status)));

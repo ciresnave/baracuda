@@ -181,18 +181,18 @@ impl<T: Element, const N: usize> DropoutPlan<T, N> {
     }
 
     fn check_args(&self, args: &DropoutArgs<'_, T, N>) -> Result<i64> {
-        if args.x.shape != self.desc.shape
-            || args.y.shape != self.desc.shape
-            || args.mask.shape != self.desc.shape
+        if args.x.shape() != self.desc.shape
+            || args.y.shape() != self.desc.shape
+            || args.mask.shape() != self.desc.shape
         {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::DropoutPlan: shape mismatch (x / y / mask)",
             ));
         }
         let numel = args.y.numel();
-        let xlen = args.x.data.len() as i64;
-        let ylen = args.y.data.len() as i64;
-        let mlen = args.mask.data.len() as i64;
+        let xlen = args.x.data().len() as i64;
+        let ylen = args.y.data().len() as i64;
+        let mlen = args.mask.data().len() as i64;
         if xlen < numel || ylen < numel || mlen < numel {
             return Err(Error::BufferTooSmall {
                 needed: numel as usize,
@@ -233,9 +233,9 @@ impl<const N: usize> DropoutPlan<f32, N> {
         };
 
         let stream_ptr = stream.as_raw();
-        let x_ptr = args.x.data.as_raw().0 as *const c_void;
-        let y_ptr = args.y.data.as_raw().0 as *mut c_void;
-        let mask_ptr = args.mask.data.as_raw().0 as *mut c_void;
+        let x_ptr = args.x.data().as_raw().0 as *const c_void;
+        let y_ptr = args.y.data().as_raw().0 as *mut c_void;
+        let mask_ptr = args.mask.data().as_raw().0 as *mut c_void;
         let rand_ptr = ws_ptr as *mut f32;
 
         let gen_handle = self.ensure_generator()?;
@@ -310,9 +310,9 @@ impl<const N: usize> DropoutPlan<f64, N> {
         };
 
         let stream_ptr = stream.as_raw();
-        let x_ptr = args.x.data.as_raw().0 as *const c_void;
-        let y_ptr = args.y.data.as_raw().0 as *mut c_void;
-        let mask_ptr = args.mask.data.as_raw().0 as *mut c_void;
+        let x_ptr = args.x.data().as_raw().0 as *const c_void;
+        let y_ptr = args.y.data().as_raw().0 as *mut c_void;
+        let mask_ptr = args.mask.data().as_raw().0 as *mut c_void;
         let rand_ptr = ws_ptr as *mut f32;
 
         let gen_handle = self.ensure_generator()?;
@@ -481,18 +481,18 @@ impl<T: Element, const N: usize> DropoutBackwardPlan<T, N> {
     }
 
     fn check_args(&self, args: &DropoutBackwardArgs<'_, T, N>) -> Result<i64> {
-        if args.dy.shape != self.desc.shape
-            || args.mask.shape != self.desc.shape
-            || args.dx.shape != self.desc.shape
+        if args.dy.shape() != self.desc.shape
+            || args.mask.shape() != self.desc.shape
+            || args.dx.shape() != self.desc.shape
         {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::DropoutBackwardPlan: shape mismatch",
             ));
         }
         let numel = args.dy.numel();
-        let dylen = args.dy.data.len() as i64;
-        let mlen = args.mask.data.len() as i64;
-        let dxlen = args.dx.data.len() as i64;
+        let dylen = args.dy.data().len() as i64;
+        let mlen = args.mask.data().len() as i64;
+        let dxlen = args.dx.data().len() as i64;
         if dylen < numel || mlen < numel || dxlen < numel {
             return Err(Error::BufferTooSmall {
                 needed: numel as usize,
@@ -519,9 +519,9 @@ impl<const N: usize> DropoutBackwardPlan<f32, N> {
             return Ok(());
         }
         let stream_ptr = stream.as_raw();
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let mask_ptr = args.mask.data.as_raw().0 as *const c_void;
-        let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let mask_ptr = args.mask.data().as_raw().0 as *const c_void;
+        let dx_ptr = args.dx.data().as_raw().0 as *mut c_void;
 
         let p = self.desc.p;
         let scale = if p < 1.0 {
@@ -561,9 +561,9 @@ impl<const N: usize> DropoutBackwardPlan<f64, N> {
             return Ok(());
         }
         let stream_ptr = stream.as_raw();
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let mask_ptr = args.mask.data.as_raw().0 as *const c_void;
-        let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let mask_ptr = args.mask.data().as_raw().0 as *const c_void;
+        let dx_ptr = args.dx.data().as_raw().0 as *mut c_void;
 
         let p = self.desc.p;
         let scale = if p < 1.0 {

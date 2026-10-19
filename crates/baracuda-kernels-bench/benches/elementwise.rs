@@ -72,21 +72,9 @@ fn bench_binary<T>(
 
         warmup(&stream, || {
             let args = BinaryArgs::<T, 1> {
-                a: TensorRef {
-                    data: dev_a.as_slice(),
-                    shape: xs,
-                    stride: stx,
-                },
-                b: TensorRef {
-                    data: dev_b.as_slice(),
-                    shape: xs,
-                    stride: stx,
-                },
-                y: TensorMut {
-                    data: dev_y.as_slice_mut(),
-                    shape: xs,
-                    stride: stx,
-                },
+                a: TensorRef::new(dev_a.as_slice(), xs, stx).unwrap(),
+                b: TensorRef::new(dev_b.as_slice(), xs, stx).unwrap(),
+                y: TensorMut::new(dev_y.as_slice_mut(), xs, stx).unwrap(),
             };
             plan.run(&stream, Workspace::None, args).expect("binary ew");
         });
@@ -99,21 +87,9 @@ fn bench_binary<T>(
         );
         let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 100, || {
             let args = BinaryArgs::<T, 1> {
-                a: TensorRef {
-                    data: dev_a.as_slice(),
-                    shape: xs,
-                    stride: stx,
-                },
-                b: TensorRef {
-                    data: dev_b.as_slice(),
-                    shape: xs,
-                    stride: stx,
-                },
-                y: TensorMut {
-                    data: dev_y.as_slice_mut(),
-                    shape: xs,
-                    stride: stx,
-                },
+                a: TensorRef::new(dev_a.as_slice(), xs, stx).unwrap(),
+                b: TensorRef::new(dev_b.as_slice(), xs, stx).unwrap(),
+                y: TensorMut::new(dev_y.as_slice_mut(), xs, stx).unwrap(),
             };
             plan.run(&stream, Workspace::None, args).expect("binary ew");
         });
@@ -137,21 +113,9 @@ fn bench_binary<T>(
             bb.iter_custom(|iters| {
                 time_with_events(&ctx, &stream, iters, || {
                     let args = BinaryArgs::<T, 1> {
-                        a: TensorRef {
-                            data: dev_a.as_slice(),
-                            shape: xs,
-                            stride: stx,
-                        },
-                        b: TensorRef {
-                            data: dev_b.as_slice(),
-                            shape: xs,
-                            stride: stx,
-                        },
-                        y: TensorMut {
-                            data: dev_y.as_slice_mut(),
-                            shape: xs,
-                            stride: stx,
-                        },
+                        a: TensorRef::new(dev_a.as_slice(), xs, stx).unwrap(),
+                        b: TensorRef::new(dev_b.as_slice(), xs, stx).unwrap(),
+                        y: TensorMut::new(dev_y.as_slice_mut(), xs, stx).unwrap(),
                     };
                     plan.run(&stream, Workspace::None, args).expect("binary ew");
                 })
@@ -200,16 +164,8 @@ fn bench_unary<T>(
 
         warmup(&stream, || {
             let args = UnaryArgs::<T, 1> {
-                x: TensorRef {
-                    data: dev_x.as_slice(),
-                    shape: xs,
-                    stride: stx,
-                },
-                y: TensorMut {
-                    data: dev_y.as_slice_mut(),
-                    shape: xs,
-                    stride: stx,
-                },
+                x: TensorRef::new(dev_x.as_slice(), xs, stx).unwrap(),
+                y: TensorMut::new(dev_y.as_slice_mut(), xs, stx).unwrap(),
             };
             plan.run(&stream, Workspace::None, args).expect("unary ew");
         });
@@ -222,16 +178,8 @@ fn bench_unary<T>(
         );
         let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 100, || {
             let args = UnaryArgs::<T, 1> {
-                x: TensorRef {
-                    data: dev_x.as_slice(),
-                    shape: xs,
-                    stride: stx,
-                },
-                y: TensorMut {
-                    data: dev_y.as_slice_mut(),
-                    shape: xs,
-                    stride: stx,
-                },
+                x: TensorRef::new(dev_x.as_slice(), xs, stx).unwrap(),
+                y: TensorMut::new(dev_y.as_slice_mut(), xs, stx).unwrap(),
             };
             plan.run(&stream, Workspace::None, args).expect("unary ew");
         });
@@ -255,16 +203,8 @@ fn bench_unary<T>(
             bb.iter_custom(|iters| {
                 time_with_events(&ctx, &stream, iters, || {
                     let args = UnaryArgs::<T, 1> {
-                        x: TensorRef {
-                            data: dev_x.as_slice(),
-                            shape: xs,
-                            stride: stx,
-                        },
-                        y: TensorMut {
-                            data: dev_y.as_slice_mut(),
-                            shape: xs,
-                            stride: stx,
-                        },
+                        x: TensorRef::new(dev_x.as_slice(), xs, stx).unwrap(),
+                        y: TensorMut::new(dev_y.as_slice_mut(), xs, stx).unwrap(),
                     };
                     plan.run(&stream, Workspace::None, args).expect("unary ew");
                 })

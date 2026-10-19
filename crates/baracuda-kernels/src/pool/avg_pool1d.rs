@@ -113,8 +113,8 @@ impl<T: Element> AvgPool1dPlan<T> {
             self.pool_desc.get(),
             self.x_desc.get(),
             self.y_desc.get(),
-            args.x.data.as_raw().0,
-            args.y.data.as_raw().0,
+            args.x.data().as_raw().0,
+            args.y.data().as_raw().0,
         )
     }
 
@@ -134,10 +134,10 @@ impl<T: Element> AvgPool1dPlan<T> {
             self.pool_desc.get(),
             self.x_desc.get(),
             self.y_desc.get(),
-            args.y.data.as_raw().0,
-            args.dy.data.as_raw().0,
-            args.x.data.as_raw().0,
-            args.dx.data.as_raw().0,
+            args.y.data().as_raw().0,
+            args.dy.data().as_raw().0,
+            args.x.data().as_raw().0,
+            args.dx.data().as_raw().0,
         )
     }
 
