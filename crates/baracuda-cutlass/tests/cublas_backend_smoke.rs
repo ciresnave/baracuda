@@ -106,25 +106,10 @@ fn run_one_f16_cublas(m: i32, n: i32, k: i32, force_cublas: bool) {
     }
 
     let args = GemmArgs::<f16> {
-        a: MatrixRef {
-            data: dev_a.as_slice(),
-            rows: m,
-            cols: k,
-            ld: k as i64,
-        },
-        b: MatrixRef {
-            data: dev_b.as_slice(),
-            rows: k,
-            cols: n,
-            ld: k as i64,
-        },
+        a: MatrixRef::new(dev_a.as_slice(), m, k, k as i64).unwrap(),
+        b: MatrixRef::new(dev_b.as_slice(), k, n, k as i64).unwrap(),
         c: None,
-        d: MatrixMut {
-            data: dev_d.as_slice_mut(),
-            rows: m,
-            cols: n,
-            ld: n as i64,
-        },
+        d: MatrixMut::new(dev_d.as_slice_mut(), m, n, n as i64).unwrap(),
         bias: None,
         alpha: 1.0,
         beta: 0.0,
@@ -199,25 +184,10 @@ fn run_one_bf16_cublas(m: i32, n: i32, k: i32, force_cublas: bool) {
     }
 
     let args = GemmArgs::<bf16> {
-        a: MatrixRef {
-            data: dev_a.as_slice(),
-            rows: m,
-            cols: k,
-            ld: k as i64,
-        },
-        b: MatrixRef {
-            data: dev_b.as_slice(),
-            rows: k,
-            cols: n,
-            ld: k as i64,
-        },
+        a: MatrixRef::new(dev_a.as_slice(), m, k, k as i64).unwrap(),
+        b: MatrixRef::new(dev_b.as_slice(), k, n, k as i64).unwrap(),
         c: None,
-        d: MatrixMut {
-            data: dev_d.as_slice_mut(),
-            rows: m,
-            cols: n,
-            ld: n as i64,
-        },
+        d: MatrixMut::new(dev_d.as_slice_mut(), m, n, n as i64).unwrap(),
         bias: None,
         alpha: 1.0,
         beta: 0.0,
@@ -287,25 +257,10 @@ fn run_one_f32_cublas_forced(m: i32, n: i32, k: i32) {
     );
 
     let args = GemmArgs::<f32> {
-        a: MatrixRef {
-            data: dev_a.as_slice(),
-            rows: m,
-            cols: k,
-            ld: k as i64,
-        },
-        b: MatrixRef {
-            data: dev_b.as_slice(),
-            rows: k,
-            cols: n,
-            ld: k as i64,
-        },
+        a: MatrixRef::new(dev_a.as_slice(), m, k, k as i64).unwrap(),
+        b: MatrixRef::new(dev_b.as_slice(), k, n, k as i64).unwrap(),
         c: None,
-        d: MatrixMut {
-            data: dev_d.as_slice_mut(),
-            rows: m,
-            cols: n,
-            ld: n as i64,
-        },
+        d: MatrixMut::new(dev_d.as_slice_mut(), m, n, n as i64).unwrap(),
         bias: None,
         alpha: 1.0,
         beta: 0.0,

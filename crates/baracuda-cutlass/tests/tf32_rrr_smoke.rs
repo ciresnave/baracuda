@@ -129,33 +129,16 @@ fn run_tf32_rrr(m: i32, n: i32, k: i32, epilogue: EpilogueKind) {
     assert_eq!(plan.sku().layout, LayoutSku::Rrr);
     assert_eq!(plan.sku().epilogue, epilogue);
 
-    let bias_arg = epilogue.requires_bias().then(|| VectorRef {
-        data: dev_bias.as_slice(),
-        len: n,
-        stride: 1,
-    });
+    let bias_arg = epilogue
+        .requires_bias()
+        .then(|| VectorRef::new(dev_bias.as_slice(), n, 1).unwrap());
 
     let args = GemmArgs::<f32> {
-        a: MatrixRef {
-            data: dev_a.as_slice(),
-            rows: m,
-            cols: k,
-            ld: k as i64,
-        },
+        a: MatrixRef::new(dev_a.as_slice(), m, k, k as i64).unwrap(),
         // RRR: B is row-major [K, N], so leading dim is N (not K as in RCR).
-        b: MatrixRef {
-            data: dev_b.as_slice(),
-            rows: k,
-            cols: n,
-            ld: n as i64,
-        },
+        b: MatrixRef::new(dev_b.as_slice(), k, n, n as i64).unwrap(),
         c: None,
-        d: MatrixMut {
-            data: dev_d.as_slice_mut(),
-            rows: m,
-            cols: n,
-            ld: n as i64,
-        },
+        d: MatrixMut::new(dev_d.as_slice_mut(), m, n, n as i64).unwrap(),
         bias: bias_arg,
         alpha: 1.0,
         beta: 0.0,

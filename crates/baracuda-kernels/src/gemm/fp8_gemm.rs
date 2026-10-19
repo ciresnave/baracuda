@@ -153,12 +153,12 @@ impl<T: FpElement> Fp8GemmPlan<T> {
                 "FP8 GEMM problem must have positive M, N, K",
             ));
         }
-        if args.a.rows != self.desc.m || args.a.cols != self.desc.k {
+        if args.a.rows() != self.desc.m || args.a.cols() != self.desc.k {
             return Err(Error::InvalidProblem(
                 "A shape mismatch with descriptor (M, K)",
             ));
         }
-        if args.b.rows != self.desc.k || args.b.cols != self.desc.n {
+        if args.b.rows() != self.desc.k || args.b.cols() != self.desc.n {
             return Err(Error::InvalidProblem(
                 "B shape mismatch with descriptor (K, N)",
             ));
@@ -169,21 +169,21 @@ impl<T: FpElement> Fp8GemmPlan<T> {
         // along N).
         match self.sku.layout {
             LayoutSku::Rcr => {
-                if args.b.ld < self.desc.k as i64 {
+                if args.b.ld() < self.desc.k as i64 {
                     return Err(Error::InvalidProblem(
                         "B leading dimension must be >= K for RCR (col-major K-contig)",
                     ));
                 }
             }
             LayoutSku::Rrr => {
-                if args.b.ld < self.desc.n as i64 {
+                if args.b.ld() < self.desc.n as i64 {
                     return Err(Error::InvalidProblem(
                         "B leading dimension must be >= N for RRR (row-major N-contig)",
                     ));
                 }
             }
         }
-        if args.d.rows != self.desc.m || args.d.cols != self.desc.n {
+        if args.d.rows() != self.desc.m || args.d.cols() != self.desc.n {
             return Err(Error::InvalidProblem(
                 "D shape mismatch with descriptor (M, N)",
             ));
@@ -212,12 +212,19 @@ impl<T: FpElement> Fp8GemmPlan<T> {
             LayoutSku::Rcr => (n, k),
             LayoutSku::Rrr => (k, n),
         };
-        crate::view_check::check_matrix(m, k, args.a.ld, eb, args.a.data.len(), eb)?;
-        crate::view_check::check_matrix(b_major, b_minor, args.b.ld, eb, args.b.data.len(), eb)?;
+        crate::view_check::check_matrix(m, k, args.a.ld(), eb, args.a.data().len(), eb)?;
+        crate::view_check::check_matrix(
+            b_major,
+            b_minor,
+            args.b.ld(),
+            eb,
+            args.b.data().len(),
+            eb,
+        )?;
         if let Some(c) = &args.c {
-            crate::view_check::check_matrix(m, n, c.ld, eb, c.data.len(), eb)?;
+            crate::view_check::check_matrix(m, n, c.ld(), eb, c.data().len(), eb)?;
         }
-        crate::view_check::check_matrix(m, n, args.d.ld, eb, args.d.data.len(), eb)?;
+        crate::view_check::check_matrix(m, n, args.d.ld(), eb, args.d.data().len(), eb)?;
         Ok(())
     }
 
@@ -249,15 +256,15 @@ impl<T: FpElement> Fp8GemmPlan<T> {
         self.can_implement(&args)?;
         let _ = workspace; // FP8 kernels take no scratch
 
-        let a_ptr = args.a.data.as_raw().0 as *const c_void;
-        let b_ptr = args.b.data.as_raw().0 as *const c_void;
-        let d_ptr = args.d.data.as_raw().0 as *mut c_void;
+        let a_ptr = args.a.data().as_raw().0 as *const c_void;
+        let b_ptr = args.b.data().as_raw().0 as *const c_void;
+        let d_ptr = args.d.data().as_raw().0 as *mut c_void;
         let (c_ptr, ldc) = match &args.c {
-            Some(c) => (c.data.as_raw().0 as *const c_void, c.ld),
+            Some(c) => (c.data().as_raw().0 as *const c_void, c.ld()),
             None => (core::ptr::null(), 0i64),
         };
         let bias_ptr = match &args.bias {
-            Some(b) => b.data.as_raw().0 as *const c_void,
+            Some(b) => b.data().as_raw().0 as *const c_void,
             None => core::ptr::null(),
         };
 
@@ -280,9 +287,9 @@ impl<T: FpElement> Fp8GemmPlan<T> {
         let m = self.desc.m;
         let n = self.desc.n;
         let k = self.desc.k;
-        let lda = args.a.ld;
-        let ldb = args.b.ld;
-        let ldd = args.d.ld;
+        let lda = args.a.ld();
+        let ldb = args.b.ld();
+        let ldd = args.d.ld();
         let alpha = args.alpha;
         let beta = args.beta;
 

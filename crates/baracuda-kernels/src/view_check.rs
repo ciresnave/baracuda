@@ -182,14 +182,14 @@ pub(crate) fn check_vector<T: baracuda_types::DeviceRepr + Copy + 'static>(
     v: &VectorRef<'_, T>,
     n: i32,
 ) -> Result<()> {
-    if v.len != n {
+    if v.len() != n {
         return Err(Error::InvalidProblem("bias length must equal N"));
     }
     let needed = usize::try_from(n).unwrap_or(0);
-    if needed > v.data.len() {
+    if needed > v.data().len() {
         return Err(Error::BufferTooSmall {
             needed,
-            got: v.data.len(),
+            got: v.data().len(),
         });
     }
     Ok(())

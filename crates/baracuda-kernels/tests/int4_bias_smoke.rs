@@ -307,30 +307,11 @@ fn run_int4_bias_smoke<T, BT>(
         .expect("select int4 bias plan");
 
     let args = Int4GemmArgs::<T, BT> {
-        a: MatrixRef {
-            data: dev_a,
-            rows: m,
-            cols: k,
-            ld: k_bytes as i64,
-        },
-        b: MatrixRef {
-            data: dev_b,
-            rows: k,
-            cols: n,
-            ld: ldb_bytes_host as i64,
-        },
+        a: MatrixRef::new(dev_a, m, k, k_bytes as i64).unwrap(),
+        b: MatrixRef::new(dev_b, k, n, ldb_bytes_host as i64).unwrap(),
         c: None,
-        d: MatrixMut {
-            data: dev_d.as_slice_mut(),
-            rows: m,
-            cols: n,
-            ld: n_bytes as i64,
-        },
-        bias: Some(VectorRef {
-            data: dev_bias.as_slice(),
-            len: n,
-            stride: 1,
-        }),
+        d: MatrixMut::new(dev_d.as_slice_mut(), m, n, n_bytes as i64).unwrap(),
+        bias: Some(VectorRef::new(dev_bias.as_slice(), n, 1).unwrap()),
         alpha,
         beta,
     };

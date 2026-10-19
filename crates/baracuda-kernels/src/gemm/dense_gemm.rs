@@ -204,19 +204,19 @@ impl<T: Element> DenseGemmPlan<T> {
     /// Validate that this plan can launch with `args`.
     pub fn can_implement(&self, args: &DenseGemmArgs<'_, T>) -> Result<()> {
         let d = &self.desc;
-        if args.a.rows != d.m || args.a.cols != d.k {
+        if args.a.rows() != d.m || args.a.cols() != d.k {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::DenseGemmPlan: A logical shape mismatch with \
                  descriptor (M, K)",
             ));
         }
-        if args.b.rows != d.k || args.b.cols != d.n {
+        if args.b.rows() != d.k || args.b.cols() != d.n {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::DenseGemmPlan: B logical shape mismatch with \
                  descriptor (K, N)",
             ));
         }
-        if args.d.rows != d.m || args.d.cols != d.n {
+        if args.d.rows() != d.m || args.d.cols() != d.n {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::DenseGemmPlan: D shape mismatch with descriptor \
                  (M, N)",
@@ -226,23 +226,23 @@ impl<T: Element> DenseGemmPlan<T> {
         // `validate` (gemm_dense_cublas_facade.rs), which re-checks at
         // run time.
         let (min_lda, min_ldb) = d.layout.min_lds(d.m, d.n, d.k);
-        if args.a.ld < min_lda.max(1) {
+        if args.a.ld() < min_lda.max(1) {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::DenseGemmPlan: lda below the layout's minimum",
             ));
         }
-        if args.b.ld < min_ldb.max(1) {
+        if args.b.ld() < min_ldb.max(1) {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::DenseGemmPlan: ldb below the layout's minimum",
             ));
         }
-        if args.d.ld < (d.n as i64).max(1) {
+        if args.d.ld() < (d.n as i64).max(1) {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::DenseGemmPlan: ldd below N",
             ));
         }
         let i32_max = i32::MAX as i64;
-        if args.a.ld > i32_max || args.b.ld > i32_max || args.d.ld > i32_max {
+        if args.a.ld() > i32_max || args.b.ld() > i32_max || args.d.ld() > i32_max {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::DenseGemmPlan: leading dimensions must fit in i32 \
                  (cuBLAS limit)",
@@ -283,14 +283,14 @@ impl<T: Element> DenseGemmPlan<T> {
             };
             let (m, n, k) = (d.m as i64, d.n as i64, d.k as i64);
             let a_slot = match d.layout {
-                DenseGemmLayout::Rrr | DenseGemmLayout::Rcr => footprint(m, k, args.a.ld),
-                DenseGemmLayout::Crr => footprint(k, m, args.a.ld),
+                DenseGemmLayout::Rrr | DenseGemmLayout::Rcr => footprint(m, k, args.a.ld()),
+                DenseGemmLayout::Crr => footprint(k, m, args.a.ld()),
             };
             let b_slot = match d.layout {
-                DenseGemmLayout::Rrr | DenseGemmLayout::Crr => footprint(k, n, args.b.ld),
-                DenseGemmLayout::Rcr => footprint(n, k, args.b.ld),
+                DenseGemmLayout::Rrr | DenseGemmLayout::Crr => footprint(k, n, args.b.ld()),
+                DenseGemmLayout::Rcr => footprint(n, k, args.b.ld()),
             };
-            let d_slot = footprint(m, n, args.d.ld);
+            let d_slot = footprint(m, n, args.d.ld());
             let reach = |slot: i64, stride: i64| -> Result<i64> {
                 if d.batch == 1 || stride == 0 {
                     return Ok(slot);
@@ -311,9 +311,9 @@ impl<T: Element> DenseGemmPlan<T> {
                 }
                 Ok(())
             };
-            check(reach(a_slot, args.stride_a)?, args.a.data.len())?;
-            check(reach(b_slot, args.stride_b)?, args.b.data.len())?;
-            check(reach(d_slot, args.stride_d)?, args.d.data.len())?;
+            check(reach(a_slot, args.stride_a)?, args.a.data().len())?;
+            check(reach(b_slot, args.stride_b)?, args.b.data().len())?;
+            check(reach(d_slot, args.stride_d)?, args.d.data().len())?;
         }
         Ok(())
     }
@@ -425,9 +425,9 @@ impl<T: Element> DenseGemmPlan<T> {
 
         let d = &self.desc;
         let layout = d.layout.ffi_tag();
-        let a_ptr = args.a.data.as_raw().0 as *const c_void;
-        let b_ptr = args.b.data.as_raw().0 as *const c_void;
-        let d_ptr = args.d.data.as_raw().0 as *mut c_void;
+        let a_ptr = args.a.data().as_raw().0 as *const c_void;
+        let b_ptr = args.b.data().as_raw().0 as *const c_void;
+        let d_ptr = args.d.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
         let status = match T::KIND {
@@ -441,13 +441,13 @@ impl<T: Element> DenseGemmPlan<T> {
                     args.alpha.to_f32(),
                     args.beta.to_f32(),
                     a_ptr,
-                    args.a.ld,
+                    args.a.ld(),
                     args.stride_a,
                     b_ptr,
-                    args.b.ld,
+                    args.b.ld(),
                     args.stride_b,
                     d_ptr,
-                    args.d.ld,
+                    args.d.ld(),
                     args.stride_d,
                     core::ptr::null_mut(),
                     0,
@@ -464,13 +464,13 @@ impl<T: Element> DenseGemmPlan<T> {
                     args.alpha.to_f64(),
                     args.beta.to_f64(),
                     a_ptr,
-                    args.a.ld,
+                    args.a.ld(),
                     args.stride_a,
                     b_ptr,
-                    args.b.ld,
+                    args.b.ld(),
                     args.stride_b,
                     d_ptr,
-                    args.d.ld,
+                    args.d.ld(),
                     args.stride_d,
                     core::ptr::null_mut(),
                     0,
@@ -487,13 +487,13 @@ impl<T: Element> DenseGemmPlan<T> {
                     args.alpha.to_f32(),
                     args.beta.to_f32(),
                     a_ptr,
-                    args.a.ld,
+                    args.a.ld(),
                     args.stride_a,
                     b_ptr,
-                    args.b.ld,
+                    args.b.ld(),
                     args.stride_b,
                     d_ptr,
-                    args.d.ld,
+                    args.d.ld(),
                     args.stride_d,
                     core::ptr::null_mut(),
                     0,
@@ -510,13 +510,13 @@ impl<T: Element> DenseGemmPlan<T> {
                     args.alpha.to_f32(),
                     args.beta.to_f32(),
                     a_ptr,
-                    args.a.ld,
+                    args.a.ld(),
                     args.stride_a,
                     b_ptr,
-                    args.b.ld,
+                    args.b.ld(),
                     args.stride_b,
                     d_ptr,
-                    args.d.ld,
+                    args.d.ld(),
                     args.stride_d,
                     core::ptr::null_mut(),
                     0,

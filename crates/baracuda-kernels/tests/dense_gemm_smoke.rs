@@ -179,26 +179,11 @@ fn run_dense_f32(
     assert_eq!(plan.workspace_size(), 0);
 
     let args = DenseGemmArgs::<f32> {
-        a: MatrixRef {
-            data: dev_a.as_slice(),
-            rows: m,
-            cols: k,
-            ld: lda as i64,
-        },
+        a: MatrixRef::new(dev_a.as_slice(), m, k, lda as i64).unwrap(),
         stride_a: stride_a as i64,
-        b: MatrixRef {
-            data: dev_b.as_slice(),
-            rows: k,
-            cols: n,
-            ld: ldb as i64,
-        },
+        b: MatrixRef::new(dev_b.as_slice(), k, n, ldb as i64).unwrap(),
         stride_b: stride_b as i64,
-        d: MatrixMut {
-            data: dev_d.as_slice_mut(),
-            rows: m,
-            cols: n,
-            ld: ldd as i64,
-        },
+        d: MatrixMut::new(dev_d.as_slice_mut(), m, n, ldd as i64).unwrap(),
         stride_d: stride_d as i64,
         alpha,
         beta,
@@ -452,26 +437,11 @@ fn dense_f64_rrr_basic() {
     let plan = DenseGemmPlan::<f64>::select(&stream, &desc, PlanPreference::default())
         .expect("select dense f64 plan");
     let args = DenseGemmArgs::<f64> {
-        a: MatrixRef {
-            data: dev_a.as_slice(),
-            rows: m,
-            cols: k,
-            ld: ku as i64,
-        },
+        a: MatrixRef::new(dev_a.as_slice(), m, k, ku as i64).unwrap(),
         stride_a: 0,
-        b: MatrixRef {
-            data: dev_b.as_slice(),
-            rows: k,
-            cols: n,
-            ld: nu as i64,
-        },
+        b: MatrixRef::new(dev_b.as_slice(), k, n, nu as i64).unwrap(),
         stride_b: 0,
-        d: MatrixMut {
-            data: dev_d.as_slice_mut(),
-            rows: m,
-            cols: n,
-            ld: nu as i64,
-        },
+        d: MatrixMut::new(dev_d.as_slice_mut(), m, n, nu as i64).unwrap(),
         stride_d: 0,
         alpha: 1.0f64,
         beta: 0.0f64,
@@ -552,26 +522,11 @@ fn run_dense_half<T, FI, FO>(
     let plan = DenseGemmPlan::<T>::select(&stream, &desc, PlanPreference::default())
         .expect("select dense half plan");
     let args = DenseGemmArgs::<T> {
-        a: MatrixRef {
-            data: dev_a.as_slice(),
-            rows: m,
-            cols: k,
-            ld: lda as i64,
-        },
+        a: MatrixRef::new(dev_a.as_slice(), m, k, lda as i64).unwrap(),
         stride_a: 0,
-        b: MatrixRef {
-            data: dev_b.as_slice(),
-            rows: k,
-            cols: n,
-            ld: ldb as i64,
-        },
+        b: MatrixRef::new(dev_b.as_slice(), k, n, ldb as i64).unwrap(),
         stride_b: 0,
-        d: MatrixMut {
-            data: dev_d.as_slice_mut(),
-            rows: m,
-            cols: n,
-            ld: nu as i64,
-        },
+        d: MatrixMut::new(dev_d.as_slice_mut(), m, n, nu as i64).unwrap(),
         stride_d: 0,
         alpha: <T::Scalar as ScalarType>::ONE,
         beta: <T::Scalar as ScalarType>::ZERO,
@@ -799,26 +754,11 @@ fn dense_plan_rejects_undersized_and_negative_stride_buffers() {
         DenseGemmPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("select");
 
     let args = DenseGemmArgs::<f32> {
-        a: MatrixRef {
-            data: dev_a.as_slice(),
-            rows: m,
-            cols: k,
-            ld: ku as i64,
-        },
+        a: MatrixRef::new(dev_a.as_slice(), m, k, ku as i64).unwrap(),
         stride_a: (mu * ku) as i64,
-        b: MatrixRef {
-            data: dev_b.as_slice(),
-            rows: k,
-            cols: n,
-            ld: nu as i64,
-        },
+        b: MatrixRef::new(dev_b.as_slice(), k, n, nu as i64).unwrap(),
         stride_b: (ku * nu) as i64,
-        d: MatrixMut {
-            data: dev_d.as_slice_mut(),
-            rows: m,
-            cols: n,
-            ld: nu as i64,
-        },
+        d: MatrixMut::new(dev_d.as_slice_mut(), m, n, nu as i64).unwrap(),
         stride_d: (mu * nu) as i64,
         alpha: 1.0,
         beta: 0.0,
@@ -834,26 +774,11 @@ fn dense_plan_rejects_undersized_and_negative_stride_buffers() {
     // Negative batch stride: never in-bounds from the slice base.
     let mut dev_d3: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, mu * nu * 3).expect("alloc D3");
     let args = DenseGemmArgs::<f32> {
-        a: MatrixRef {
-            data: dev_a.as_slice(),
-            rows: m,
-            cols: k,
-            ld: ku as i64,
-        },
+        a: MatrixRef::new(dev_a.as_slice(), m, k, ku as i64).unwrap(),
         stride_a: -((mu * ku) as i64),
-        b: MatrixRef {
-            data: dev_b.as_slice(),
-            rows: k,
-            cols: n,
-            ld: nu as i64,
-        },
+        b: MatrixRef::new(dev_b.as_slice(), k, n, nu as i64).unwrap(),
         stride_b: (ku * nu) as i64,
-        d: MatrixMut {
-            data: dev_d3.as_slice_mut(),
-            rows: m,
-            cols: n,
-            ld: nu as i64,
-        },
+        d: MatrixMut::new(dev_d3.as_slice_mut(), m, n, nu as i64).unwrap(),
         stride_d: (mu * nu) as i64,
         alpha: 1.0,
         beta: 0.0,
@@ -934,26 +859,11 @@ fn dense_f32_concurrent_handle_pool() {
                 // create under contention).
                 for _ in 0..8 {
                     let args = DenseGemmArgs::<f32> {
-                        a: MatrixRef {
-                            data: dev_a.as_slice(),
-                            rows: m,
-                            cols: k,
-                            ld: ku as i64,
-                        },
+                        a: MatrixRef::new(dev_a.as_slice(), m, k, ku as i64).unwrap(),
                         stride_a: 0,
-                        b: MatrixRef {
-                            data: dev_b.as_slice(),
-                            rows: k,
-                            cols: n,
-                            ld: nu as i64,
-                        },
+                        b: MatrixRef::new(dev_b.as_slice(), k, n, nu as i64).unwrap(),
                         stride_b: 0,
-                        d: MatrixMut {
-                            data: dev_d.as_slice_mut(),
-                            rows: m,
-                            cols: n,
-                            ld: nu as i64,
-                        },
+                        d: MatrixMut::new(dev_d.as_slice_mut(), m, n, nu as i64).unwrap(),
                         stride_d: 0,
                         alpha: 1.0,
                         beta: 0.0,

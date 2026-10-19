@@ -146,25 +146,10 @@ fn rrr_round_trip_f16(m: i32, n: i32, k: i32) {
     let plan =
         GemmPlan::<f16>::select(&stream, &desc, PlanPreference::default()).expect("plan select");
     let args = GemmArgs::<f16> {
-        a: MatrixRef {
-            data: dev_a.as_slice(),
-            rows: m,
-            cols: k,
-            ld: k as i64,
-        },
-        b: MatrixRef {
-            data: dev_b.as_slice(),
-            rows: k,
-            cols: n,
-            ld: n as i64,
-        },
+        a: MatrixRef::new(dev_a.as_slice(), m, k, k as i64).unwrap(),
+        b: MatrixRef::new(dev_b.as_slice(), k, n, n as i64).unwrap(),
         c: None,
-        d: MatrixMut {
-            data: dev_d.as_slice_mut(),
-            rows: m,
-            cols: n,
-            ld: n as i64,
-        },
+        d: MatrixMut::new(dev_d.as_slice_mut(), m, n, n as i64).unwrap(),
         bias: None,
         alpha: 1.0,
         beta: 0.0,
@@ -233,25 +218,10 @@ fn rrr_round_trip_bf16(m: i32, n: i32, k: i32) {
     let plan =
         GemmPlan::<bf16>::select(&stream, &desc, PlanPreference::default()).expect("plan select");
     let args = GemmArgs::<bf16> {
-        a: MatrixRef {
-            data: dev_a.as_slice(),
-            rows: m,
-            cols: k,
-            ld: k as i64,
-        },
-        b: MatrixRef {
-            data: dev_b.as_slice(),
-            rows: k,
-            cols: n,
-            ld: n as i64,
-        },
+        a: MatrixRef::new(dev_a.as_slice(), m, k, k as i64).unwrap(),
+        b: MatrixRef::new(dev_b.as_slice(), k, n, n as i64).unwrap(),
         c: None,
-        d: MatrixMut {
-            data: dev_d.as_slice_mut(),
-            rows: m,
-            cols: n,
-            ld: n as i64,
-        },
+        d: MatrixMut::new(dev_d.as_slice_mut(), m, n, n as i64).unwrap(),
         bias: None,
         alpha: 1.0,
         beta: 0.0,
@@ -337,25 +307,10 @@ fn tf32_round_trip(m: i32, n: i32, k: i32) {
     assert_eq!(plan.precision_guarantee().accumulator, ElementKind::F32);
 
     let args = GemmArgs::<f32> {
-        a: MatrixRef {
-            data: dev_a.as_slice(),
-            rows: m,
-            cols: k,
-            ld: k as i64,
-        },
-        b: MatrixRef {
-            data: dev_b.as_slice(),
-            rows: k,
-            cols: n,
-            ld: k as i64,
-        },
+        a: MatrixRef::new(dev_a.as_slice(), m, k, k as i64).unwrap(),
+        b: MatrixRef::new(dev_b.as_slice(), k, n, k as i64).unwrap(),
         c: None,
-        d: MatrixMut {
-            data: dev_d.as_slice_mut(),
-            rows: m,
-            cols: n,
-            ld: n as i64,
-        },
+        d: MatrixMut::new(dev_d.as_slice_mut(), m, n, n as i64).unwrap(),
         bias: None,
         alpha: 1.0,
         beta: 0.0,
@@ -462,28 +417,13 @@ fn batched_round_trip_f16(m: i32, n: i32, k: i32, batch_count: i32) {
         .expect("plan select");
 
     let args = BatchedGemmArgs::<f16> {
-        a: MatrixRef {
-            data: dev_a.as_slice(),
-            rows: m,
-            cols: k,
-            ld: k as i64,
-        },
+        a: MatrixRef::new(dev_a.as_slice(), m, k, k as i64).unwrap(),
         stride_a: elements_a as i64,
-        b: MatrixRef {
-            data: dev_b.as_slice(),
-            rows: k,
-            cols: n,
-            ld: k as i64,
-        },
+        b: MatrixRef::new(dev_b.as_slice(), k, n, k as i64).unwrap(),
         stride_b: elements_b as i64,
         c: None,
         stride_c: 0,
-        d: MatrixMut {
-            data: dev_d.as_slice_mut(),
-            rows: m,
-            cols: n,
-            ld: n as i64,
-        },
+        d: MatrixMut::new(dev_d.as_slice_mut(), m, n, n as i64).unwrap(),
         stride_d: elements_d as i64,
         alpha: 1.0,
         beta: 0.0,
@@ -574,28 +514,13 @@ fn batched_round_trip_bf16(m: i32, n: i32, k: i32, batch_count: i32) {
     let plan = BatchedGemmPlan::<bf16>::select(&stream, &desc, PlanPreference::default())
         .expect("plan select");
     let args = BatchedGemmArgs::<bf16> {
-        a: MatrixRef {
-            data: dev_a.as_slice(),
-            rows: m,
-            cols: k,
-            ld: k as i64,
-        },
+        a: MatrixRef::new(dev_a.as_slice(), m, k, k as i64).unwrap(),
         stride_a: elements_a as i64,
-        b: MatrixRef {
-            data: dev_b.as_slice(),
-            rows: k,
-            cols: n,
-            ld: k as i64,
-        },
+        b: MatrixRef::new(dev_b.as_slice(), k, n, k as i64).unwrap(),
         stride_b: elements_b as i64,
         c: None,
         stride_c: 0,
-        d: MatrixMut {
-            data: dev_d.as_slice_mut(),
-            rows: m,
-            cols: n,
-            ld: n as i64,
-        },
+        d: MatrixMut::new(dev_d.as_slice_mut(), m, n, n as i64).unwrap(),
         stride_d: elements_d as i64,
         alpha: 1.0,
         beta: 0.0,

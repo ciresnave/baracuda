@@ -16,6 +16,13 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.140 - 2026-10-19 (BREAKING: MatrixRef/MatrixMut/VectorRef fields are private; validated constructors)
+
+Workspace alpha.140 (proposed; PM allocates at gate).
+
+- **BREAKING (API):** `MatrixRef`, `MatrixMut` and `VectorRef` (baracuda-kernels-types, re-exported by baracuda-cutlass and baracuda-kernels) no longer have public fields. Build with `MatrixRef::new(data, rows, cols, ld)` / `MatrixMut::new(..)` / `VectorRef::new(data, len, stride)`, which return `Err(ViewError)` for a negative dimension / ld / stride or a slice shorter than the layout-independent floor (`rows * cols` logical elements, counted in slots for packed S4/U4/Bin; `(len-1)*stride + 1` for a vector). The plan that consumes the matrix still checks the exact footprint of its layout (row- or column-major, byte-counted for packed operands). Read back with `.data()` / `.rows()` / `.cols()` / `.ld()` (`VectorRef`: `.data()` / `.len()` / `.stride()`; `MatrixMut` also `.data_mut()`). `unsafe ::new_unchecked` exists for callers that have proved their own footprint. A struct literal no longer compiles. Migration: `MatrixRef { data, rows, cols, ld }` -> `MatrixRef::new(data, rows, cols, ld)?`; `m.ld` -> `m.ld()`. Fuel (the only known downstream) pins baracuda-kernels-types alpha.116 and has 3 literals in fuel-cuda-backend/src/cutlass.rs to migrate when it bumps; coordinated with the fuel lane.
+- Mechanical migration: `privatize_views.py --matrix` rewrote 264 literals in 37 files; ~390 field reads fixed from rustc E0616 spans (`fix_reads.py`, now also for the Matrix/Vector types, driven over every (crate, feature) pair of baracuda-kernels-types, -cutlass, -kernels, -kernels-bench and -examples). Stated limits: device-verified only for the 30 test binaries that use these types (16 kernels, 14 cutlass; 261 tests, 0 failed), not the whole 520-binary kernels suite; type-checks only for every other feature.
+
 ## 0.0.1-alpha.139 - 2026-10-19 (every declared feature now compiles; CI builds each one)
 
 Workspace alpha.139 (proposed; PM allocates at gate).

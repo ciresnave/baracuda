@@ -88,25 +88,10 @@ fn bench_float_gemm<T>(
             group.bench_with_input(BenchmarkId::from_parameter(&shape), &(), |bb, _| {
                 warmup(&stream, || {
                     let args = GemmArgs::<T> {
-                        a: MatrixRef {
-                            data: dev_a.as_slice(),
-                            rows: m,
-                            cols: k,
-                            ld: k as i64,
-                        },
-                        b: MatrixRef {
-                            data: dev_b.as_slice(),
-                            rows: k,
-                            cols: n,
-                            ld: k as i64,
-                        },
+                        a: MatrixRef::new(dev_a.as_slice(), m, k, k as i64).unwrap(),
+                        b: MatrixRef::new(dev_b.as_slice(), k, n, k as i64).unwrap(),
                         c: None,
-                        d: MatrixMut {
-                            data: dev_d.as_slice_mut(),
-                            rows: m,
-                            cols: n,
-                            ld: n as i64,
-                        },
+                        d: MatrixMut::new(dev_d.as_slice_mut(), m, n, n as i64).unwrap(),
                         bias: None,
                         alpha,
                         beta,
@@ -118,25 +103,10 @@ fn bench_float_gemm<T>(
                 bb.iter_custom(|iters| {
                     time_with_events(&ctx, &stream, iters, || {
                         let args = GemmArgs::<T> {
-                            a: MatrixRef {
-                                data: dev_a.as_slice(),
-                                rows: m,
-                                cols: k,
-                                ld: k as i64,
-                            },
-                            b: MatrixRef {
-                                data: dev_b.as_slice(),
-                                rows: k,
-                                cols: n,
-                                ld: k as i64,
-                            },
+                            a: MatrixRef::new(dev_a.as_slice(), m, k, k as i64).unwrap(),
+                            b: MatrixRef::new(dev_b.as_slice(), k, n, k as i64).unwrap(),
                             c: None,
-                            d: MatrixMut {
-                                data: dev_d.as_slice_mut(),
-                                rows: m,
-                                cols: n,
-                                ld: n as i64,
-                            },
+                            d: MatrixMut::new(dev_d.as_slice_mut(), m, n, n as i64).unwrap(),
                             bias: None,
                             alpha,
                             beta,
@@ -204,25 +174,10 @@ fn bench_int8_gemm(c: &mut Criterion) {
                         None => Workspace::None,
                     };
                     let args = IntGemmArgs::<S8, f32> {
-                        a: MatrixRef {
-                            data: dev_a.as_slice(),
-                            rows: m,
-                            cols: k,
-                            ld: k as i64,
-                        },
-                        b: MatrixRef {
-                            data: dev_b.as_slice(),
-                            rows: k,
-                            cols: n,
-                            ld: k as i64,
-                        },
+                        a: MatrixRef::new(dev_a.as_slice(), m, k, k as i64).unwrap(),
+                        b: MatrixRef::new(dev_b.as_slice(), k, n, k as i64).unwrap(),
                         c: None,
-                        d: MatrixMut {
-                            data: dev_d.as_slice_mut(),
-                            rows: m,
-                            cols: n,
-                            ld: n as i64,
-                        },
+                        d: MatrixMut::new(dev_d.as_slice_mut(), m, n, n as i64).unwrap(),
                         bias: None,
                         alpha: 1.0,
                         beta: 0.0,
@@ -238,25 +193,10 @@ fn bench_int8_gemm(c: &mut Criterion) {
                             None => Workspace::None,
                         };
                         let args = IntGemmArgs::<S8, f32> {
-                            a: MatrixRef {
-                                data: dev_a.as_slice(),
-                                rows: m,
-                                cols: k,
-                                ld: k as i64,
-                            },
-                            b: MatrixRef {
-                                data: dev_b.as_slice(),
-                                rows: k,
-                                cols: n,
-                                ld: k as i64,
-                            },
+                            a: MatrixRef::new(dev_a.as_slice(), m, k, k as i64).unwrap(),
+                            b: MatrixRef::new(dev_b.as_slice(), k, n, k as i64).unwrap(),
                             c: None,
-                            d: MatrixMut {
-                                data: dev_d.as_slice_mut(),
-                                rows: m,
-                                cols: n,
-                                ld: n as i64,
-                            },
+                            d: MatrixMut::new(dev_d.as_slice_mut(), m, n, n as i64).unwrap(),
                             bias: None,
                             alpha: 1.0,
                             beta: 0.0,
@@ -318,25 +258,10 @@ fn bench_fp8_gemm(c: &mut Criterion) {
             group.bench_with_input(BenchmarkId::from_parameter(&shape), &(), |bb, _| {
                 warmup(&stream, || {
                     let args = Fp8GemmArgs::<Fp8E4M3FN> {
-                        a: MatrixRef {
-                            data: dev_a.as_slice(),
-                            rows: m,
-                            cols: k,
-                            ld: k as i64,
-                        },
-                        b: MatrixRef {
-                            data: dev_b.as_slice(),
-                            rows: k,
-                            cols: n,
-                            ld: k as i64,
-                        },
+                        a: MatrixRef::new(dev_a.as_slice(), m, k, k as i64).unwrap(),
+                        b: MatrixRef::new(dev_b.as_slice(), k, n, k as i64).unwrap(),
                         c: None,
-                        d: MatrixMut {
-                            data: dev_d.as_slice_mut(),
-                            rows: m,
-                            cols: n,
-                            ld: n as i64,
-                        },
+                        d: MatrixMut::new(dev_d.as_slice_mut(), m, n, n as i64).unwrap(),
                         bias: None,
                         alpha: 1.0,
                         beta: 0.0,
@@ -348,25 +273,10 @@ fn bench_fp8_gemm(c: &mut Criterion) {
                 bb.iter_custom(|iters| {
                     time_with_events(&ctx, &stream, iters, || {
                         let args = Fp8GemmArgs::<Fp8E4M3FN> {
-                            a: MatrixRef {
-                                data: dev_a.as_slice(),
-                                rows: m,
-                                cols: k,
-                                ld: k as i64,
-                            },
-                            b: MatrixRef {
-                                data: dev_b.as_slice(),
-                                rows: k,
-                                cols: n,
-                                ld: k as i64,
-                            },
+                            a: MatrixRef::new(dev_a.as_slice(), m, k, k as i64).unwrap(),
+                            b: MatrixRef::new(dev_b.as_slice(), k, n, k as i64).unwrap(),
                             c: None,
-                            d: MatrixMut {
-                                data: dev_d.as_slice_mut(),
-                                rows: m,
-                                cols: n,
-                                ld: n as i64,
-                            },
+                            d: MatrixMut::new(dev_d.as_slice_mut(), m, n, n as i64).unwrap(),
                             bias: None,
                             alpha: 1.0,
                             beta: 0.0,

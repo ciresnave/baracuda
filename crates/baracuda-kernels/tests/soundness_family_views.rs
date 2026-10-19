@@ -39,6 +39,31 @@ fn bad_ref<'a, T: baracuda_types::DeviceRepr + Copy + 'static, const N: usize>(
     unsafe { TensorRef::new_unchecked(data, shape, stride) }
 }
 
+/// Build a `MatrixRef` WITHOUT the constructor's slice-length check, so a test
+/// can hand a plan an operand shorter than its footprint and prove the plan
+/// rejects it on its own (defence in depth).
+fn bad_matrix_ref<'a, T: baracuda_types::DeviceRepr + Copy + 'static>(
+    data: DeviceSlice<'a, T>,
+    rows: i32,
+    cols: i32,
+    ld: i64,
+) -> MatrixRef<'a, T> {
+    // SAFETY: deliberately too short. It is only ever handed to a plan whose own
+    // footprint check must return `Err` before any kernel is launched.
+    unsafe { MatrixRef::new_unchecked(data, rows, cols, ld) }
+}
+
+/// Build a `VectorRef` WITHOUT the constructor's slice-length check (see
+/// [`bad_matrix_ref`]).
+fn bad_vector<'a, T: baracuda_types::DeviceRepr + Copy + 'static>(
+    data: DeviceSlice<'a, T>,
+    len: i32,
+    stride: i64,
+) -> VectorRef<'a, T> {
+    // SAFETY: deliberately too short; only handed to a plan that must reject it.
+    unsafe { VectorRef::new_unchecked(data, len, stride) }
+}
+
 /// Mutable counterpart of [`bad_ref`].
 fn bad_mut<'a, T: baracuda_types::DeviceRepr + Copy + 'static, const N: usize>(
     data: DeviceSliceMut<'a, T>,
@@ -277,25 +302,10 @@ fn gemm_rejects_view_longer_than_its_slice() {
         &stream,
         Workspace::None,
         Fp8GemmArgs::<Fp8E4M3FN> {
-            a: MatrixRef {
-                data: a_short.view_as::<Fp8E4M3FN>(),
-                rows: m,
-                cols: k,
-                ld: k as i64,
-            },
-            b: MatrixRef {
-                data: b.view_as::<Fp8E4M3FN>(),
-                rows: k,
-                cols: n,
-                ld: k as i64,
-            },
+            a: bad_matrix_ref(a_short.view_as::<Fp8E4M3FN>(), m, k, k as i64),
+            b: MatrixRef::new(b.view_as::<Fp8E4M3FN>(), k, n, k as i64).unwrap(),
             c: None,
-            d: MatrixMut {
-                data: d.as_slice_mut(),
-                rows: m,
-                cols: n,
-                ld: n as i64,
-            },
+            d: MatrixMut::new(d.as_slice_mut(), m, n, n as i64).unwrap(),
             bias: None,
             alpha: 1.0,
             beta: 0.0,
@@ -330,30 +340,11 @@ fn gemm_bias_vector_shorter_than_n_is_rejected() {
         &stream,
         Workspace::None,
         Fp8GemmArgs::<Fp8E4M3FN> {
-            a: MatrixRef {
-                data: a.view_as::<Fp8E4M3FN>(),
-                rows: m,
-                cols: k,
-                ld: k as i64,
-            },
-            b: MatrixRef {
-                data: b.view_as::<Fp8E4M3FN>(),
-                rows: k,
-                cols: n,
-                ld: k as i64,
-            },
+            a: MatrixRef::new(a.view_as::<Fp8E4M3FN>(), m, k, k as i64).unwrap(),
+            b: MatrixRef::new(b.view_as::<Fp8E4M3FN>(), k, n, k as i64).unwrap(),
             c: None,
-            d: MatrixMut {
-                data: d.as_slice_mut(),
-                rows: m,
-                cols: n,
-                ld: n as i64,
-            },
-            bias: Some(VectorRef {
-                data: bias.as_slice(),
-                len: n,
-                stride: 1,
-            }),
+            d: MatrixMut::new(d.as_slice_mut(), m, n, n as i64).unwrap(),
+            bias: Some(bad_vector(bias.as_slice(), n, 1)),
             alpha: 1.0,
             beta: 0.0,
         },

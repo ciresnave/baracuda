@@ -244,30 +244,11 @@ fn run_fp8_bias<T: Fp8Shim>(m: i32, n: i32, k: i32, layout: LayoutSku, ep: Epilo
         .expect("select FP8 plan");
 
     let args = Fp8GemmArgs::<T> {
-        a: MatrixRef {
-            data: dev_a,
-            rows: m,
-            cols: k,
-            ld: k as i64,
-        },
-        b: MatrixRef {
-            data: dev_b,
-            rows: k,
-            cols: n,
-            ld: ldb as i64,
-        },
+        a: MatrixRef::new(dev_a, m, k, k as i64).unwrap(),
+        b: MatrixRef::new(dev_b, k, n, ldb as i64).unwrap(),
         c: None,
-        d: MatrixMut {
-            data: dev_d.as_slice_mut(),
-            rows: m,
-            cols: n,
-            ld: n as i64,
-        },
-        bias: Some(VectorRef {
-            data: dev_bias.as_slice(),
-            len: n,
-            stride: 1,
-        }),
+        d: MatrixMut::new(dev_d.as_slice_mut(), m, n, n as i64).unwrap(),
+        bias: Some(VectorRef::new(dev_bias.as_slice(), n, 1).unwrap()),
         alpha,
         beta,
     };

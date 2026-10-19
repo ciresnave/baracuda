@@ -133,24 +133,24 @@ impl BinGemmPlan {
                 "bin GEMM problem must have positive M, N, K",
             ));
         }
-        if args.a.rows != self.desc.m || args.a.cols != self.desc.k {
+        if args.a.rows() != self.desc.m || args.a.cols() != self.desc.k {
             return Err(Error::InvalidProblem(
                 "A shape mismatch with descriptor (M, K in elements)",
             ));
         }
-        if args.b.rows != self.desc.k || args.b.cols != self.desc.n {
+        if args.b.rows() != self.desc.k || args.b.cols() != self.desc.n {
             return Err(Error::InvalidProblem(
                 "B shape mismatch with descriptor (K, N in elements)",
             ));
         }
-        if args.d.rows != self.desc.m || args.d.cols != self.desc.n {
+        if args.d.rows() != self.desc.m || args.d.cols() != self.desc.n {
             return Err(Error::InvalidProblem(
                 "D shape mismatch with descriptor (M, N in elements)",
             ));
         }
         let k_bytes_min = (self.desc.k / 8) as i64;
         let n_bytes_min = (self.desc.n / 8) as i64;
-        if args.a.ld < k_bytes_min {
+        if args.a.ld() < k_bytes_min {
             return Err(Error::InvalidProblem(
                 "A leading dimension (bytes) must be >= K/8 for row-major bin A",
             ));
@@ -159,13 +159,13 @@ impl BinGemmPlan {
             LayoutSku::Rcr => k_bytes_min,
             LayoutSku::Rrr => n_bytes_min,
         };
-        if args.b.ld < b_ld_min {
+        if args.b.ld() < b_ld_min {
             return Err(Error::InvalidProblem(
                 "B leading dimension (bytes) must be >= K/8 for RCR \
                  (col-major) or >= N/8 for RRR (row-major)",
             ));
         }
-        if args.d.ld < self.desc.n as i64 {
+        if args.d.ld() < self.desc.n as i64 {
             return Err(Error::InvalidProblem(
                 "D leading dimension (i32 elements) must be >= N for row-major i32 D",
             ));
@@ -179,9 +179,9 @@ impl BinGemmPlan {
         };
         // Packed bits: `ld` and the per-line extent of A / B are counted in bytes;
         // D is plain i32 with `ld` in elements.
-        crate::view_check::check_matrix(m, k_bytes, args.a.ld, 1, args.a.data.len(), eb)?;
-        crate::view_check::check_matrix(b_major, b_minor, args.b.ld, 1, args.b.data.len(), eb)?;
-        crate::view_check::check_matrix(m, n, args.d.ld, 4, args.d.data.len(), 4)?;
+        crate::view_check::check_matrix(m, k_bytes, args.a.ld(), 1, args.a.data().len(), eb)?;
+        crate::view_check::check_matrix(b_major, b_minor, args.b.ld(), 1, args.b.data().len(), eb)?;
+        crate::view_check::check_matrix(m, n, args.d.ld(), 4, args.d.data().len(), 4)?;
         Ok(())
     }
 
@@ -215,17 +215,17 @@ impl BinGemmPlan {
         self.can_implement(&args)?;
         let _ = workspace; // bin kernel takes no scratch
 
-        let a_ptr = args.a.data.as_raw().0 as *const c_void;
-        let b_ptr = args.b.data.as_raw().0 as *const c_void;
-        let d_ptr = args.d.data.as_raw().0 as *mut c_void;
+        let a_ptr = args.a.data().as_raw().0 as *const c_void;
+        let b_ptr = args.b.data().as_raw().0 as *const c_void;
+        let d_ptr = args.d.data().as_raw().0 as *mut c_void;
 
         let stream_ptr = stream.as_raw();
         let m = self.desc.m;
         let n = self.desc.n;
         let k = self.desc.k;
-        let lda = args.a.ld;
-        let ldb = args.b.ld;
-        let ldd = args.d.ld;
+        let lda = args.a.ld();
+        let ldb = args.b.ld();
+        let ldd = args.d.ld();
 
         #[cfg(not(feature = "sm89"))]
         {

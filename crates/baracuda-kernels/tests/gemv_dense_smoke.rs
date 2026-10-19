@@ -144,26 +144,11 @@ fn run_gemv_f32(
     assert_eq!(plan.workspace_size(), 0);
 
     let args = GemvDenseArgs::<f32> {
-        a: MatrixRef {
-            data: dev_a.as_slice(),
-            rows: 1,
-            cols: k,
-            ld: lda as i64,
-        },
+        a: MatrixRef::new(dev_a.as_slice(), 1, k, lda as i64).unwrap(),
         stride_a: stride_a as i64,
-        b: MatrixRef {
-            data: dev_b.as_slice(),
-            rows: k,
-            cols: n,
-            ld: ldb as i64,
-        },
+        b: MatrixRef::new(dev_b.as_slice(), k, n, ldb as i64).unwrap(),
         stride_b: stride_b as i64,
-        d: MatrixMut {
-            data: dev_d.as_slice_mut(),
-            rows: 1,
-            cols: n,
-            ld: ldd as i64,
-        },
+        d: MatrixMut::new(dev_d.as_slice_mut(), 1, n, ldd as i64).unwrap(),
         stride_d: stride_d as i64,
         alpha,
         beta,
@@ -283,26 +268,11 @@ fn gemv_bf16_batch1_basic() {
         .expect("select gemv bf16 plan");
 
     let args = GemvDenseArgs::<bf16> {
-        a: MatrixRef {
-            data: dev_a.as_slice(),
-            rows: 1,
-            cols: k,
-            ld: ku as i64,
-        },
+        a: MatrixRef::new(dev_a.as_slice(), 1, k, ku as i64).unwrap(),
         stride_a: 0,
-        b: MatrixRef {
-            data: dev_b.as_slice(),
-            rows: k,
-            cols: n,
-            ld: nu as i64,
-        },
+        b: MatrixRef::new(dev_b.as_slice(), k, n, nu as i64).unwrap(),
         stride_b: 0,
-        d: MatrixMut {
-            data: dev_d.as_slice_mut(),
-            rows: 1,
-            cols: n,
-            ld: nu as i64,
-        },
+        d: MatrixMut::new(dev_d.as_slice_mut(), 1, n, nu as i64).unwrap(),
         stride_d: 0,
         alpha: 1.0f32,
         beta: 0.0f32,

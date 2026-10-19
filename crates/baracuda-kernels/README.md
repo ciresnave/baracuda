@@ -132,10 +132,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let plan = IntGemmPlan::<S8>::select(&stream, &desc, PlanPreference::default())?;
 
     let args = IntGemmArgs::<S8, f32> {
-        a: MatrixRef { data: dev_a.as_slice(), rows: m, cols: k, ld: k as i64 },
-        b: MatrixRef { data: dev_b.as_slice(), rows: k, cols: n, ld: n as i64 },
+        a: MatrixRef::new(dev_a.as_slice(), m, k, k as i64).unwrap(),
+        b: MatrixRef::new(dev_b.as_slice(), k, n, n as i64).unwrap(),
         c: None,
-        d: MatrixMut { data: dev_d.as_slice_mut(), rows: m, cols: n, ld: n as i64 },
+        d: MatrixMut::new(dev_d.as_slice_mut(), m, n, n as i64).unwrap(),
         bias: None,
         alpha: 0.125,
         beta: 0.0,

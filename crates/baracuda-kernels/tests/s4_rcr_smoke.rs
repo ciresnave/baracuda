@@ -210,27 +210,12 @@ fn run_s4_rcr_identity(m: i32, n: i32, k: i32) {
 
     let args = Int4GemmArgs::<S4> {
         // A: row-major [M, K]; ld in BYTES = K/2.
-        a: MatrixRef {
-            data: dev_a,
-            rows: m,
-            cols: k,
-            ld: k_bytes as i64,
-        },
+        a: MatrixRef::new(dev_a, m, k, k_bytes as i64).unwrap(),
         // B: col-major [K, N] (RCR); ld in BYTES = K/2.
-        b: MatrixRef {
-            data: dev_b,
-            rows: k,
-            cols: n,
-            ld: k_bytes as i64,
-        },
+        b: MatrixRef::new(dev_b, k, n, k_bytes as i64).unwrap(),
         c: None,
         // D: row-major [M, N]; ld in BYTES = N/2.
-        d: MatrixMut {
-            data: dev_d.as_slice_mut(),
-            rows: m,
-            cols: n,
-            ld: n_bytes as i64,
-        },
+        d: MatrixMut::new(dev_d.as_slice_mut(), m, n, n_bytes as i64).unwrap(),
         bias: None,
         alpha,
         beta,

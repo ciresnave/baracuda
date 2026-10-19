@@ -139,29 +139,29 @@ impl<T: IntElement, BT: BiasElement> IntGemmPlan<T, BT> {
                         "int GEMM problem must have positive M, N, K",
                     ));
                 }
-                if args.a.rows != self.desc.m || args.a.cols != self.desc.k {
+                if args.a.rows() != self.desc.m || args.a.cols() != self.desc.k {
                     return Err(Error::InvalidProblem(
                         "A shape mismatch with descriptor (M, K)",
                     ));
                 }
-                if args.b.rows != self.desc.k || args.b.cols != self.desc.n {
+                if args.b.rows() != self.desc.k || args.b.cols() != self.desc.n {
                     return Err(Error::InvalidProblem(
                         "B shape mismatch with descriptor (K, N) (row-major)",
                     ));
                 }
-                if args.d.rows != self.desc.m || args.d.cols != self.desc.n {
+                if args.d.rows() != self.desc.m || args.d.cols() != self.desc.n {
                     return Err(Error::InvalidProblem(
                         "D shape mismatch with descriptor (M, N)",
                     ));
                 }
                 let (m, n, k) = (self.desc.m as i64, self.desc.n as i64, self.desc.k as i64);
                 let eb = core::mem::size_of::<T>();
-                crate::view_check::check_matrix(m, k, args.a.ld, eb, args.a.data.len(), eb)?;
-                crate::view_check::check_matrix(k, n, args.b.ld, eb, args.b.data.len(), eb)?;
+                crate::view_check::check_matrix(m, k, args.a.ld(), eb, args.a.data().len(), eb)?;
+                crate::view_check::check_matrix(k, n, args.b.ld(), eb, args.b.data().len(), eb)?;
                 if let Some(c) = &args.c {
-                    crate::view_check::check_matrix(m, n, c.ld, eb, c.data.len(), eb)?;
+                    crate::view_check::check_matrix(m, n, c.ld(), eb, c.data().len(), eb)?;
                 }
-                crate::view_check::check_matrix(m, n, args.d.ld, eb, args.d.data.len(), eb)?;
+                crate::view_check::check_matrix(m, n, args.d.ld(), eb, args.d.data().len(), eb)?;
                 if let Some(b) = &args.bias {
                     crate::view_check::check_vector(b, self.desc.n)?;
                 }
@@ -210,15 +210,15 @@ impl<T: IntElement, BT: BiasElement> IntGemmPlan<T, BT> {
                 // Sanity: workspace is always None for bespoke SKUs today.
                 let _ = workspace; // silence unused-binding warning
 
-                let a_ptr = args.a.data.as_raw().0 as *const c_void;
-                let b_ptr = args.b.data.as_raw().0 as *const c_void;
-                let d_ptr = args.d.data.as_raw().0 as *mut c_void;
+                let a_ptr = args.a.data().as_raw().0 as *const c_void;
+                let b_ptr = args.b.data().as_raw().0 as *const c_void;
+                let d_ptr = args.d.data().as_raw().0 as *mut c_void;
                 let (c_ptr, ldc) = match &args.c {
-                    Some(c) => (c.data.as_raw().0 as *const c_void, c.ld),
+                    Some(c) => (c.data().as_raw().0 as *const c_void, c.ld()),
                     None => (core::ptr::null(), 0i64),
                 };
                 let bias_ptr = match &args.bias {
-                    Some(b) => b.data.as_raw().0 as *const c_void,
+                    Some(b) => b.data().as_raw().0 as *const c_void,
                     None => core::ptr::null(),
                 };
 
@@ -242,9 +242,9 @@ impl<T: IntElement, BT: BiasElement> IntGemmPlan<T, BT> {
                 let m = self.desc.m;
                 let n = self.desc.n;
                 let k = self.desc.k;
-                let lda = args.a.ld;
-                let ldb = args.b.ld;
-                let ldd = args.d.ld;
+                let lda = args.a.ld();
+                let ldb = args.b.ld();
+                let ldd = args.d.ld();
                 let alpha = args.alpha;
                 let beta = args.beta;
 

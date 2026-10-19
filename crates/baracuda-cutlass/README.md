@@ -134,10 +134,10 @@ let desc = GemmDescriptor {
 let plan = GemmPlan::<f16>::select(&stream, &desc, PlanPreference::default())?;
 
 let args = GemmArgs::<f16> {
-    a: MatrixRef { data: dev_a.as_slice(), rows: m, cols: k, ld: k as i64 },
-    b: MatrixRef { data: dev_b.as_slice(), rows: k, cols: n, ld: k as i64 },
+    a: MatrixRef::new(dev_a.as_slice(), m, k, k as i64).unwrap(),
+    b: MatrixRef::new(dev_b.as_slice(), k, n, k as i64).unwrap(),
     c: None,
-    d: MatrixMut { data: dev_d.as_slice_mut(), rows: m, cols: n, ld: n as i64 },
+    d: MatrixMut::new(dev_d.as_slice_mut(), m, n, n as i64).unwrap(),
     bias: None,
     alpha: 1.0,
     beta: 0.0,
@@ -204,14 +204,8 @@ use half::bf16;
 
 # fn demo(byte_a: &DeviceBuffer<u8>, byte_d: &mut DeviceBuffer<u8>) {
 let m = 128i32; let n = 128i32; let k = 128i32;
-let a_view: MatrixRef<bf16> = MatrixRef {
-    data: byte_a.view_as::<bf16>(),
-    rows: m, cols: k, ld: k as i64,
-};
-let d_view: MatrixMut<bf16> = MatrixMut {
-    data: byte_d.view_as_mut::<bf16>(),
-    rows: m, cols: n, ld: n as i64,
-};
+let a_view: MatrixRef<bf16> = MatrixRef::new(byte_a.view_as::<bf16>(), m, k, k as i64).unwrap();
+let d_view: MatrixMut<bf16> = MatrixMut::new(byte_d.view_as_mut::<bf16>(), m, n, n as i64).unwrap();
 # let _ = (a_view, d_view); }
 ```
 

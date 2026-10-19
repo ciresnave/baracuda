@@ -26,7 +26,7 @@ for line in open(log, encoding="utf-8"):
     d = m["message"]
     if d["level"] != "error":
         continue
-    mm = re.match(r"field `(data|shape|stride)` of struct `(TensorRef|TensorMut)` is private", d["message"])
+    mm = re.match(r"field `(data|shape|stride|rows|cols|ld|len)` of struct `(TensorRef|TensorMut|MatrixRef|MatrixMut|VectorRef)` is private", d["message"])
     if not mm:
         continue
     seen += 1

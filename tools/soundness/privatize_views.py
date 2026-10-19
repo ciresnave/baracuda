@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Rewrite `TensorRef { data, shape, stride }` / `TensorMut { .. }` struct
 literals into `TensorRef::new(data, shape, stride).unwrap()` calls, now that
-the fields are private and `new` is the validated constructor.
+the fields are private and `new` is the validated constructor. With
+`--matrix` it does the same for `MatrixRef/MatrixMut { data, rows, cols, ld }`
+and `VectorRef { data, len, stride }`.
 
 Handles any field order, `field: expr` and shorthand `field`, an optional
 turbofish (`TensorRef::<f32, 2> { .. }`) and nested brackets / strings in the
@@ -9,21 +11,28 @@ expressions. A literal it cannot rewrite safely (comment inside the braces,
 `..` rest pattern, a missing or extra field, an unparsable field) is left
 untouched and listed, for a by-hand fix.
 
-Usage (repo root):  python tools/soundness/privatize_views.py [--count]
+Usage (repo root):  python tools/soundness/privatize_views.py [--matrix] [--count]
 `--count` reports and writes nothing. Files come from `git ls-files`.
 """
 import re
 import subprocess
 import sys
 
-OPEN = re.compile(r"\bTensor(Ref|Mut)(\s*::\s*<[^{};]*?>)?\s*\{")
-FIELDS = ("data", "shape", "stride")
+if "--matrix" in sys.argv:
+    SPECS = {
+        "MatrixRef": ("data", "rows", "cols", "ld"),
+        "MatrixMut": ("data", "rows", "cols", "ld"),
+        "VectorRef": ("data", "len", "stride"),
+    }
+else:
+    SPECS = {"TensorRef": ("data", "shape", "stride"), "TensorMut": ("data", "shape", "stride")}
+OPEN = re.compile(r"\b(" + "|".join(SPECS) + r")(\s*::\s*<[^{};]*?>)?\s*\{")
 SKIP_BEFORE = re.compile(r"(?:\bstruct|\bimpl|\bfor|->|\bmatch|\blet)\s*$")
 
 files = [
     f
     for f in subprocess.check_output(["git", "ls-files", "-z", "--", "*.rs", "*.md"], text=True).split("\0")
-    if f
+    if f and not f.startswith("tools/soundness/")
 ]
 
 
@@ -116,13 +125,14 @@ for f in files:
                 got[part] = part
             else:
                 ok = False
-        if not ok or set(got) != set(FIELDS):
+        fields = SPECS[m.group(1)]
+        if not ok or set(got) != set(fields):
             tally["skipped"] += 1
             skipped.append((where, f"fields={sorted(got)}"))
             continue
         turbo = m.group(2) or ""
         turbo = re.sub(r"\s+", "", turbo)
-        call = f"Tensor{m.group(1)}{turbo}::new({got['data']}, {got['shape']}, {got['stride']}).unwrap()"
+        call = f"{m.group(1)}{turbo}::new({', '.join(got[f] for f in fields)}).unwrap()"
         out.append(s[last : m.start()] + call)
         last = close + 1
         tally["rewritten"] += 1

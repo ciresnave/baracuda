@@ -206,26 +206,11 @@ fn run_int4_rrr_identity<T: IntElement + Default>(
         .expect("select int4 RRR plan");
 
     let args = Int4GemmArgs::<T> {
-        a: MatrixRef {
-            data: dev_a,
-            rows: m,
-            cols: k,
-            ld: k_bytes as i64,
-        },
+        a: MatrixRef::new(dev_a, m, k, k_bytes as i64).unwrap(),
         // RRR: B row-major [K, N], row stride = N/2 bytes.
-        b: MatrixRef {
-            data: dev_b,
-            rows: k,
-            cols: n,
-            ld: n_bytes as i64,
-        },
+        b: MatrixRef::new(dev_b, k, n, n_bytes as i64).unwrap(),
         c: None,
-        d: MatrixMut {
-            data: dev_d.as_slice_mut(),
-            rows: m,
-            cols: n,
-            ld: n_bytes as i64,
-        },
+        d: MatrixMut::new(dev_d.as_slice_mut(), m, n, n_bytes as i64).unwrap(),
         bias: None,
         alpha,
         beta,
