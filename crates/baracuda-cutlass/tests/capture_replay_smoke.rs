@@ -128,25 +128,10 @@ fn gemm_capture_replay_f16_rcr_identity() {
     let graph = stream
         .capture(CaptureMode::ThreadLocal, |s| {
             let args = GemmArgs::<f16> {
-                a: MatrixRef {
-                    data: dev_a.as_slice(),
-                    rows: m,
-                    cols: k,
-                    ld: k as i64,
-                },
-                b: MatrixRef {
-                    data: dev_b.as_slice(),
-                    rows: k,
-                    cols: n,
-                    ld: k as i64,
-                },
+                a: MatrixRef::new(dev_a.as_slice(), m, k, k as i64).unwrap(),
+                b: MatrixRef::new(dev_b.as_slice(), k, n, k as i64).unwrap(),
                 c: None,
-                d: MatrixMut {
-                    data: dev_d.as_slice_mut(),
-                    rows: m,
-                    cols: n,
-                    ld: n as i64,
-                },
+                d: MatrixMut::new(dev_d.as_slice_mut(), m, n, n as i64).unwrap(),
                 bias: None,
                 alpha: 1.0,
                 beta: 0.0,
@@ -215,25 +200,10 @@ fn gemm_capture_replay_f16_rrr_identity() {
     let graph = stream
         .capture(CaptureMode::ThreadLocal, |s| {
             let args = GemmArgs::<f16> {
-                a: MatrixRef {
-                    data: dev_a.as_slice(),
-                    rows: m,
-                    cols: k,
-                    ld: k as i64,
-                },
-                b: MatrixRef {
-                    data: dev_b.as_slice(),
-                    rows: k,
-                    cols: n,
-                    ld: n as i64,
-                },
+                a: MatrixRef::new(dev_a.as_slice(), m, k, k as i64).unwrap(),
+                b: MatrixRef::new(dev_b.as_slice(), k, n, n as i64).unwrap(),
                 c: None,
-                d: MatrixMut {
-                    data: dev_d.as_slice_mut(),
-                    rows: m,
-                    cols: n,
-                    ld: n as i64,
-                },
+                d: MatrixMut::new(dev_d.as_slice_mut(), m, n, n as i64).unwrap(),
                 bias: None,
                 alpha: 1.0,
                 beta: 0.0,
@@ -300,25 +270,10 @@ fn gemm_capture_replay_tf32_rcr_identity() {
     let graph = stream
         .capture(CaptureMode::ThreadLocal, |s| {
             let args = GemmArgs::<f32> {
-                a: MatrixRef {
-                    data: dev_a.as_slice(),
-                    rows: m,
-                    cols: k,
-                    ld: k as i64,
-                },
-                b: MatrixRef {
-                    data: dev_b.as_slice(),
-                    rows: k,
-                    cols: n,
-                    ld: k as i64,
-                },
+                a: MatrixRef::new(dev_a.as_slice(), m, k, k as i64).unwrap(),
+                b: MatrixRef::new(dev_b.as_slice(), k, n, k as i64).unwrap(),
                 c: None,
-                d: MatrixMut {
-                    data: dev_d.as_slice_mut(),
-                    rows: m,
-                    cols: n,
-                    ld: n as i64,
-                },
+                d: MatrixMut::new(dev_d.as_slice_mut(), m, n, n as i64).unwrap(),
                 bias: None,
                 alpha: 1.0,
                 beta: 0.0,
@@ -391,26 +346,11 @@ fn gemm_capture_replay_tf32_rrr_identity() {
     let graph = stream
         .capture(CaptureMode::ThreadLocal, |s| {
             let args = GemmArgs::<f32> {
-                a: MatrixRef {
-                    data: dev_a.as_slice(),
-                    rows: m,
-                    cols: k,
-                    ld: k as i64,
-                },
+                a: MatrixRef::new(dev_a.as_slice(), m, k, k as i64).unwrap(),
                 // RRR: B row-major, leading dim N.
-                b: MatrixRef {
-                    data: dev_b.as_slice(),
-                    rows: k,
-                    cols: n,
-                    ld: n as i64,
-                },
+                b: MatrixRef::new(dev_b.as_slice(), k, n, n as i64).unwrap(),
                 c: None,
-                d: MatrixMut {
-                    data: dev_d.as_slice_mut(),
-                    rows: m,
-                    cols: n,
-                    ld: n as i64,
-                },
+                d: MatrixMut::new(dev_d.as_slice_mut(), m, n, n as i64).unwrap(),
                 bias: None,
                 alpha: 1.0,
                 beta: 0.0,
@@ -492,30 +432,11 @@ fn gemm_capture_replay_f16_rcr_bias_gelu() {
     let graph = stream
         .capture(CaptureMode::ThreadLocal, |s| {
             let args = GemmArgs::<f16> {
-                a: MatrixRef {
-                    data: dev_a.as_slice(),
-                    rows: m,
-                    cols: k,
-                    ld: k as i64,
-                },
-                b: MatrixRef {
-                    data: dev_b.as_slice(),
-                    rows: k,
-                    cols: n,
-                    ld: k as i64,
-                },
+                a: MatrixRef::new(dev_a.as_slice(), m, k, k as i64).unwrap(),
+                b: MatrixRef::new(dev_b.as_slice(), k, n, k as i64).unwrap(),
                 c: None,
-                d: MatrixMut {
-                    data: dev_d.as_slice_mut(),
-                    rows: m,
-                    cols: n,
-                    ld: n as i64,
-                },
-                bias: Some(VectorRef {
-                    data: dev_bias.as_slice(),
-                    len: n,
-                    stride: 1,
-                }),
+                d: MatrixMut::new(dev_d.as_slice_mut(), m, n, n as i64).unwrap(),
+                bias: Some(VectorRef::new(dev_bias.as_slice(), n, 1).unwrap()),
                 alpha: 1.0,
                 beta: 0.0,
             };
@@ -602,28 +523,13 @@ fn batched_gemm_capture_replay_f16_rcr() {
     let graph = stream
         .capture(CaptureMode::ThreadLocal, |s| {
             let args = BatchedGemmArgs::<f16> {
-                a: MatrixRef {
-                    data: dev_a.as_slice(),
-                    rows: m,
-                    cols: k,
-                    ld: k as i64,
-                },
+                a: MatrixRef::new(dev_a.as_slice(), m, k, k as i64).unwrap(),
                 stride_a: elements_a as i64,
-                b: MatrixRef {
-                    data: dev_b.as_slice(),
-                    rows: k,
-                    cols: n,
-                    ld: k as i64,
-                },
+                b: MatrixRef::new(dev_b.as_slice(), k, n, k as i64).unwrap(),
                 stride_b: elements_b as i64,
                 c: None,
                 stride_c: 0,
-                d: MatrixMut {
-                    data: dev_d.as_slice_mut(),
-                    rows: m,
-                    cols: n,
-                    ld: n as i64,
-                },
+                d: MatrixMut::new(dev_d.as_slice_mut(), m, n, n as i64).unwrap(),
                 stride_d: elements_d as i64,
                 alpha: 1.0,
                 beta: 0.0,

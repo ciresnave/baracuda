@@ -220,30 +220,11 @@ fn run_s8_smoke<BT: BiasElement + Copy + Default>(
         .expect("select s8 RRR plan");
 
     let args = IntGemmArgs::<S8, BT> {
-        a: MatrixRef {
-            data: dev_a,
-            rows: m,
-            cols: k,
-            ld: k as i64,
-        },
-        b: MatrixRef {
-            data: dev_b,
-            rows: k,
-            cols: n,
-            ld: n as i64,
-        },
+        a: MatrixRef::new(dev_a, m, k, k as i64).unwrap(),
+        b: MatrixRef::new(dev_b, k, n, n as i64).unwrap(),
         c: None,
-        d: MatrixMut {
-            data: dev_d.as_slice_mut(),
-            rows: m,
-            cols: n,
-            ld: n as i64,
-        },
-        bias: dev_bias_opt.as_ref().map(|buf| VectorRef {
-            data: buf.as_slice(),
-            len: n,
-            stride: 1,
-        }),
+        d: MatrixMut::new(dev_d.as_slice_mut(), m, n, n as i64).unwrap(),
+        bias: dev_bias_opt.as_ref().map(|buf| VectorRef::new(buf.as_slice(), n, 1).unwrap()),
         alpha,
         beta,
     };
@@ -353,30 +334,11 @@ fn run_u8_smoke<BT: BiasElement + Copy + Default>(
         .expect("select u8 RRR plan");
 
     let args = IntGemmArgs::<U8, BT> {
-        a: MatrixRef {
-            data: dev_a,
-            rows: m,
-            cols: k,
-            ld: k as i64,
-        },
-        b: MatrixRef {
-            data: dev_b,
-            rows: k,
-            cols: n,
-            ld: n as i64,
-        },
+        a: MatrixRef::new(dev_a, m, k, k as i64).unwrap(),
+        b: MatrixRef::new(dev_b, k, n, n as i64).unwrap(),
         c: None,
-        d: MatrixMut {
-            data: dev_d.as_slice_mut(),
-            rows: m,
-            cols: n,
-            ld: n as i64,
-        },
-        bias: dev_bias_opt.as_ref().map(|buf| VectorRef {
-            data: buf.as_slice(),
-            len: n,
-            stride: 1,
-        }),
+        d: MatrixMut::new(dev_d.as_slice_mut(), m, n, n as i64).unwrap(),
+        bias: dev_bias_opt.as_ref().map(|buf| VectorRef::new(buf.as_slice(), n, 1).unwrap()),
         alpha,
         beta,
     };

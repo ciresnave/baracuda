@@ -3026,45 +3026,45 @@ fn check_args<T: CutlassElement>(desc: &GemmDescriptor, args: &GemmArgs<'_, T>) 
         (false, None) | (true, Some(_)) => {}
     }
     if let Some(bias) = &args.bias {
-        if bias.len != desc.n {
+        if bias.len() != desc.n {
             return Err(Error::InvalidProblem("bias vector length must equal N"));
         }
-        if bias.stride != 1 {
+        if bias.stride() != 1 {
             return Err(Error::Unsupported(
                 "bias vector must be contiguous (stride 1) — strided bias not supported",
             ));
         }
-        if bias.data.len() < desc.n as usize {
+        if bias.data().len() < desc.n as usize {
             return Err(Error::BufferTooSmall {
                 needed: desc.n as usize,
-                got: bias.data.len(),
+                got: bias.data().len(),
             });
         }
     }
-    if args.a.rows != desc.m || args.a.cols != desc.k {
+    if args.a.rows() != desc.m || args.a.cols() != desc.k {
         return Err(Error::InvalidProblem(
             "A shape doesn't match descriptor (M, K)",
         ));
     }
-    if args.b.rows != desc.k || args.b.cols != desc.n {
+    if args.b.rows() != desc.k || args.b.cols() != desc.n {
         return Err(Error::InvalidProblem(
             "B shape doesn't match descriptor (K, N)",
         ));
     }
-    if args.d.rows != desc.m || args.d.cols != desc.n {
+    if args.d.rows() != desc.m || args.d.cols() != desc.n {
         return Err(Error::InvalidProblem(
             "D shape doesn't match descriptor (M, N)",
         ));
     }
     if let Some(c) = &args.c {
-        if c.rows != desc.m || c.cols != desc.n {
+        if c.rows() != desc.m || c.cols() != desc.n {
             return Err(Error::InvalidProblem(
                 "C shape doesn't match descriptor (M, N)",
             ));
         }
     }
     // A is row-major in both Rcr and Rrr — leading dim along the K axis.
-    if args.a.ld < desc.k as i64 {
+    if args.a.ld() < desc.k as i64 {
         return Err(Error::InvalidProblem("A leading dimension must be >= K"));
     }
     // B's leading-dim minor depends on layout:
@@ -3074,55 +3074,55 @@ fn check_args<T: CutlassElement>(desc: &GemmDescriptor, args: &GemmArgs<'_, T>) 
         LayoutSku::Rcr => desc.k as i64,
         LayoutSku::Rrr => desc.n as i64,
     };
-    if args.b.ld < b_min_ld {
+    if args.b.ld() < b_min_ld {
         return Err(Error::InvalidProblem(match desc.layout {
             LayoutSku::Rcr => "B leading dimension must be >= K (column-major Rcr layout)",
             LayoutSku::Rrr => "B leading dimension must be >= N (row-major Rrr layout)",
         }));
     }
-    if args.d.ld < desc.n as i64 {
+    if args.d.ld() < desc.n as i64 {
         return Err(Error::InvalidProblem("D leading dimension must be >= N"));
     }
     if let Some(c) = &args.c {
-        if c.ld < desc.n as i64 {
+        if c.ld() < desc.n as i64 {
             return Err(Error::InvalidProblem("C leading dimension must be >= N"));
         }
     }
 
-    let need_a = min_elements_row_major(args.a.rows, args.a.cols, args.a.ld)
+    let need_a = min_elements_row_major(args.a.rows(), args.a.cols(), args.a.ld())
         .ok_or(Error::InvalidProblem("A storage size overflow"))?;
-    if args.a.data.len() < need_a {
+    if args.a.data().len() < need_a {
         return Err(Error::BufferTooSmall {
             needed: need_a,
-            got: args.a.data.len(),
+            got: args.a.data().len(),
         });
     }
     let need_b = match desc.layout {
-        LayoutSku::Rcr => min_elements_col_major(args.b.rows, args.b.cols, args.b.ld),
-        LayoutSku::Rrr => min_elements_row_major(args.b.rows, args.b.cols, args.b.ld),
+        LayoutSku::Rcr => min_elements_col_major(args.b.rows(), args.b.cols(), args.b.ld()),
+        LayoutSku::Rrr => min_elements_row_major(args.b.rows(), args.b.cols(), args.b.ld()),
     }
     .ok_or(Error::InvalidProblem("B storage size overflow"))?;
-    if args.b.data.len() < need_b {
+    if args.b.data().len() < need_b {
         return Err(Error::BufferTooSmall {
             needed: need_b,
-            got: args.b.data.len(),
+            got: args.b.data().len(),
         });
     }
-    let need_d = min_elements_row_major(args.d.rows, args.d.cols, args.d.ld)
+    let need_d = min_elements_row_major(args.d.rows(), args.d.cols(), args.d.ld())
         .ok_or(Error::InvalidProblem("D storage size overflow"))?;
-    if args.d.data.len() < need_d {
+    if args.d.data().len() < need_d {
         return Err(Error::BufferTooSmall {
             needed: need_d,
-            got: args.d.data.len(),
+            got: args.d.data().len(),
         });
     }
     if let Some(c) = &args.c {
-        let need_c = min_elements_row_major(c.rows, c.cols, c.ld)
+        let need_c = min_elements_row_major(c.rows(), c.cols(), c.ld())
             .ok_or(Error::InvalidProblem("C storage size overflow"))?;
-        if c.data.len() < need_c {
+        if c.data().len() < need_c {
             return Err(Error::BufferTooSmall {
                 needed: need_c,
-                got: c.data.len(),
+                got: c.data().len(),
             });
         }
     }
@@ -3652,17 +3652,17 @@ impl<T: CutlassElement> GemmPlan<T> {
         // path up front than discover an alignment problem deep in the
         // capture replay.
 
-        let a_ptr = args.a.data.as_raw().0 as *const c_void;
-        let b_ptr = args.b.data.as_raw().0 as *const c_void;
-        let d_ptr = args.d.data.as_raw().0 as *mut c_void;
+        let a_ptr = args.a.data().as_raw().0 as *const c_void;
+        let b_ptr = args.b.data().as_raw().0 as *const c_void;
+        let d_ptr = args.d.data().as_raw().0 as *mut c_void;
         let (c_ptr, ldc) = match &args.c {
-            Some(c) => (c.data.as_raw().0 as *const c_void, c.ld),
+            Some(c) => (c.data().as_raw().0 as *const c_void, c.ld()),
             None => (core::ptr::null(), 0i64),
         };
         let bias_ptr = args
             .bias
             .as_ref()
-            .map(|b| b.data.as_raw().0 as *const c_void)
+            .map(|b| b.data().as_raw().0 as *const c_void)
             .unwrap_or(core::ptr::null());
 
         let bias_family = self.sku.epilogue.requires_bias();
@@ -3675,13 +3675,13 @@ impl<T: CutlassElement> GemmPlan<T> {
                     self.desc.n,
                     self.desc.k,
                     a_ptr,
-                    args.a.ld,
+                    args.a.ld(),
                     b_ptr,
-                    args.b.ld,
+                    args.b.ld(),
                     c_ptr,
                     ldc,
                     d_ptr,
-                    args.d.ld,
+                    args.d.ld(),
                 )
             },
             #[cfg(feature = "sm80")]
@@ -3693,13 +3693,13 @@ impl<T: CutlassElement> GemmPlan<T> {
                     self.desc.n,
                     self.desc.k,
                     a_ptr,
-                    args.a.ld,
+                    args.a.ld(),
                     b_ptr,
-                    args.b.ld,
+                    args.b.ld(),
                     c_ptr,
                     ldc,
                     d_ptr,
-                    args.d.ld,
+                    args.d.ld(),
                 )
             },
             #[cfg(feature = "sm80")]
@@ -3711,13 +3711,13 @@ impl<T: CutlassElement> GemmPlan<T> {
                     self.desc.n,
                     self.desc.k,
                     a_ptr,
-                    args.a.ld,
+                    args.a.ld(),
                     b_ptr,
-                    args.b.ld,
+                    args.b.ld(),
                     c_ptr,
                     ldc,
                     d_ptr,
-                    args.d.ld,
+                    args.d.ld(),
                     bias_ptr,
                 )
             },
@@ -3731,13 +3731,13 @@ impl<T: CutlassElement> GemmPlan<T> {
                     self.desc.n,
                     self.desc.k,
                     a_ptr,
-                    args.a.ld,
+                    args.a.ld(),
                     b_ptr,
-                    args.b.ld,
+                    args.b.ld(),
                     c_ptr,
                     ldc,
                     d_ptr,
-                    args.d.ld,
+                    args.d.ld(),
                     bias_ptr,
                 )
             },
@@ -3870,17 +3870,17 @@ impl<T: CutlassElement> GemmPlan<T> {
             }
         };
 
-        let a_ptr = args.a.data.as_raw().0 as *const c_void;
-        let b_ptr = args.b.data.as_raw().0 as *const c_void;
-        let d_ptr = args.d.data.as_raw().0 as *mut c_void;
+        let a_ptr = args.a.data().as_raw().0 as *const c_void;
+        let b_ptr = args.b.data().as_raw().0 as *const c_void;
+        let d_ptr = args.d.data().as_raw().0 as *mut c_void;
         let (c_ptr, ldc) = match &args.c {
-            Some(c) => (c.data.as_raw().0 as *const c_void, c.ld),
+            Some(c) => (c.data().as_raw().0 as *const c_void, c.ld()),
             None => (core::ptr::null(), 0i64),
         };
         let bias_ptr = args
             .bias
             .as_ref()
-            .map(|b| b.data.as_raw().0 as *const c_void)
+            .map(|b| b.data().as_raw().0 as *const c_void)
             .unwrap_or(core::ptr::null());
         // When the caller passes c = None, force beta = 0 at the safe
         // layer. The kernel internally substitutes D for the C operand to
@@ -3966,13 +3966,13 @@ impl<T: CutlassElement> GemmPlan<T> {
                     self.desc.n,
                     self.desc.k,
                     a_ptr,
-                    args.a.ld,
+                    args.a.ld(),
                     b_ptr,
-                    args.b.ld,
+                    args.b.ld(),
                     c_ptr,
                     ldc,
                     d_ptr,
-                    args.d.ld,
+                    args.d.ld(),
                     args.alpha.to_f64(),
                     beta_eff.to_f64(),
                     ws_ptr,
@@ -3989,13 +3989,13 @@ impl<T: CutlassElement> GemmPlan<T> {
                     self.desc.n,
                     self.desc.k,
                     a_ptr,
-                    args.a.ld,
+                    args.a.ld(),
                     b_ptr,
-                    args.b.ld,
+                    args.b.ld(),
                     c_ptr,
                     ldc,
                     d_ptr,
-                    args.d.ld,
+                    args.d.ld(),
                     args.alpha.to_f32(),
                     beta_eff.to_f32(),
                     ws_ptr,
@@ -4012,13 +4012,13 @@ impl<T: CutlassElement> GemmPlan<T> {
                     self.desc.n,
                     self.desc.k,
                     a_ptr,
-                    args.a.ld,
+                    args.a.ld(),
                     b_ptr,
-                    args.b.ld,
+                    args.b.ld(),
                     c_ptr,
                     ldc,
                     d_ptr,
-                    args.d.ld,
+                    args.d.ld(),
                     bias_ptr,
                     args.alpha.to_f64(),
                     beta_eff.to_f64(),
@@ -4037,13 +4037,13 @@ impl<T: CutlassElement> GemmPlan<T> {
                     self.desc.n,
                     self.desc.k,
                     a_ptr,
-                    args.a.ld,
+                    args.a.ld(),
                     b_ptr,
-                    args.b.ld,
+                    args.b.ld(),
                     c_ptr,
                     ldc,
                     d_ptr,
-                    args.d.ld,
+                    args.d.ld(),
                     bias_ptr,
                     args.alpha.to_f32(),
                     beta_eff.to_f32(),
@@ -4104,9 +4104,9 @@ impl<T: CutlassElement> GemmPlan<T> {
         let m = self.desc.m;
         let n = self.desc.n;
         let k = self.desc.k;
-        let a_ptr = args.a.data.as_raw().0 as *const c_void;
-        let b_ptr = args.b.data.as_raw().0 as *const c_void;
-        let d_ptr = args.d.data.as_raw().0 as *mut c_void;
+        let a_ptr = args.a.data().as_raw().0 as *const c_void;
+        let b_ptr = args.b.data().as_raw().0 as *const c_void;
+        let d_ptr = args.d.data().as_raw().0 as *mut c_void;
         // C must equal D for cuBLAS's `C = α·op(A)·op(B) + β·C` shape
         // when the safe-layer caller passed C=None (treated as β=0).
         // When C is Some, we route it through. cuBLAS reads C with the
@@ -4114,8 +4114,8 @@ impl<T: CutlassElement> GemmPlan<T> {
         // col-major mapping applies.
         let (c_ptr, ldc_arg) = match &args.c {
             // cuBLAS expects β*C added in; pass the caller's C directly.
-            Some(c) => (c.data.as_raw().0 as *mut c_void, c.ld as i32),
-            None => (d_ptr, args.d.ld as i32),
+            Some(c) => (c.data().as_raw().0 as *mut c_void, c.ld() as i32),
+            None => (d_ptr, args.d.ld() as i32),
         };
 
         // Row-major-from-col-major mapping for baracuda's Rcr/Rrr:
@@ -4162,9 +4162,9 @@ impl<T: CutlassElement> GemmPlan<T> {
             LayoutSku::Rcr => (CublasOp::T, CublasOp::N),
             LayoutSku::Rrr => (CublasOp::N, CublasOp::N),
         };
-        let cublas_lda = args.b.ld as i32; // first operand (B) ld
-        let cublas_ldb = args.a.ld as i32; // second operand (A) ld
-        let ldd_arg = args.d.ld as i32;
+        let cublas_lda = args.b.ld() as i32; // first operand (B) ld
+        let cublas_ldb = args.a.ld() as i32; // second operand (A) ld
+        let ldd_arg = args.d.ld() as i32;
 
         // Pick compute path by `T::Scalar` (the FP family bound on
         // CutlassElement guarantees f32 or f64). f64 routes through
@@ -4403,13 +4403,13 @@ impl<T: CutlassElement> GemmPlan<T> {
         let m = self.desc.m as usize;
         let n = self.desc.n as usize;
         let k = self.desc.k as usize;
-        let lda = args.b.ld as usize; // first operand (B) ld
-        let ldb = args.a.ld as usize; // second operand (A) ld
-        let ldc = args.d.ld as usize;
+        let lda = args.b.ld() as usize; // first operand (B) ld
+        let ldb = args.a.ld() as usize; // second operand (A) ld
+        let ldc = args.d.ld() as usize;
 
-        let a_ptr = args.a.data.as_raw().0 as *const f64;
-        let b_ptr = args.b.data.as_raw().0 as *const f64;
-        let d_ptr = args.d.data.as_raw().0 as *mut f64;
+        let a_ptr = args.a.data().as_raw().0 as *const f64;
+        let b_ptr = args.b.data().as_raw().0 as *const f64;
+        let d_ptr = args.d.data().as_raw().0 as *mut f64;
         let alpha = args.alpha.to_f64();
         let beta = beta_eff.to_f64();
 
@@ -4570,45 +4570,45 @@ fn check_batched_args<T: CutlassElement>(
     // Per-batch shape validation matches the single-GEMM path; strides
     // are validated by checking that the last batch's max-addressable
     // element fits within each base buffer.
-    if args.a.rows != desc.m || args.a.cols != desc.k {
+    if args.a.rows() != desc.m || args.a.cols() != desc.k {
         return Err(Error::InvalidProblem(
             "A shape doesn't match descriptor (M, K)",
         ));
     }
-    if args.b.rows != desc.k || args.b.cols != desc.n {
+    if args.b.rows() != desc.k || args.b.cols() != desc.n {
         return Err(Error::InvalidProblem(
             "B shape doesn't match descriptor (K, N)",
         ));
     }
-    if args.d.rows != desc.m || args.d.cols != desc.n {
+    if args.d.rows() != desc.m || args.d.cols() != desc.n {
         return Err(Error::InvalidProblem(
             "D shape doesn't match descriptor (M, N)",
         ));
     }
     if let Some(c) = &args.c {
-        if c.rows != desc.m || c.cols != desc.n {
+        if c.rows() != desc.m || c.cols() != desc.n {
             return Err(Error::InvalidProblem(
                 "C shape doesn't match descriptor (M, N)",
             ));
         }
     }
-    if args.a.ld < desc.k as i64 {
+    if args.a.ld() < desc.k as i64 {
         return Err(Error::InvalidProblem("A leading dimension must be >= K"));
     }
     let b_min_ld = match desc.layout {
         LayoutSku::Rcr => desc.k as i64,
         LayoutSku::Rrr => desc.n as i64,
     };
-    if args.b.ld < b_min_ld {
+    if args.b.ld() < b_min_ld {
         return Err(Error::InvalidProblem(
             "B leading dimension too small for layout",
         ));
     }
-    if args.d.ld < desc.n as i64 {
+    if args.d.ld() < desc.n as i64 {
         return Err(Error::InvalidProblem("D leading dimension must be >= N"));
     }
     if let Some(c) = &args.c {
-        if c.ld < desc.n as i64 {
+        if c.ld() < desc.n as i64 {
             return Err(Error::InvalidProblem("C leading dimension must be >= N"));
         }
     }
@@ -4625,51 +4625,51 @@ fn check_batched_args<T: CutlassElement>(
         per_batch_min.checked_add(extra)
     }
 
-    let a_per = min_elements_row_major(args.a.rows, args.a.cols, args.a.ld)
+    let a_per = min_elements_row_major(args.a.rows(), args.a.cols(), args.a.ld())
         .ok_or(Error::InvalidProblem("A storage size overflow"))?;
     let need_a = need_for_batches(a_per, args.stride_a, desc.batch_count)
         .ok_or(Error::InvalidProblem("A batched storage size overflow"))?;
-    if args.a.data.len() < need_a {
+    if args.a.data().len() < need_a {
         return Err(Error::BufferTooSmall {
             needed: need_a,
-            got: args.a.data.len(),
+            got: args.a.data().len(),
         });
     }
 
     let b_per = match desc.layout {
-        LayoutSku::Rcr => min_elements_col_major(args.b.rows, args.b.cols, args.b.ld),
-        LayoutSku::Rrr => min_elements_row_major(args.b.rows, args.b.cols, args.b.ld),
+        LayoutSku::Rcr => min_elements_col_major(args.b.rows(), args.b.cols(), args.b.ld()),
+        LayoutSku::Rrr => min_elements_row_major(args.b.rows(), args.b.cols(), args.b.ld()),
     }
     .ok_or(Error::InvalidProblem("B storage size overflow"))?;
     let need_b = need_for_batches(b_per, args.stride_b, desc.batch_count)
         .ok_or(Error::InvalidProblem("B batched storage size overflow"))?;
-    if args.b.data.len() < need_b {
+    if args.b.data().len() < need_b {
         return Err(Error::BufferTooSmall {
             needed: need_b,
-            got: args.b.data.len(),
+            got: args.b.data().len(),
         });
     }
 
-    let d_per = min_elements_row_major(args.d.rows, args.d.cols, args.d.ld)
+    let d_per = min_elements_row_major(args.d.rows(), args.d.cols(), args.d.ld())
         .ok_or(Error::InvalidProblem("D storage size overflow"))?;
     let need_d = need_for_batches(d_per, args.stride_d, desc.batch_count)
         .ok_or(Error::InvalidProblem("D batched storage size overflow"))?;
-    if args.d.data.len() < need_d {
+    if args.d.data().len() < need_d {
         return Err(Error::BufferTooSmall {
             needed: need_d,
-            got: args.d.data.len(),
+            got: args.d.data().len(),
         });
     }
 
     if let Some(c) = &args.c {
-        let c_per = min_elements_row_major(c.rows, c.cols, c.ld)
+        let c_per = min_elements_row_major(c.rows(), c.cols(), c.ld())
             .ok_or(Error::InvalidProblem("C storage size overflow"))?;
         let need_c = need_for_batches(c_per, args.stride_c, desc.batch_count)
             .ok_or(Error::InvalidProblem("C batched storage size overflow"))?;
-        if c.data.len() < need_c {
+        if c.data().len() < need_c {
             return Err(Error::BufferTooSmall {
                 needed: need_c,
-                got: c.data.len(),
+                got: c.data().len(),
             });
         }
     }
@@ -4741,11 +4741,11 @@ impl<T: CutlassElement> BatchedGemmPlan<T> {
     pub fn can_implement(&self, args: &BatchedGemmArgs<'_, T>) -> Result<()> {
         check_batched_args(&self.desc, args)?;
 
-        let a_ptr = args.a.data.as_raw().0 as *const c_void;
-        let b_ptr = args.b.data.as_raw().0 as *const c_void;
-        let d_ptr = args.d.data.as_raw().0 as *mut c_void;
+        let a_ptr = args.a.data().as_raw().0 as *const c_void;
+        let b_ptr = args.b.data().as_raw().0 as *const c_void;
+        let d_ptr = args.d.data().as_raw().0 as *mut c_void;
         let (c_ptr, ldc, stride_c) = match &args.c {
-            Some(c) => (c.data.as_raw().0 as *const c_void, c.ld, args.stride_c),
+            Some(c) => (c.data().as_raw().0 as *const c_void, c.ld(), args.stride_c),
             None => (core::ptr::null(), 0i64, 0i64),
         };
 
@@ -4759,16 +4759,16 @@ impl<T: CutlassElement> BatchedGemmPlan<T> {
                     self.desc.n,
                     self.desc.k,
                     a_ptr,
-                    args.a.ld,
+                    args.a.ld(),
                     args.stride_a,
                     b_ptr,
-                    args.b.ld,
+                    args.b.ld(),
                     args.stride_b,
                     c_ptr,
                     ldc,
                     stride_c,
                     d_ptr,
-                    args.d.ld,
+                    args.d.ld(),
                     args.stride_d,
                     self.desc.batch_count,
                 )
@@ -4849,11 +4849,11 @@ impl<T: CutlassElement> BatchedGemmPlan<T> {
             }
         };
 
-        let a_ptr = args.a.data.as_raw().0 as *const c_void;
-        let b_ptr = args.b.data.as_raw().0 as *const c_void;
-        let d_ptr = args.d.data.as_raw().0 as *mut c_void;
+        let a_ptr = args.a.data().as_raw().0 as *const c_void;
+        let b_ptr = args.b.data().as_raw().0 as *const c_void;
+        let d_ptr = args.d.data().as_raw().0 as *mut c_void;
         let (c_ptr, ldc, stride_c) = match &args.c {
-            Some(c) => (c.data.as_raw().0 as *const c_void, c.ld, args.stride_c),
+            Some(c) => (c.data().as_raw().0 as *const c_void, c.ld(), args.stride_c),
             None => (core::ptr::null(), 0i64, 0i64),
         };
         let beta_eff = if args.c.is_some() {
@@ -4876,16 +4876,16 @@ impl<T: CutlassElement> BatchedGemmPlan<T> {
                     self.desc.n,
                     self.desc.k,
                     a_ptr,
-                    args.a.ld,
+                    args.a.ld(),
                     args.stride_a,
                     b_ptr,
-                    args.b.ld,
+                    args.b.ld(),
                     args.stride_b,
                     c_ptr,
                     ldc,
                     stride_c,
                     d_ptr,
-                    args.d.ld,
+                    args.d.ld(),
                     args.stride_d,
                     args.alpha.to_f32(),
                     beta_eff.to_f32(),
@@ -5157,21 +5157,21 @@ impl<T: CutlassElement> GroupedGemmPlan<T> {
             if g.m <= 0 || g.n <= 0 || g.k <= 0 {
                 return Err(Error::InvalidProblem("group M, N, K must all be positive"));
             }
-            if g.a.rows != g.m || g.a.cols != g.k {
+            if g.a.rows() != g.m || g.a.cols() != g.k {
                 return Err(Error::InvalidProblem("group A shape doesn't match (M, K)"));
             }
-            if g.b.rows != g.k || g.b.cols != g.n {
+            if g.b.rows() != g.k || g.b.cols() != g.n {
                 return Err(Error::InvalidProblem("group B shape doesn't match (K, N)"));
             }
-            if g.d.rows != g.m || g.d.cols != g.n {
+            if g.d.rows() != g.m || g.d.cols() != g.n {
                 return Err(Error::InvalidProblem("group D shape doesn't match (M, N)"));
             }
             if let Some(c) = &g.c {
-                if c.rows != g.m || c.cols != g.n {
+                if c.rows() != g.m || c.cols() != g.n {
                     return Err(Error::InvalidProblem("group C shape doesn't match (M, N)"));
                 }
             }
-            if g.a.ld < g.k as i64 || g.b.ld < g.k as i64 || g.d.ld < g.n as i64 {
+            if g.a.ld() < g.k as i64 || g.b.ld() < g.k as i64 || g.d.ld() < g.n as i64 {
                 return Err(Error::InvalidProblem("group leading dimension too small"));
             }
             if g.alpha != first_alpha {
@@ -5287,9 +5287,9 @@ impl<T: CutlassElement> GroupedGemmPlan<T> {
         // Collect device pointers and leading dimensions before borrowing
         // `pinned` mutably — keeps the mutable-borrow scope tight so we
         // can move `pinned` into the returned struct below.
-        let ptr_a: Vec<u64> = groups.iter().map(|g| g.a.data.as_raw().0).collect();
-        let ptr_b: Vec<u64> = groups.iter().map(|g| g.b.data.as_raw().0).collect();
-        let ptr_d: Vec<u64> = groups.iter().map(|g| g.d.data.as_raw().0).collect();
+        let ptr_a: Vec<u64> = groups.iter().map(|g| g.a.data().as_raw().0).collect();
+        let ptr_b: Vec<u64> = groups.iter().map(|g| g.b.data().as_raw().0).collect();
+        let ptr_d: Vec<u64> = groups.iter().map(|g| g.d.data().as_raw().0).collect();
         // For c = None, point ptr_c at the group's D buffer (kernel reads
         // a valid pointer but multiplies by beta = 0; same trick as
         // single-GEMM null-C handling).
@@ -5297,16 +5297,16 @@ impl<T: CutlassElement> GroupedGemmPlan<T> {
             .iter()
             .map(|g| {
                 g.c.as_ref()
-                    .map(|c| c.data.as_raw().0)
-                    .unwrap_or_else(|| g.d.data.as_raw().0)
+                    .map(|c| c.data().as_raw().0)
+                    .unwrap_or_else(|| g.d.data().as_raw().0)
             })
             .collect();
-        let lda: Vec<i64> = groups.iter().map(|g| g.a.ld).collect();
-        let ldb: Vec<i64> = groups.iter().map(|g| g.b.ld).collect();
-        let ldd: Vec<i64> = groups.iter().map(|g| g.d.ld).collect();
+        let lda: Vec<i64> = groups.iter().map(|g| g.a.ld()).collect();
+        let ldb: Vec<i64> = groups.iter().map(|g| g.b.ld()).collect();
+        let ldd: Vec<i64> = groups.iter().map(|g| g.d.ld()).collect();
         let ldc: Vec<i64> = groups
             .iter()
-            .map(|g| g.c.as_ref().map(|c| c.ld).unwrap_or(g.d.ld))
+            .map(|g| g.c.as_ref().map(|c| c.ld()).unwrap_or(g.d.ld()))
             .collect();
 
         // Now write all metadata into the pinned slab. The borrow ends
@@ -5637,17 +5637,17 @@ impl<T: IntElement, BT: BiasElement> IntGemmPlan<T, BT> {
     pub fn can_implement(&self, args: &IntGemmArgs<'_, T, BT>) -> Result<()> {
         check_int_args(&self.desc, args)?;
 
-        let a_ptr = args.a.data.as_raw().0 as *const c_void;
-        let b_ptr = args.b.data.as_raw().0 as *const c_void;
-        let d_ptr = args.d.data.as_raw().0 as *mut c_void;
+        let a_ptr = args.a.data().as_raw().0 as *const c_void;
+        let b_ptr = args.b.data().as_raw().0 as *const c_void;
+        let d_ptr = args.d.data().as_raw().0 as *mut c_void;
         let (c_ptr, ldc) = match &args.c {
-            Some(c) => (c.data.as_raw().0 as *const c_void, c.ld),
+            Some(c) => (c.data().as_raw().0 as *const c_void, c.ld()),
             None => (core::ptr::null(), 0i64),
         };
         let bias_ptr = args
             .bias
             .as_ref()
-            .map(|b| b.data.as_raw().0 as *const c_void)
+            .map(|b| b.data().as_raw().0 as *const c_void)
             .unwrap_or(core::ptr::null());
 
         let bias_family = self.sku.epilogue.requires_bias();
@@ -5661,13 +5661,13 @@ impl<T: IntElement, BT: BiasElement> IntGemmPlan<T, BT> {
                     self.desc.n,
                     self.desc.k,
                     a_ptr,
-                    args.a.ld,
+                    args.a.ld(),
                     b_ptr,
-                    args.b.ld,
+                    args.b.ld(),
                     c_ptr,
                     ldc,
                     d_ptr,
-                    args.d.ld,
+                    args.d.ld(),
                 )
             },
             #[cfg(feature = "sm80")]
@@ -5681,13 +5681,13 @@ impl<T: IntElement, BT: BiasElement> IntGemmPlan<T, BT> {
                     self.desc.n,
                     self.desc.k,
                     a_ptr,
-                    args.a.ld,
+                    args.a.ld(),
                     b_ptr,
-                    args.b.ld,
+                    args.b.ld(),
                     c_ptr,
                     ldc,
                     d_ptr,
-                    args.d.ld,
+                    args.d.ld(),
                     bias_ptr,
                 )
             },
@@ -5777,17 +5777,17 @@ impl<T: IntElement, BT: BiasElement> IntGemmPlan<T, BT> {
             }
         };
 
-        let a_ptr = args.a.data.as_raw().0 as *const c_void;
-        let b_ptr = args.b.data.as_raw().0 as *const c_void;
-        let d_ptr = args.d.data.as_raw().0 as *mut c_void;
+        let a_ptr = args.a.data().as_raw().0 as *const c_void;
+        let b_ptr = args.b.data().as_raw().0 as *const c_void;
+        let d_ptr = args.d.data().as_raw().0 as *mut c_void;
         let (c_ptr, ldc) = match &args.c {
-            Some(c) => (c.data.as_raw().0 as *const c_void, c.ld),
+            Some(c) => (c.data().as_raw().0 as *const c_void, c.ld()),
             None => (core::ptr::null(), 0i64),
         };
         let bias_ptr = args
             .bias
             .as_ref()
-            .map(|b| b.data.as_raw().0 as *const c_void)
+            .map(|b| b.data().as_raw().0 as *const c_void)
             .unwrap_or(core::ptr::null());
         // Match GemmPlan: when c = None, force beta = 0 at the safe layer
         // so the C-substituted-as-D fallback inside the kernel doesn't
@@ -5806,13 +5806,13 @@ impl<T: IntElement, BT: BiasElement> IntGemmPlan<T, BT> {
                     self.desc.n,
                     self.desc.k,
                     a_ptr,
-                    args.a.ld,
+                    args.a.ld(),
                     b_ptr,
-                    args.b.ld,
+                    args.b.ld(),
                     c_ptr,
                     ldc,
                     d_ptr,
-                    args.d.ld,
+                    args.d.ld(),
                     args.alpha,
                     beta_eff,
                     ws_ptr,
@@ -5831,13 +5831,13 @@ impl<T: IntElement, BT: BiasElement> IntGemmPlan<T, BT> {
                     self.desc.n,
                     self.desc.k,
                     a_ptr,
-                    args.a.ld,
+                    args.a.ld(),
                     b_ptr,
-                    args.b.ld,
+                    args.b.ld(),
                     c_ptr,
                     ldc,
                     d_ptr,
-                    args.d.ld,
+                    args.d.ld(),
                     bias_ptr,
                     args.alpha,
                     beta_eff,
@@ -5896,98 +5896,98 @@ fn check_int_args<T: IntElement, BT: BiasElement>(
         (false, None) | (true, Some(_)) => {}
     }
     if let Some(bias) = &args.bias {
-        if bias.len != desc.n {
+        if bias.len() != desc.n {
             return Err(Error::InvalidProblem("bias vector length must equal N"));
         }
-        if bias.stride != 1 {
+        if bias.stride() != 1 {
             return Err(Error::Unsupported(
                 "bias vector must be contiguous (stride 1) — strided bias not supported",
             ));
         }
-        if bias.data.len() < desc.n as usize {
+        if bias.data().len() < desc.n as usize {
             return Err(Error::BufferTooSmall {
                 needed: desc.n as usize,
-                got: bias.data.len(),
+                got: bias.data().len(),
             });
         }
     }
-    if args.a.rows != desc.m || args.a.cols != desc.k {
+    if args.a.rows() != desc.m || args.a.cols() != desc.k {
         return Err(Error::InvalidProblem(
             "A shape doesn't match descriptor (M, K)",
         ));
     }
-    if args.b.rows != desc.k || args.b.cols != desc.n {
+    if args.b.rows() != desc.k || args.b.cols() != desc.n {
         return Err(Error::InvalidProblem(
             "B shape doesn't match descriptor (K, N)",
         ));
     }
-    if args.d.rows != desc.m || args.d.cols != desc.n {
+    if args.d.rows() != desc.m || args.d.cols() != desc.n {
         return Err(Error::InvalidProblem(
             "D shape doesn't match descriptor (M, N)",
         ));
     }
     if let Some(c) = &args.c {
-        if c.rows != desc.m || c.cols != desc.n {
+        if c.rows() != desc.m || c.cols() != desc.n {
             return Err(Error::InvalidProblem(
                 "C shape doesn't match descriptor (M, N)",
             ));
         }
     }
-    if args.a.ld < desc.k as i64 {
+    if args.a.ld() < desc.k as i64 {
         return Err(Error::InvalidProblem("A leading dimension must be >= K"));
     }
     let b_min_ld = match desc.layout {
         LayoutSku::Rcr => desc.k as i64,
         LayoutSku::Rrr => desc.n as i64,
     };
-    if args.b.ld < b_min_ld {
+    if args.b.ld() < b_min_ld {
         return Err(Error::InvalidProblem(match desc.layout {
             LayoutSku::Rcr => "B leading dimension must be >= K (column-major Rcr layout)",
             LayoutSku::Rrr => "B leading dimension must be >= N (row-major Rrr layout)",
         }));
     }
-    if args.d.ld < desc.n as i64 {
+    if args.d.ld() < desc.n as i64 {
         return Err(Error::InvalidProblem("D leading dimension must be >= N"));
     }
     if let Some(c) = &args.c {
-        if c.ld < desc.n as i64 {
+        if c.ld() < desc.n as i64 {
             return Err(Error::InvalidProblem("C leading dimension must be >= N"));
         }
     }
-    let need_a = min_elements_row_major(args.a.rows, args.a.cols, args.a.ld)
+    let need_a = min_elements_row_major(args.a.rows(), args.a.cols(), args.a.ld())
         .ok_or(Error::InvalidProblem("A storage size overflow"))?;
-    if args.a.data.len() < need_a {
+    if args.a.data().len() < need_a {
         return Err(Error::BufferTooSmall {
             needed: need_a,
-            got: args.a.data.len(),
+            got: args.a.data().len(),
         });
     }
     let need_b = match desc.layout {
-        LayoutSku::Rcr => min_elements_col_major(args.b.rows, args.b.cols, args.b.ld),
-        LayoutSku::Rrr => min_elements_row_major(args.b.rows, args.b.cols, args.b.ld),
+        LayoutSku::Rcr => min_elements_col_major(args.b.rows(), args.b.cols(), args.b.ld()),
+        LayoutSku::Rrr => min_elements_row_major(args.b.rows(), args.b.cols(), args.b.ld()),
     }
     .ok_or(Error::InvalidProblem("B storage size overflow"))?;
-    if args.b.data.len() < need_b {
+    if args.b.data().len() < need_b {
         return Err(Error::BufferTooSmall {
             needed: need_b,
-            got: args.b.data.len(),
+            got: args.b.data().len(),
         });
     }
-    let need_d = min_elements_row_major(args.d.rows, args.d.cols, args.d.ld)
+    let need_d = min_elements_row_major(args.d.rows(), args.d.cols(), args.d.ld())
         .ok_or(Error::InvalidProblem("D storage size overflow"))?;
-    if args.d.data.len() < need_d {
+    if args.d.data().len() < need_d {
         return Err(Error::BufferTooSmall {
             needed: need_d,
-            got: args.d.data.len(),
+            got: args.d.data().len(),
         });
     }
     if let Some(c) = &args.c {
-        let need_c = min_elements_row_major(c.rows, c.cols, c.ld)
+        let need_c = min_elements_row_major(c.rows(), c.cols(), c.ld())
             .ok_or(Error::InvalidProblem("C storage size overflow"))?;
-        if c.data.len() < need_c {
+        if c.data().len() < need_c {
             return Err(Error::BufferTooSmall {
                 needed: need_c,
-                got: c.data.len(),
+                got: c.data().len(),
             });
         }
     }

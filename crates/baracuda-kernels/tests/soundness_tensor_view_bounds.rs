@@ -172,24 +172,9 @@ fn gemm_matrix_operand_shorter_than_its_footprint_is_rejected() {
         &stream,
         Workspace::None,
         BinGemmArgs {
-            a: MatrixRef {
-                data: a_short.view_as::<Bin>(),
-                rows: m,
-                cols: k,
-                ld: k_bytes as i64,
-            },
-            b: MatrixRef {
-                data: b.view_as::<Bin>(),
-                rows: k,
-                cols: n,
-                ld: k_bytes as i64,
-            },
-            d: MatrixMut {
-                data: d.as_slice_mut(),
-                rows: m,
-                cols: n,
-                ld: n as i64,
-            },
+            a: MatrixRef::new(a_short.view_as::<Bin>(), m, k, k_bytes as i64).unwrap(),
+            b: MatrixRef::new(b.view_as::<Bin>(), k, n, k_bytes as i64).unwrap(),
+            d: MatrixMut::new(d.as_slice_mut(), m, n, n as i64).unwrap(),
         },
     );
     stream.synchronize().unwrap();

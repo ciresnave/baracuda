@@ -206,17 +206,17 @@ impl<T: IntElement, BT: BiasElement> Int4GemmPlan<T, BT> {
                 "int4 GEMM problem must have positive M, N, K",
             ));
         }
-        if args.a.rows != self.desc.m || args.a.cols != self.desc.k {
+        if args.a.rows() != self.desc.m || args.a.cols() != self.desc.k {
             return Err(Error::InvalidProblem(
                 "A shape mismatch with descriptor (M, K in elements)",
             ));
         }
-        if args.b.rows != self.desc.k || args.b.cols != self.desc.n {
+        if args.b.rows() != self.desc.k || args.b.cols() != self.desc.n {
             return Err(Error::InvalidProblem(
                 "B shape mismatch with descriptor (K, N in elements)",
             ));
         }
-        if args.d.rows != self.desc.m || args.d.cols != self.desc.n {
+        if args.d.rows() != self.desc.m || args.d.cols() != self.desc.n {
             return Err(Error::InvalidProblem(
                 "D shape mismatch with descriptor (M, N in elements)",
             ));
@@ -226,12 +226,12 @@ impl<T: IntElement, BT: BiasElement> Int4GemmPlan<T, BT> {
         let n_bytes_min = (self.desc.n / 2) as i64;
         match self.sku.layout {
             LayoutSku::Rcr => {
-                if args.a.ld < k_bytes_min {
+                if args.a.ld() < k_bytes_min {
                     return Err(Error::InvalidProblem(
                         "A leading dimension (bytes) must be >= K/2 for row-major int4 A",
                     ));
                 }
-                if args.b.ld < k_bytes_min {
+                if args.b.ld() < k_bytes_min {
                     return Err(Error::InvalidProblem(
                         "B leading dimension (bytes) must be >= K/2 for col-major int4 B (RCR)",
                     ));
@@ -240,30 +240,30 @@ impl<T: IntElement, BT: BiasElement> Int4GemmPlan<T, BT> {
             LayoutSku::Rrr => {
                 // Reserved for fanout; reaches here only via a
                 // direct construction bypassing `select`.
-                if args.a.ld < k_bytes_min {
+                if args.a.ld() < k_bytes_min {
                     return Err(Error::InvalidProblem(
                         "A leading dimension (bytes) must be >= K/2 for row-major int4 A",
                     ));
                 }
-                if args.b.ld < n_bytes_min {
+                if args.b.ld() < n_bytes_min {
                     return Err(Error::InvalidProblem(
                         "B leading dimension (bytes) must be >= N/2 for row-major int4 B (RRR)",
                     ));
                 }
             }
         }
-        if args.d.ld < n_bytes_min {
+        if args.d.ld() < n_bytes_min {
             return Err(Error::InvalidProblem(
                 "D leading dimension (bytes) must be >= N/2 for row-major int4 D",
             ));
         }
         if let Some(c) = &args.c {
-            if c.rows != self.desc.m || c.cols != self.desc.n {
+            if c.rows() != self.desc.m || c.cols() != self.desc.n {
                 return Err(Error::InvalidProblem(
                     "C shape mismatch with descriptor (M, N in elements)",
                 ));
             }
-            if c.ld < n_bytes_min {
+            if c.ld() < n_bytes_min {
                 return Err(Error::InvalidProblem(
                     "C leading dimension (bytes) must be >= N/2 for row-major int4 C",
                 ));
@@ -296,12 +296,12 @@ impl<T: IntElement, BT: BiasElement> Int4GemmPlan<T, BT> {
             LayoutSku::Rrr => (k, n_bytes),
         };
         // Packed-pair int4: `ld` and the per-line extent are counted in bytes.
-        crate::view_check::check_matrix(m, k_bytes, args.a.ld, 1, args.a.data.len(), eb)?;
-        crate::view_check::check_matrix(b_major, b_minor, args.b.ld, 1, args.b.data.len(), eb)?;
+        crate::view_check::check_matrix(m, k_bytes, args.a.ld(), 1, args.a.data().len(), eb)?;
+        crate::view_check::check_matrix(b_major, b_minor, args.b.ld(), 1, args.b.data().len(), eb)?;
         if let Some(c) = &args.c {
-            crate::view_check::check_matrix(m, n_bytes, c.ld, 1, c.data.len(), eb)?;
+            crate::view_check::check_matrix(m, n_bytes, c.ld(), 1, c.data().len(), eb)?;
         }
-        crate::view_check::check_matrix(m, n_bytes, args.d.ld, 1, args.d.data.len(), eb)?;
+        crate::view_check::check_matrix(m, n_bytes, args.d.ld(), 1, args.d.data().len(), eb)?;
         Ok(())
     }
 
@@ -336,15 +336,15 @@ impl<T: IntElement, BT: BiasElement> Int4GemmPlan<T, BT> {
         self.can_implement(&args)?;
         let _ = workspace; // int4 kernels take no scratch
 
-        let a_ptr = args.a.data.as_raw().0 as *const c_void;
-        let b_ptr = args.b.data.as_raw().0 as *const c_void;
-        let d_ptr = args.d.data.as_raw().0 as *mut c_void;
+        let a_ptr = args.a.data().as_raw().0 as *const c_void;
+        let b_ptr = args.b.data().as_raw().0 as *const c_void;
+        let d_ptr = args.d.data().as_raw().0 as *mut c_void;
         let (c_ptr, ldc) = match &args.c {
-            Some(c) => (c.data.as_raw().0 as *const c_void, c.ld),
+            Some(c) => (c.data().as_raw().0 as *const c_void, c.ld()),
             None => (core::ptr::null(), 0i64),
         };
         let bias_ptr: *const c_void = match &args.bias {
-            Some(b) => b.data.as_raw().0 as *const c_void,
+            Some(b) => b.data().as_raw().0 as *const c_void,
             None => core::ptr::null(),
         };
 
@@ -364,9 +364,9 @@ impl<T: IntElement, BT: BiasElement> Int4GemmPlan<T, BT> {
         let m = self.desc.m;
         let n = self.desc.n;
         let k = self.desc.k;
-        let lda = args.a.ld;
-        let ldb = args.b.ld;
-        let ldd = args.d.ld;
+        let lda = args.a.ld();
+        let ldb = args.b.ld();
+        let ldd = args.d.ld();
         let alpha = args.alpha;
         let beta = if args.c.is_some() { args.beta } else { 0.0 };
 

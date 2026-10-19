@@ -162,19 +162,19 @@ impl<T: Element> GemvDensePlan<T> {
                  the batched DenseGemmPlan path)",
             ));
         }
-        if args.a.rows != d.m || args.a.cols != d.k {
+        if args.a.rows() != d.m || args.a.cols() != d.k {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::GemvDensePlan: A logical shape mismatch with \
                  descriptor (M=1, K)",
             ));
         }
-        if args.b.rows != d.k || args.b.cols != d.n {
+        if args.b.rows() != d.k || args.b.cols() != d.n {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::GemvDensePlan: B logical shape mismatch with \
                  descriptor (K, N)",
             ));
         }
-        if args.d.rows != d.m || args.d.cols != d.n {
+        if args.d.rows() != d.m || args.d.cols() != d.n {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::GemvDensePlan: D shape mismatch with descriptor \
                  (M=1, N)",
@@ -184,17 +184,17 @@ impl<T: Element> GemvDensePlan<T> {
         // ld ≥ N, D [1, N] ld ≥ N. `lda` / `ldd` are honored though
         // unused at m == 1 (single A / D row). Keep in sync with the
         // .cu `gemv_validate`, which re-checks at run time.
-        if args.a.ld < (d.k as i64).max(1) {
+        if args.a.ld() < (d.k as i64).max(1) {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::GemvDensePlan: lda below K",
             ));
         }
-        if args.b.ld < (d.n as i64).max(1) {
+        if args.b.ld() < (d.n as i64).max(1) {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::GemvDensePlan: ldb below N",
             ));
         }
-        if args.d.ld < (d.n as i64).max(1) {
+        if args.d.ld() < (d.n as i64).max(1) {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::GemvDensePlan: ldd below N",
             ));
@@ -239,9 +239,9 @@ impl<T: Element> GemvDensePlan<T> {
                     ))
             };
             let (m, n, k) = (d.m as i64, d.n as i64, d.k as i64);
-            let a_slot = footprint(m, k, args.a.ld)?; // A [1, K]
-            let b_slot = footprint(k, n, args.b.ld)?; // B [K, N]
-            let d_slot = footprint(m, n, args.d.ld)?; // D [1, N]
+            let a_slot = footprint(m, k, args.a.ld())?; // A [1, K]
+            let b_slot = footprint(k, n, args.b.ld())?; // B [K, N]
+            let d_slot = footprint(m, n, args.d.ld())?; // D [1, N]
             let reach = |slot: i64, stride: i64| -> Result<i64> {
                 if d.batch == 1 || stride == 0 {
                     return Ok(slot);
@@ -262,9 +262,9 @@ impl<T: Element> GemvDensePlan<T> {
                 }
                 Ok(())
             };
-            check(reach(a_slot, args.stride_a)?, args.a.data.len())?;
-            check(reach(b_slot, args.stride_b)?, args.b.data.len())?;
-            check(reach(d_slot, args.stride_d)?, args.d.data.len())?;
+            check(reach(a_slot, args.stride_a)?, args.a.data().len())?;
+            check(reach(b_slot, args.stride_b)?, args.b.data().len())?;
+            check(reach(d_slot, args.stride_d)?, args.d.data().len())?;
         }
         Ok(())
     }
@@ -317,9 +317,9 @@ impl<T: Element> GemvDensePlan<T> {
         let _ = workspace;
 
         let d = &self.desc;
-        let a_ptr = args.a.data.as_raw().0 as *const c_void;
-        let b_ptr = args.b.data.as_raw().0 as *const c_void;
-        let d_ptr = args.d.data.as_raw().0 as *mut c_void;
+        let a_ptr = args.a.data().as_raw().0 as *const c_void;
+        let b_ptr = args.b.data().as_raw().0 as *const c_void;
+        let d_ptr = args.d.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         let alpha = args.alpha.to_f32();
         let beta = args.beta.to_f32();
@@ -335,13 +335,13 @@ impl<T: Element> GemvDensePlan<T> {
                     alpha,
                     beta,
                     a_ptr,
-                    args.a.ld,
+                    args.a.ld(),
                     args.stride_a,
                     b_ptr,
-                    args.b.ld,
+                    args.b.ld(),
                     args.stride_b,
                     d_ptr,
-                    args.d.ld,
+                    args.d.ld(),
                     args.stride_d,
                     core::ptr::null_mut(),
                     0,
@@ -358,13 +358,13 @@ impl<T: Element> GemvDensePlan<T> {
                     alpha,
                     beta,
                     a_ptr,
-                    args.a.ld,
+                    args.a.ld(),
                     args.stride_a,
                     b_ptr,
-                    args.b.ld,
+                    args.b.ld(),
                     args.stride_b,
                     d_ptr,
-                    args.d.ld,
+                    args.d.ld(),
                     args.stride_d,
                     core::ptr::null_mut(),
                     0,
@@ -381,13 +381,13 @@ impl<T: Element> GemvDensePlan<T> {
                     alpha,
                     beta,
                     a_ptr,
-                    args.a.ld,
+                    args.a.ld(),
                     args.stride_a,
                     b_ptr,
-                    args.b.ld,
+                    args.b.ld(),
                     args.stride_b,
                     d_ptr,
-                    args.d.ld,
+                    args.d.ld(),
                     args.stride_d,
                     core::ptr::null_mut(),
                     0,

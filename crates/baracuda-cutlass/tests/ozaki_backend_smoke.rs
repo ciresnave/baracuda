@@ -56,25 +56,10 @@ fn run_ozaki_once() -> f64 {
     assert_eq!(plan.backend(), BackendKind::Ozaki { slices: 8 });
 
     let args = GemmArgs::<f64> {
-        a: MatrixRef {
-            data: dev_a.as_slice(),
-            rows: M,
-            cols: K,
-            ld: K as i64,
-        },
-        b: MatrixRef {
-            data: dev_b.as_slice(),
-            rows: K,
-            cols: N,
-            ld: K as i64,
-        },
+        a: MatrixRef::new(dev_a.as_slice(), M, K, K as i64).unwrap(),
+        b: MatrixRef::new(dev_b.as_slice(), K, N, K as i64).unwrap(),
         c: None,
-        d: MatrixMut {
-            data: dev_d.as_slice_mut(),
-            rows: M,
-            cols: N,
-            ld: N as i64,
-        },
+        d: MatrixMut::new(dev_d.as_slice_mut(), M, N, N as i64).unwrap(),
         bias: None,
         alpha: 1.0,
         beta: 0.0,

@@ -147,32 +147,13 @@ fn run_f32_strict(layout: LayoutSku, epilogue: EpilogueKind, m: i32, n: i32, k: 
     assert_eq!(plan.sku().element, ElementKind::F32Strict);
     assert_eq!(plan.sku().layout, layout);
 
-    let bias_arg = epilogue.requires_bias().then(|| VectorRef {
-        data: dev_bias_buf.as_slice(),
-        len: n,
-        stride: 1,
-    });
+    let bias_arg = epilogue.requires_bias().then(|| VectorRef::new(dev_bias_buf.as_slice(), n, 1).unwrap());
 
     let args = GemmArgs::<F32Strict> {
-        a: MatrixRef {
-            data: dev_a_buf.as_slice(),
-            rows: m,
-            cols: k,
-            ld: k as i64,
-        },
-        b: MatrixRef {
-            data: dev_b_buf.as_slice(),
-            rows: k,
-            cols: n,
-            ld: ldb as i64,
-        },
+        a: MatrixRef::new(dev_a_buf.as_slice(), m, k, k as i64).unwrap(),
+        b: MatrixRef::new(dev_b_buf.as_slice(), k, n, ldb as i64).unwrap(),
         c: None,
-        d: MatrixMut {
-            data: dev_d_buf.as_slice_mut(),
-            rows: m,
-            cols: n,
-            ld: n as i64,
-        },
+        d: MatrixMut::new(dev_d_buf.as_slice_mut(), m, n, n as i64).unwrap(),
         bias: bias_arg,
         alpha: 1.0,
         beta: 0.0,

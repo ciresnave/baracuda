@@ -159,26 +159,11 @@ fn run_fp8_e4m3_rcr_identity(m: i32, n: i32, k: i32) {
         .expect("select FP8 E4M3 RCR plan");
 
     let args = Fp8GemmArgs::<Fp8E4M3FN> {
-        a: MatrixRef {
-            data: dev_a,
-            rows: m,
-            cols: k,
-            ld: k as i64,
-        },
+        a: MatrixRef::new(dev_a, m, k, k as i64).unwrap(),
         // RCR: B is col-major [K, N] with column stride = K
-        b: MatrixRef {
-            data: dev_b,
-            rows: k,
-            cols: n,
-            ld: k as i64,
-        },
+        b: MatrixRef::new(dev_b, k, n, k as i64).unwrap(),
         c: None,
-        d: MatrixMut {
-            data: dev_d.as_slice_mut(),
-            rows: m,
-            cols: n,
-            ld: n as i64,
-        },
+        d: MatrixMut::new(dev_d.as_slice_mut(), m, n, n as i64).unwrap(),
         bias: None,
         alpha,
         beta,
