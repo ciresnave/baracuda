@@ -129,7 +129,9 @@ fn run_tf32_rrr(m: i32, n: i32, k: i32, epilogue: EpilogueKind) {
     assert_eq!(plan.sku().layout, LayoutSku::Rrr);
     assert_eq!(plan.sku().epilogue, epilogue);
 
-    let bias_arg = epilogue.requires_bias().then(|| VectorRef::new(dev_bias.as_slice(), n, 1).unwrap());
+    let bias_arg = epilogue
+        .requires_bias()
+        .then(|| VectorRef::new(dev_bias.as_slice(), n, 1).unwrap());
 
     let args = GemmArgs::<f32> {
         a: MatrixRef::new(dev_a.as_slice(), m, k, k as i64).unwrap(),

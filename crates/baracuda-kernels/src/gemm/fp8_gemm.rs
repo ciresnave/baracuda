@@ -213,7 +213,14 @@ impl<T: FpElement> Fp8GemmPlan<T> {
             LayoutSku::Rrr => (k, n),
         };
         crate::view_check::check_matrix(m, k, args.a.ld(), eb, args.a.data().len(), eb)?;
-        crate::view_check::check_matrix(b_major, b_minor, args.b.ld(), eb, args.b.data().len(), eb)?;
+        crate::view_check::check_matrix(
+            b_major,
+            b_minor,
+            args.b.ld(),
+            eb,
+            args.b.data().len(),
+            eb,
+        )?;
         if let Some(c) = &args.c {
             crate::view_check::check_matrix(m, n, c.ld(), eb, c.data().len(), eb)?;
         }

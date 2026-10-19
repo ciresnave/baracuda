@@ -56,12 +56,7 @@ pub struct MatrixRef<'a, T: DeviceRepr + Copy + 'static> {
 impl<'a, T: DeviceRepr + Copy + 'static> MatrixRef<'a, T> {
     /// Build a view, checking the dimensions and the slice length (see the
     /// type docs for what is, and is not, checked here).
-    pub fn new(
-        data: DeviceSlice<'a, T>,
-        rows: i32,
-        cols: i32,
-        ld: i64,
-    ) -> Result<Self, ViewError> {
+    pub fn new(data: DeviceSlice<'a, T>, rows: i32, cols: i32, ld: i64) -> Result<Self, ViewError> {
         matrix_floor::<T>(rows, cols, ld, data.len())?;
         Ok(Self {
             data,

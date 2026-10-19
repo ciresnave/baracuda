@@ -141,7 +141,9 @@ fn run_f64(layout: LayoutSku, epilogue: EpilogueKind, m: i32, n: i32, k: i32) {
     assert_eq!(plan.sku().element, ElementKind::F64);
     assert_eq!(plan.sku().layout, layout);
 
-    let bias_arg = epilogue.requires_bias().then(|| VectorRef::new(dev_bias.as_slice(), n, 1).unwrap());
+    let bias_arg = epilogue
+        .requires_bias()
+        .then(|| VectorRef::new(dev_bias.as_slice(), n, 1).unwrap());
 
     let args = GemmArgs::<f64> {
         a: MatrixRef::new(dev_a.as_slice(), m, k, k as i64).unwrap(),

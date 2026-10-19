@@ -232,7 +232,9 @@ fn run_s8_smoke<BT: BiasElement + Copy + Default>(
         b: MatrixRef::new(dev_b, k, n, k as i64).unwrap(),
         c: None,
         d: MatrixMut::new(dev_d.as_slice_mut(), m, n, n as i64).unwrap(),
-        bias: dev_bias_opt.as_ref().map(|buf| VectorRef::new(buf.as_slice(), n, 1).unwrap()),
+        bias: dev_bias_opt
+            .as_ref()
+            .map(|buf| VectorRef::new(buf.as_slice(), n, 1).unwrap()),
         alpha,
         beta,
     };
@@ -364,7 +366,9 @@ fn run_u8_smoke<BT: BiasElement + Copy + Default>(
         b: MatrixRef::new(dev_b, k, n, k as i64).unwrap(),
         c: None,
         d: MatrixMut::new(dev_d.as_slice_mut(), m, n, n as i64).unwrap(),
-        bias: dev_bias_opt.as_ref().map(|buf| VectorRef::new(buf.as_slice(), n, 1).unwrap()),
+        bias: dev_bias_opt
+            .as_ref()
+            .map(|buf| VectorRef::new(buf.as_slice(), n, 1).unwrap()),
         alpha,
         beta,
     };
