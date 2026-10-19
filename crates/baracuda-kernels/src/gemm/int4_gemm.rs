@@ -285,10 +285,8 @@ impl<T: IntElement, BT: BiasElement> Int4GemmPlan<T, BT> {
             }
             _ => {}
         }
-        if let Some(b) = &args.bias
-            && b.len != self.desc.n
-        {
-            return Err(Error::InvalidProblem("bias length must equal N"));
+        if let Some(b) = &args.bias {
+            crate::view_check::check_vector(b, self.desc.n)?;
         }
         let (m, n, k) = (self.desc.m as i64, self.desc.n as i64, self.desc.k as i64);
         let eb = core::mem::size_of::<T>();

@@ -17,6 +17,8 @@
 use baracuda_driver::{DeviceSlice, DeviceSliceMut};
 use baracuda_types::DeviceRepr;
 
+use crate::{Bin, S4, U4};
+
 /// Read-only view of a device-resident rank-`N` tensor.
 ///
 /// `shape[i]` is the extent along axis `i`. `stride[i]` is the **element**
@@ -76,7 +78,7 @@ impl<'a, T: DeviceRepr + Copy + 'static, const N: usize> TensorRef<'a, T, N> {
         shape: [i32; N],
         stride: [i64; N],
     ) -> Result<Self, ViewError> {
-        match required_len(&shape, &stride) {
+        match required_len(&shape, &stride).map(|n| n.div_ceil(elements_per_slot::<T>())) {
             None => Err(ViewError::NotAddressable),
             Some(needed) if needed > data.len() => Err(ViewError::TooSmall {
                 needed,
@@ -194,7 +196,7 @@ impl<'a, T: DeviceRepr + Copy + 'static, const N: usize> TensorMut<'a, T, N> {
         shape: [i32; N],
         stride: [i64; N],
     ) -> Result<Self, ViewError> {
-        match required_len(&shape, &stride) {
+        match required_len(&shape, &stride).map(|n| n.div_ceil(elements_per_slot::<T>())) {
             None => Err(ViewError::NotAddressable),
             Some(needed) if needed > data.len() => Err(ViewError::TooSmall {
                 needed,
@@ -290,6 +292,22 @@ impl<'a, T: DeviceRepr + Copy + 'static, const N: usize> TensorMut<'a, T, N> {
             expected = expected.saturating_mul(self.shape[i] as i64);
         }
         true
+    }
+}
+
+/// Logical elements stored per slot of a `DeviceSlice<T>`: `S4` / `U4` pack two
+/// nibbles into a slot and `Bin` packs eight bits; every other type is one.
+/// Views over packed types count `shape` / `stride` in logical elements, so the
+/// slice has to hold `ceil(required_len / elements_per_slot)` slots.
+#[must_use]
+pub fn elements_per_slot<T: 'static>() -> usize {
+    let id = core::any::TypeId::of::<T>();
+    if id == core::any::TypeId::of::<S4>() || id == core::any::TypeId::of::<U4>() {
+        2
+    } else if id == core::any::TypeId::of::<Bin>() {
+        8
+    } else {
+        1
     }
 }
 

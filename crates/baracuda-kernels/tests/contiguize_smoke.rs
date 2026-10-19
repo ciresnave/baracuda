@@ -218,7 +218,10 @@ fn contiguize_negative_stride_rank2_f32() {
     let plan = ContiguizePlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = ContiguizeArgs::<f32, 2> {
-        source: TensorRef::new(dev_phys.as_slice(), shape, view_strides).unwrap(),
+        // SAFETY: the negative strides are legal only with the descriptor's
+        // `source_offset` (9): the lowest element reached is 9 - 3*3 = 0 and the
+        // highest 9 + 2 = 11, both inside the 12-element slice.
+        source: unsafe { TensorRef::new_unchecked(dev_phys.as_slice(), shape, view_strides) },
         dest: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");

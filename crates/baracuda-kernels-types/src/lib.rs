@@ -53,4 +53,7 @@ pub use unpopped_vocab::*;
 pub use matrix::{MatrixMut, MatrixRef, VectorRef};
 pub use operand_desc_ext::OperandDescExt;
 pub use plan::Workspace;
-pub use tensor::{TensorMut, TensorRef, ViewError, contiguous_stride, required_len, strides_equal};
+pub use tensor::{
+    TensorMut, TensorRef, ViewError, contiguous_stride, elements_per_slot, required_len,
+    strides_equal,
+};

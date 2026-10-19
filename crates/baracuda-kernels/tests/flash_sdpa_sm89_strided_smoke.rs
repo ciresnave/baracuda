@@ -576,7 +576,9 @@ fn flash_sdpa_sm89_strided_rejects_non_unit_head_dim_stride() {
     let (ctx, stream) = setup();
     let scale = default_scale();
     let n = (B * H * Q * DK) as usize;
-    let host = vec![f16::ZERO; n];
+    // 2x: the bad stride below reaches twice the contiguous extent, and the view
+    // constructor refuses a view that reaches past its slice.
+    let host = vec![f16::ZERO; 2 * n];
     let dq = DeviceBuffer::from_slice(&ctx, &host).expect("up q");
     let dk_n = (B * H * K * DK) as usize;
     let dv_n = (B * H * K * DV) as usize;

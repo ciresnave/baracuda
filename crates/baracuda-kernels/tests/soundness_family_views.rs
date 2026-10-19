@@ -22,7 +22,7 @@ use baracuda_kernels::{
     RMSNormPlan, ReduceArgs, ReduceDescriptor, ReduceKind, ReducePlan, S8, ScanArgs,
     ScanDescriptor, ScanKind, ScanPlan, SegmentSumArgs, SegmentSumDescriptor, SegmentSumPlan,
     SoftmaxArgs, SoftmaxDescriptor, SoftmaxKind, SoftmaxPlan, SortArgs, SortDescriptor, SortPlan,
-    TensorMut, TensorRef, UnaryArgs, UnaryDescriptor, UnaryKind, UnaryPlan, Workspace,
+    TensorMut, TensorRef, UnaryArgs, UnaryDescriptor, UnaryKind, UnaryPlan, VectorRef, Workspace,
     contiguous_stride,
 };
 
@@ -304,6 +304,63 @@ fn gemm_rejects_view_longer_than_its_slice() {
     assert!(
         res.is_err(),
         "Fp8GemmPlan::run accepted an A operand shorter than its footprint"
+    );
+}
+
+/// FP8 GEMM bias: `len` says N but the slice holds half of it, so the epilogue
+/// would read past the vector. A, B and D are valid, so only the bias can be
+/// what is rejected.
+#[test]
+fn gemm_bias_vector_shorter_than_n_is_rejected() {
+    let (ctx, stream) = setup();
+    let (m, n, k) = (128i32, 128i32, 128i32);
+    let a = DeviceBuffer::from_slice(&ctx, &vec![0u8; (m * k) as usize]).unwrap();
+    let b = DeviceBuffer::from_slice(&ctx, &vec![0u8; (k * n) as usize]).unwrap();
+    let bias = zeros_f32(&ctx, n as usize / 2);
+    let mut d: DeviceBuffer<Fp8E4M3FN> = DeviceBuffer::zeros(&ctx, (m * n) as usize).unwrap();
+    let desc = Fp8GemmDescriptor {
+        m,
+        n,
+        k,
+        layout: LayoutSku::Rcr,
+        epilogue: EpilogueKind::Bias,
+    };
+    let plan = Fp8GemmPlan::<Fp8E4M3FN>::select(&stream, &desc, PlanPreference::default()).unwrap();
+    let res = plan.run(
+        &stream,
+        Workspace::None,
+        Fp8GemmArgs::<Fp8E4M3FN> {
+            a: MatrixRef {
+                data: a.view_as::<Fp8E4M3FN>(),
+                rows: m,
+                cols: k,
+                ld: k as i64,
+            },
+            b: MatrixRef {
+                data: b.view_as::<Fp8E4M3FN>(),
+                rows: k,
+                cols: n,
+                ld: k as i64,
+            },
+            c: None,
+            d: MatrixMut {
+                data: d.as_slice_mut(),
+                rows: m,
+                cols: n,
+                ld: n as i64,
+            },
+            bias: Some(VectorRef {
+                data: bias.as_slice(),
+                len: n,
+                stride: 1,
+            }),
+            alpha: 1.0,
+            beta: 0.0,
+        },
+    );
+    assert!(
+        res.is_err(),
+        "Fp8GemmPlan::run accepted a bias vector shorter than N"
     );
 }
 
