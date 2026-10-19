@@ -20,7 +20,7 @@ Exit 1 if any (crate, feature) fails to compile.
 """
 import json
 import os
-import subprocess
+import subprocess  # nosec B404 - fixed argv lists to `cargo`, never a shell, never user input
 import sys
 import time
 
@@ -30,28 +30,59 @@ NEEDS_TOOLKIT: dict[tuple[str, str], str] = {}
 
 
 def workspace_features():
+    """All (crate, feature) pairs of the workspace, from `cargo metadata`."""
     meta = json.loads(
-        subprocess.check_output(["cargo", "metadata", "--format-version", "1", "--no-deps", "--locked"], text=True)
+        subprocess.check_output(  # nosec B603 B607 - fixed argv, `cargo` from PATH on purpose
+            ["cargo", "metadata", "--format-version", "1", "--no-deps", "--locked"], text=True
+        )
     )
-    ws = set(meta["workspace_members"])
-    out = []
-    for p in sorted(meta["packages"], key=lambda p: p["name"]):
-        if p["id"] not in ws:
-            continue
-        for f in sorted(p["features"]):
-            if f != "default":
-                out.append((p["name"], f))
-    return out
+    members = set(meta["workspace_members"])
+    pairs = []
+    for pkg in sorted(meta["packages"], key=lambda p: p["name"]):
+        if pkg["id"] in members:
+            pairs.extend((pkg["name"], f) for f in sorted(pkg["features"]) if f != "default")
+    return pairs
+
+
+def option_values(argv, flag):
+    """Every value that follows `flag` in argv."""
+    return [argv[i + 1] for i, a in enumerate(argv[:-1]) if a == flag]
+
+
+def select_pairs(argv):
+    """Apply --crate filters and the --shard K/N partition."""
+    only = option_values(argv, "--crate")
+    pairs = [(c, f) for c, f in workspace_features() if not only or c in only]
+    for spec in option_values(argv, "--shard"):
+        k, n = (int(x) for x in spec.split("/"))
+        if not 1 <= k <= n:
+            raise SystemExit("--shard K/N needs 1 <= K <= N")
+        pairs = pairs[k - 1 :: n]
+    return pairs
+
+
+def check_pair(crate, feature, env, targets):
+    """Run one `cargo check`; return (ok, first error lines)."""
+    cmd = ["cargo", "check", "--locked", "-p", crate, "--features", feature, "--message-format", "short", *targets]
+    r = subprocess.run(cmd, env=env, capture_output=True, text=True, check=False)  # nosec B603 B607
+    errors = [line for line in r.stderr.splitlines() if "error" in line][:8]
+    return r.returncode == 0, errors
+
+
+def report(checked, failed, skipped, started):
+    """Print the summary; the exit status is derived from `failed`."""
+    print(
+        f"\nchecked {checked} (crate, feature) pairs in {time.time() - started:.0f}s; "
+        f"{len(failed)} failed; {len(skipped)} declared toolkit-only"
+    )
+    for c, f, why in skipped:
+        print(f"  NOT BUILT {c} --features {f}: {why}")
+    for c, f in failed:
+        print(f"  FAILED    {c} --features {f}")
 
 
 def main(argv):
-    only = [argv[i + 1] for i, a in enumerate(argv) if a == "--crate"]
-    pairs = [(c, f) for c, f in workspace_features() if not only or c in only]
-    for i, a in enumerate(argv):
-        if a == "--shard":
-            k, n = (int(x) for x in argv[i + 1].split("/"))
-            assert 1 <= k <= n, "--shard K/N needs 1 <= K <= N"
-            pairs = pairs[k - 1 :: n]
+    pairs = select_pairs(argv)
     if "--list" in argv:
         for c, f in pairs:
             print(f"{c} {f}")
@@ -59,26 +90,18 @@ def main(argv):
     env = dict(os.environ, DOCS_RS="1")
     targets = [] if "--lib-only" in argv else ["--all-targets"]
     failed, skipped = [], []
-    t0 = time.time()
+    started = time.time()
     for i, (c, f) in enumerate(pairs, 1):
         if (c, f) in NEEDS_TOOLKIT:
             skipped.append((c, f, NEEDS_TOOLKIT[(c, f)]))
             continue
-        cmd = ["cargo", "check", "--locked", "-p", c, "--features", f, "--message-format", "short", *targets]
-        r = subprocess.run(cmd, env=env, capture_output=True, text=True)
-        status = "ok" if r.returncode == 0 else "FAIL"
-        print(f"[{i}/{len(pairs)}] {status:4} {c} --features {f}", flush=True)
-        if r.returncode != 0:
+        ok, errors = check_pair(c, f, env, targets)
+        print(f"[{i}/{len(pairs)}] {'ok' if ok else 'FAIL':4} {c} --features {f}", flush=True)
+        if not ok:
             failed.append((c, f))
-            errs = [l for l in r.stderr.splitlines() if "error" in l][:8]
-            for l in errs:
-                print("      " + l, flush=True)
-    print(f"\nchecked {len(pairs) - len(skipped)} (crate, feature) pairs in {time.time() - t0:.0f}s; "
-          f"{len(failed)} failed; {len(skipped)} declared toolkit-only")
-    for c, f, why in skipped:
-        print(f"  NOT BUILT {c} --features {f}: {why}")
-    for c, f in failed:
-        print(f"  FAILED    {c} --features {f}")
+            for line in errors:
+                print("      " + line, flush=True)
+    report(len(pairs) - len(skipped), failed, skipped, started)
     return 1 if failed else 0
 
 
