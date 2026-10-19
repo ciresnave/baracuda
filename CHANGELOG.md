@@ -16,6 +16,14 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.138 - 2026-10-19 (BREAKING: TensorRef/TensorMut fields are private; validated constructors; bias vector bounds)
+
+Workspace alpha.138 (proposed; PM allocates at gate).
+
+- **BREAKING (API):** `TensorRef` / `TensorMut` (baracuda-kernels-types) no longer have public fields. Build a view with `TensorRef::new(data, shape, stride)` / `::contiguous(data, shape)` (same for `TensorMut`), which return `Err(ViewError)` when the shape/stride pair reaches outside the slice (packed S4/U4/Bin counted in slots via the new `elements_per_slot::<T>()`); read them back with `.data()` / `.shape()` / `.stride()` (`TensorMut` also `.data_mut()`). `unsafe TensorRef::new_unchecked` / `TensorMut::new_unchecked` remain for offset views (ContiguizePlan's `source_offset`). A struct literal no longer compiles (`compile_fail,E0451` doctest), so a safe API can no longer hold an out-of-bounds view. Closes the follow-up to alpha.135. Migration: `TensorRef { data, shape, stride }` -> `TensorRef::new(data, shape, stride)?`; `v.shape` -> `v.shape()`. `baracuda-kernels` re-exports `ViewError`.
+- Mechanical migration with the scripts in `tools/soundness/` (`privatize_views.py`: 5927 literals in 490 files, 3 more by hand; `fix_reads.py` + `loop_reads.py`: ~2900 field reads fixed from rustc E0616 spans). Fuel is unaffected (it pins baracuda-kernels-types alpha.116 and uses none of these types).
+- Also fixed: the fp8 / int4 / bespoke-int GEMM bias `VectorRef` only had its `len` compared with N, never its slice (the epilogue could read past it); now `check_vector`. ViewError's Display text no longer contains a run of spaces.
+
 ## 0.0.1-alpha.137 - 2026-10-18 (types-derive: real compile_fail doctests; drop unused trybuild)
 
 Workspace alpha.137 (proposed; PM allocates at gate).
