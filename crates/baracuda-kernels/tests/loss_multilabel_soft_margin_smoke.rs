@@ -62,21 +62,9 @@ fn loss_multilabel_soft_margin_f32_mean() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         MultilabelSoftMarginLossArgs {
-            input: TensorRef {
-                data: dev_in.as_slice(),
-                shape: [n as i32, c as i32],
-                stride: [c as i64, 1],
-            },
-            target: TensorRef {
-                data: dev_t.as_slice(),
-                shape: [n as i32, c as i32],
-                stride: [c as i64, 1],
-            },
-            out: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: [1, 1],
-                stride: [1, 1],
-            },
+            input: TensorRef::new(dev_in.as_slice(), [n as i32, c as i32], [c as i64, 1]).unwrap(),
+            target: TensorRef::new(dev_t.as_slice(), [n as i32, c as i32], [c as i64, 1]).unwrap(),
+            out: TensorMut::new(dev_y.as_slice_mut(), [1, 1], [1, 1]).unwrap(),
         },
     )
     .unwrap();
@@ -112,21 +100,9 @@ fn loss_multilabel_soft_margin_f64_mean() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         MultilabelSoftMarginLossArgs {
-            input: TensorRef {
-                data: dev_in.as_slice(),
-                shape: [n as i32, c as i32],
-                stride: [c as i64, 1],
-            },
-            target: TensorRef {
-                data: dev_t.as_slice(),
-                shape: [n as i32, c as i32],
-                stride: [c as i64, 1],
-            },
-            out: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: [1, 1],
-                stride: [1, 1],
-            },
+            input: TensorRef::new(dev_in.as_slice(), [n as i32, c as i32], [c as i64, 1]).unwrap(),
+            target: TensorRef::new(dev_t.as_slice(), [n as i32, c as i32], [c as i64, 1]).unwrap(),
+            out: TensorMut::new(dev_y.as_slice_mut(), [1, 1], [1, 1]).unwrap(),
         },
     )
     .unwrap();
@@ -166,21 +142,9 @@ fn loss_multilabel_soft_margin_f16_mean() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         MultilabelSoftMarginLossArgs {
-            input: TensorRef {
-                data: dev_in.as_slice(),
-                shape: [n as i32, c as i32],
-                stride: [c as i64, 1],
-            },
-            target: TensorRef {
-                data: dev_t.as_slice(),
-                shape: [n as i32, c as i32],
-                stride: [c as i64, 1],
-            },
-            out: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: [1, 1],
-                stride: [1, 1],
-            },
+            input: TensorRef::new(dev_in.as_slice(), [n as i32, c as i32], [c as i64, 1]).unwrap(),
+            target: TensorRef::new(dev_t.as_slice(), [n as i32, c as i32], [c as i64, 1]).unwrap(),
+            out: TensorMut::new(dev_y.as_slice_mut(), [1, 1], [1, 1]).unwrap(),
         },
     )
     .unwrap();
@@ -227,21 +191,9 @@ fn loss_multilabel_soft_margin_bf16_mean() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         MultilabelSoftMarginLossArgs {
-            input: TensorRef {
-                data: dev_in.as_slice(),
-                shape: [n as i32, c as i32],
-                stride: [c as i64, 1],
-            },
-            target: TensorRef {
-                data: dev_t.as_slice(),
-                shape: [n as i32, c as i32],
-                stride: [c as i64, 1],
-            },
-            out: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: [1, 1],
-                stride: [1, 1],
-            },
+            input: TensorRef::new(dev_in.as_slice(), [n as i32, c as i32], [c as i64, 1]).unwrap(),
+            target: TensorRef::new(dev_t.as_slice(), [n as i32, c as i32], [c as i64, 1]).unwrap(),
+            out: TensorMut::new(dev_y.as_slice_mut(), [1, 1], [1, 1]).unwrap(),
         },
     )
     .unwrap();

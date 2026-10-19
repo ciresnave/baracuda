@@ -133,16 +133,16 @@ impl<T: Element> AffinePlan<T> {
                 "baracuda-kernels::AffinePlan: output numel mismatch with descriptor",
             ));
         }
-        if (args.input.data.len() as i64) < expected {
+        if (args.input.data().len() as i64) < expected {
             return Err(Error::BufferTooSmall {
                 needed: expected as usize,
-                got: args.input.data.len(),
+                got: args.input.data().len(),
             });
         }
-        if (args.output.data.len() as i64) < expected {
+        if (args.output.data().len() as i64) < expected {
             return Err(Error::BufferTooSmall {
                 needed: expected as usize,
-                got: args.output.data.len(),
+                got: args.output.data().len(),
             });
         }
         Ok(())
@@ -184,13 +184,13 @@ impl<T: Element> AffinePlan<T> {
         if numel == 0 {
             return Ok(());
         }
-        let x_ptr = args.input.data.as_raw().0 as *const c_void;
-        let y_ptr = args.output.data.as_raw().0 as *mut c_void;
+        let x_ptr = args.input.data().as_raw().0 as *const c_void;
+        let y_ptr = args.output.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
         // Contig fast path: rank-1, input.stride == [1], output.stride == [1].
-        let contig = is_canonical_contig(&args.input.shape, &args.input.stride)
-            && is_canonical_contig(&args.output.shape, &args.output.stride);
+        let contig = is_canonical_contig(&args.input.shape(), &args.input.stride())
+            && is_canonical_contig(&args.output.shape(), &args.output.stride());
 
         // SAFETY: each match arm only fires when `T::KIND` equals the
         // matched ElementKind. The `transmute_copy` of `desc.a` /
@@ -294,9 +294,9 @@ impl<T: Element> AffinePlan<T> {
             } else {
                 // Strided slow path. Pass `shape` (logical, equal on
                 // both sides) plus signed-i64 strides for x and y.
-                let shape_ptr = args.input.shape.as_ptr();
-                let stride_x_ptr = args.input.stride.as_ptr();
-                let stride_y_ptr = args.output.stride.as_ptr();
+                let shape_ptr = args.input.shape().as_ptr();
+                let stride_x_ptr = args.input.stride().as_ptr();
+                let stride_y_ptr = args.output.stride().as_ptr();
                 let rank: i32 = 1;
                 match T::KIND {
                     ElementKind::F32 => {

@@ -200,8 +200,8 @@ impl<T: Element> Im2ColPlan<T> {
         crate::view_check::check_dense(&args.input)?;
         crate::view_check::check_dense(&args.output)?;
         self.check_args(&args)?;
-        let input_ptr = args.input.data.as_raw().0 as *const c_void;
-        let output_ptr = args.output.data.as_raw().0 as *mut c_void;
+        let input_ptr = args.input.data().as_raw().0 as *const c_void;
+        let output_ptr = args.output.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw() as *mut c_void;
         let d = &self.desc;
         let status = match T::KIND {
@@ -308,12 +308,12 @@ impl<T: Element> Im2ColPlan<T> {
         let col_rows = self.desc.channels * self.desc.kh * self.desc.kw;
         let spatial = self.h_out * self.w_out;
         let out_shape = [self.desc.batch, col_rows, spatial];
-        if args.input.shape != in_shape {
+        if args.input.shape() != in_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::Im2ColPlan: input shape != [N, C, H_in, W_in]",
             ));
         }
-        if args.output.shape != out_shape {
+        if args.output.shape() != out_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::Im2ColPlan: output shape != [N, C·kh·kw, h_out·w_out]",
             ));

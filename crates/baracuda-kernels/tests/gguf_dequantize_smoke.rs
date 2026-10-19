@@ -62,16 +62,18 @@ fn gguf_dequantize_q4_0_all_high_nibbles() {
     let plan =
         GgufDequantizePlan::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = GgufDequantizeArgs {
-        input: TensorRef {
-            data: dev_packed.as_slice(),
-            shape: [bytes_len],
-            stride: contiguous_stride([bytes_len]),
-        },
-        output: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: [numel as i32],
-            stride: contiguous_stride([numel as i32]),
-        },
+        input: TensorRef::new(
+            dev_packed.as_slice(),
+            [bytes_len],
+            contiguous_stride([bytes_len]),
+        )
+        .unwrap(),
+        output: TensorMut::new(
+            dev_out.as_slice_mut(),
+            [numel as i32],
+            contiguous_stride([numel as i32]),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -125,16 +127,18 @@ fn gguf_dequantize_q8_0_known_values() {
     let plan =
         GgufDequantizePlan::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = GgufDequantizeArgs {
-        input: TensorRef {
-            data: dev_packed.as_slice(),
-            shape: [bytes_len],
-            stride: contiguous_stride([bytes_len]),
-        },
-        output: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: [numel as i32],
-            stride: contiguous_stride([numel as i32]),
-        },
+        input: TensorRef::new(
+            dev_packed.as_slice(),
+            [bytes_len],
+            contiguous_stride([bytes_len]),
+        )
+        .unwrap(),
+        output: TensorMut::new(
+            dev_out.as_slice_mut(),
+            [numel as i32],
+            contiguous_stride([numel as i32]),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

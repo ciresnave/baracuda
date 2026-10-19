@@ -162,19 +162,19 @@ impl<T: Element, const N: usize> GatedActivationBackwardPlan<T, N> {
         crate::view_check::check_fits(&args.x)?;
         crate::view_check::check_fits(&args.dx)?;
         let output_shape = self.desc.output_shape();
-        if args.dy.shape != output_shape {
+        if args.dy.shape() != output_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::GatedActivationBackwardPlan: dy shape mismatch with \
                  desc.output_shape()",
             ));
         }
-        if args.x.shape != self.desc.input_shape {
+        if args.x.shape() != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::GatedActivationBackwardPlan: x shape mismatch with \
                  desc.input_shape",
             ));
         }
-        if args.dx.shape != self.desc.input_shape {
+        if args.dx.shape() != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::GatedActivationBackwardPlan: dx shape mismatch with \
                  desc.input_shape",
@@ -186,9 +186,9 @@ impl<T: Element, const N: usize> GatedActivationBackwardPlan<T, N> {
                  dy / x / dx; strided fanout lands later",
             ));
         }
-        let dy_len = args.dy.data.len() as i64;
-        let x_len = args.x.data.len() as i64;
-        let dx_len = args.dx.data.len() as i64;
+        let dy_len = args.dy.data().len() as i64;
+        let x_len = args.x.data().len() as i64;
+        let dx_len = args.dx.data().len() as i64;
         let output_numel = args.dy.numel();
         let input_numel = args.x.numel();
         if dy_len < output_numel {
@@ -243,17 +243,17 @@ impl<T: Element, const N: usize> GatedActivationBackwardPlan<T, N> {
         // element offset between an a-half cell and its b-half twin.
         let sd = self.desc.split_dim as usize;
         let half = self.desc.input_shape[sd] as i64 / 2;
-        let x_half_offset = half * args.x.stride[sd];
-        let dx_half_offset = half * args.dx.stride[sd];
+        let x_half_offset = half * args.x.stride()[sd];
+        let dx_half_offset = half * args.dx.stride()[sd];
 
         let stream_ptr = stream.as_raw();
-        let x_ptr = args.x.data.as_raw().0 as *const c_void;
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
+        let x_ptr = args.x.data().as_raw().0 as *const c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let dx_ptr = args.dx.data().as_raw().0 as *mut c_void;
 
-        let stride_x = args.x.stride;
-        let stride_dy = args.dy.stride;
-        let stride_dx = args.dx.stride;
+        let stride_x = args.x.stride();
+        let stride_dy = args.dy.stride();
+        let stride_dx = args.dx.stride();
         let rank = N as i32;
         let split_dim = self.desc.split_dim as i32;
 

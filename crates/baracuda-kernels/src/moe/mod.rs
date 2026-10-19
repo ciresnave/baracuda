@@ -322,18 +322,18 @@ impl MoePlan {
         T: baracuda_types::DeviceRepr + Copy + 'static,
     {
         let stream_ptr = stream.as_raw();
-        let acts_ptr = args.activations.data.as_raw().0 as *const c_void;
-        let weights_ptr = args.expert_matrices.data.as_raw().0 as *const c_void;
-        let sorted_token_ids_ptr = args.sorted_token_ids.data.as_raw().0 as *const i32;
-        let flat_expert_ids_ptr = args.flat_expert_ids.data.as_raw().0 as *const i32;
+        let acts_ptr = args.activations.data().as_raw().0 as *const c_void;
+        let weights_ptr = args.expert_matrices.data().as_raw().0 as *const c_void;
+        let sorted_token_ids_ptr = args.sorted_token_ids.data().as_raw().0 as *const i32;
+        let flat_expert_ids_ptr = args.flat_expert_ids.data().as_raw().0 as *const i32;
         let topk_weights_ptr = args
             .topk_weight_flat
             .as_ref()
-            .map(|tw| tw.data.as_raw().0 as *const f32)
+            .map(|tw| tw.data().as_raw().0 as *const f32)
             .unwrap_or(core::ptr::null());
-        let out_ptr = args.output.data.as_raw().0 as *mut c_void;
+        let out_ptr = args.output.data().as_raw().0 as *mut c_void;
 
-        let num_tokens_flat = args.sorted_token_ids.shape[0];
+        let num_tokens_flat = args.sorted_token_ids.shape()[0];
 
         let status = match self.desc.variant {
             MoeVariant::ScalarGguf => {
@@ -372,8 +372,8 @@ impl MoePlan {
                     .ok_or(Error::InvalidProblem(
                         "MoePlan::run: Wmma variant requires expert_offsets_scratch",
                     ))?;
-                let ec_ptr = ec.data.as_raw().0 as *mut i32;
-                let eo_ptr = eo.data.as_raw().0 as *mut i32;
+                let ec_ptr = ec.data().as_raw().0 as *mut i32;
+                let eo_ptr = eo.data().as_raw().0 as *mut i32;
                 let is_prefill = if self.desc.is_prefill { 1 } else { 0 };
                 match self.desc.element {
                     ElementKind::F16 => unsafe {
@@ -436,8 +436,8 @@ impl MoePlan {
                     .ok_or(Error::InvalidProblem(
                         "MoePlan::run: WmmaGguf variant requires expert_offsets_scratch",
                     ))?;
-                let ec_ptr = ec.data.as_raw().0 as *mut i32;
-                let eo_ptr = eo.data.as_raw().0 as *mut i32;
+                let ec_ptr = ec.data().as_raw().0 as *mut i32;
+                let eo_ptr = eo.data().as_raw().0 as *mut i32;
                 match self.desc.element {
                     ElementKind::F16 => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_moe_wmma_gguf_f16_run(

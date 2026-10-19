@@ -66,31 +66,11 @@ fn quantize_per_token_backward_f32_ste() {
         QuantizePerTokenBackwardPlan::<f32>::select(&stream, &desc, PlanPreference::default())
             .expect("select");
     let args = QuantizePerTokenBackwardArgs::<f32> {
-        d_output: TensorRef {
-            data: dev_dy.as_slice(),
-            shape: [n, d],
-            stride: contiguous_stride([n, d]),
-        },
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape: [n, d],
-            stride: contiguous_stride([n, d]),
-        },
-        scale: TensorRef {
-            data: dev_scale.as_slice(),
-            shape: [n],
-            stride: contiguous_stride([n]),
-        },
-        zero_point: TensorRef {
-            data: dev_zp.as_slice(),
-            shape: [n],
-            stride: contiguous_stride([n]),
-        },
-        d_input: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape: [n, d],
-            stride: contiguous_stride([n, d]),
-        },
+        d_output: TensorRef::new(dev_dy.as_slice(), [n, d], contiguous_stride([n, d])).unwrap(),
+        input: TensorRef::new(dev_x.as_slice(), [n, d], contiguous_stride([n, d])).unwrap(),
+        scale: TensorRef::new(dev_scale.as_slice(), [n], contiguous_stride([n])).unwrap(),
+        zero_point: TensorRef::new(dev_zp.as_slice(), [n], contiguous_stride([n])).unwrap(),
+        d_input: TensorMut::new(dev_dx.as_slice_mut(), [n, d], contiguous_stride([n, d])).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

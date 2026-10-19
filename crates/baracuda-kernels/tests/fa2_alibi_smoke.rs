@@ -104,37 +104,13 @@ fn fa2_alibi_per_head_broadcast() {
         &stream,
         Workspace::Borrowed(ws_buf.as_slice_mut()),
         FlashSdpaArgs {
-            q: TensorRef {
-                data: dq.as_slice(),
-                shape: sq,
-                stride: contiguous_stride(sq),
-            },
-            k: TensorRef {
-                data: dk.as_slice(),
-                shape: sk,
-                stride: contiguous_stride(sk),
-            },
-            v: TensorRef {
-                data: dv.as_slice(),
-                shape: sv,
-                stride: contiguous_stride(sv),
-            },
-            y: TensorMut {
-                data: dy.as_slice_mut(),
-                shape: sy,
-                stride: contiguous_stride(sy),
-            },
-            lse: TensorMut {
-                data: dlse.as_slice_mut(),
-                shape: sl,
-                stride: contiguous_stride(sl),
-            },
+            q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+            k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+            v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
+            y: TensorMut::new(dy.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
+            lse: TensorMut::new(dlse.as_slice_mut(), sl, contiguous_stride(sl)).unwrap(),
             mask: None,
-            alibi_slopes: Some(TensorRef {
-                data: dslopes.as_slice(),
-                shape: s_slopes,
-                stride: alibi_stride,
-            }),
+            alibi_slopes: Some(TensorRef::new(dslopes.as_slice(), s_slopes, alibi_stride).unwrap()),
         },
     )
     .expect("alibi per-head run");
@@ -200,37 +176,15 @@ fn fa2_alibi_per_batch_per_head() {
         &stream,
         Workspace::Borrowed(ws_buf.as_slice_mut()),
         FlashSdpaArgs {
-            q: TensorRef {
-                data: dq.as_slice(),
-                shape: sq,
-                stride: contiguous_stride(sq),
-            },
-            k: TensorRef {
-                data: dk.as_slice(),
-                shape: sk,
-                stride: contiguous_stride(sk),
-            },
-            v: TensorRef {
-                data: dv.as_slice(),
-                shape: sv,
-                stride: contiguous_stride(sv),
-            },
-            y: TensorMut {
-                data: dy.as_slice_mut(),
-                shape: sy,
-                stride: contiguous_stride(sy),
-            },
-            lse: TensorMut {
-                data: dlse.as_slice_mut(),
-                shape: sl,
-                stride: contiguous_stride(sl),
-            },
+            q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+            k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+            v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
+            y: TensorMut::new(dy.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
+            lse: TensorMut::new(dlse.as_slice_mut(), sl, contiguous_stride(sl)).unwrap(),
             mask: None,
-            alibi_slopes: Some(TensorRef {
-                data: dslopes.as_slice(),
-                shape: s_slopes,
-                stride: contiguous_stride(s_slopes),
-            }),
+            alibi_slopes: Some(
+                TensorRef::new(dslopes.as_slice(), s_slopes, contiguous_stride(s_slopes)).unwrap(),
+            ),
         },
     )
     .expect("alibi per-batch run (causal)");
@@ -285,37 +239,13 @@ fn fa2_alibi_rejected_on_bespoke() {
     let plan = FlashSdpaPlan::<f16>::select(&stream, &desc, pref).expect("sel bespoke");
     assert_eq!(plan.backend(), BackendKind::Bespoke);
     let args = FlashSdpaArgs {
-        q: TensorRef {
-            data: dq.as_slice(),
-            shape: sq,
-            stride: contiguous_stride(sq),
-        },
-        k: TensorRef {
-            data: dk.as_slice(),
-            shape: sk,
-            stride: contiguous_stride(sk),
-        },
-        v: TensorRef {
-            data: dv.as_slice(),
-            shape: sv,
-            stride: contiguous_stride(sv),
-        },
-        y: TensorMut {
-            data: dy.as_slice_mut(),
-            shape: sy,
-            stride: contiguous_stride(sy),
-        },
-        lse: TensorMut {
-            data: dlse.as_slice_mut(),
-            shape: sl,
-            stride: contiguous_stride(sl),
-        },
+        q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+        k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+        v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
+        y: TensorMut::new(dy.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
+        lse: TensorMut::new(dlse.as_slice_mut(), sl, contiguous_stride(sl)).unwrap(),
         mask: None,
-        alibi_slopes: Some(TensorRef {
-            data: dslopes.as_slice(),
-            shape: [1, h],
-            stride: [0_i64, 1_i64],
-        }),
+        alibi_slopes: Some(TensorRef::new(dslopes.as_slice(), [1, h], [0_i64, 1_i64]).unwrap()),
     };
     let result = plan.can_implement(&args);
     assert!(

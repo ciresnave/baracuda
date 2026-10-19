@@ -121,16 +121,8 @@ fn run_f32_3d(op: ReduceToOp, host_src: &[f32]) {
         .expect("select ReduceToPlan<f32, 3>");
     assert_eq!(plan.workspace_size(), 0, "reduce_to needs no workspace");
     let args = ReduceToArgs::<f32, 3> {
-        x: TensorRef {
-            data: dev_src.as_slice(),
-            shape: input_shape,
-            stride: in_stride,
-        },
-        y: TensorMut {
-            data: dev_dst.as_slice_mut(),
-            shape: output_shape,
-            stride: out_stride,
-        },
+        x: TensorRef::new(dev_src.as_slice(), input_shape, in_stride).unwrap(),
+        y: TensorMut::new(dev_dst.as_slice_mut(), output_shape, out_stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args)
         .expect("reduce_to f32 run");
@@ -213,16 +205,8 @@ fn plan_reduce_to_sum_f16_3d() {
     let plan = ReduceToPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select ReduceToPlan<f16, 3>");
     let args = ReduceToArgs::<f16, 3> {
-        x: TensorRef {
-            data: dev_src.as_slice(),
-            shape: input_shape,
-            stride: in_stride,
-        },
-        y: TensorMut {
-            data: dev_dst.as_slice_mut(),
-            shape: output_shape,
-            stride: out_stride,
-        },
+        x: TensorRef::new(dev_src.as_slice(), input_shape, in_stride).unwrap(),
+        y: TensorMut::new(dev_dst.as_slice_mut(), output_shape, out_stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args)
         .expect("reduce_to sum f16 run");
@@ -276,16 +260,8 @@ fn plan_reduce_to_sum_f32_strided_transposed() {
     let plan = ReduceToPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select ReduceToPlan<f32, 2>");
     let args = ReduceToArgs::<f32, 2> {
-        x: TensorRef {
-            data: dev_src.as_slice(),
-            shape: input_shape,
-            stride: in_stride,
-        },
-        y: TensorMut {
-            data: dev_dst.as_slice_mut(),
-            shape: output_shape,
-            stride: out_stride,
-        },
+        x: TensorRef::new(dev_src.as_slice(), input_shape, in_stride).unwrap(),
+        y: TensorMut::new(dev_dst.as_slice_mut(), output_shape, out_stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args)
         .expect("reduce_to strided run");
@@ -332,16 +308,8 @@ fn plan_reduce_to_sum_f32_stride0_broadcast_input() {
     let plan = ReduceToPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select ReduceToPlan<f32, 2>");
     let args = ReduceToArgs::<f32, 2> {
-        x: TensorRef {
-            data: dev_src.as_slice(),
-            shape: input_shape,
-            stride: in_stride,
-        },
-        y: TensorMut {
-            data: dev_dst.as_slice_mut(),
-            shape: output_shape,
-            stride: out_stride,
-        },
+        x: TensorRef::new(dev_src.as_slice(), input_shape, in_stride).unwrap(),
+        y: TensorMut::new(dev_dst.as_slice_mut(), output_shape, out_stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args)
         .expect("reduce_to stride-0 run");
@@ -382,16 +350,8 @@ fn plan_reduce_to_prod_f32_empty_reduce_set_identity() {
     let plan = ReduceToPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select ReduceToPlan<f32, 2>");
     let args = ReduceToArgs::<f32, 2> {
-        x: TensorRef {
-            data: dev_src.as_slice(),
-            shape: input_shape,
-            stride: in_stride,
-        },
-        y: TensorMut {
-            data: dev_dst.as_slice_mut(),
-            shape: output_shape,
-            stride: out_stride,
-        },
+        x: TensorRef::new(dev_src.as_slice(), input_shape, in_stride).unwrap(),
+        y: TensorMut::new(dev_dst.as_slice_mut(), output_shape, out_stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args)
         .expect("reduce_to prod empty run");

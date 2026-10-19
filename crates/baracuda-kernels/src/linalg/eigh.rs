@@ -292,17 +292,17 @@ impl<T: Element> EighPlan<T> {
 
     fn check_args<TW: Element>(&self, args: &EighArgs<'_, T, TW>) -> Result<()> {
         let n = self.desc.n;
-        if args.a.shape != [n, n] {
+        if args.a.shape() != [n, n] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::EighPlan: A shape != [N, N]",
             ));
         }
-        if args.w.shape != [n] {
+        if args.w.shape() != [n] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::EighPlan: W shape != [N]",
             ));
         }
-        if args.info.shape != [1] {
+        if args.info.shape() != [1] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::EighPlan: info shape != [1]",
             ));
@@ -357,9 +357,9 @@ impl EighPlan<f32> {
         let (ws_ptr, ws_bytes) = unpack_workspace(workspace, needed)?;
         let lwork = (ws_bytes / core::mem::size_of::<f32>()) as i32;
 
-        let a_ptr = args.a.data.as_raw().0 as *mut f32;
-        let w_ptr = args.w.data.as_raw().0 as *mut f32;
-        let info_ptr = args.info.data.as_raw().0 as *mut i32;
+        let a_ptr = args.a.data().as_raw().0 as *mut f32;
+        let w_ptr = args.w.data().as_raw().0 as *mut f32;
+        let info_ptr = args.info.data().as_raw().0 as *mut i32;
 
         let status = unsafe {
             cusolverDnSsyevd(
@@ -409,9 +409,9 @@ impl EighPlan<f64> {
         let (ws_ptr, ws_bytes) = unpack_workspace(workspace, needed)?;
         let lwork = (ws_bytes / core::mem::size_of::<f64>()) as i32;
 
-        let a_ptr = args.a.data.as_raw().0 as *mut f64;
-        let w_ptr = args.w.data.as_raw().0 as *mut f64;
-        let info_ptr = args.info.data.as_raw().0 as *mut i32;
+        let a_ptr = args.a.data().as_raw().0 as *mut f64;
+        let w_ptr = args.w.data().as_raw().0 as *mut f64;
+        let info_ptr = args.info.data().as_raw().0 as *mut i32;
 
         let status = unsafe {
             cusolverDnDsyevd(
@@ -462,10 +462,10 @@ impl EighPlan<Complex64> {
         let (ws_ptr, ws_bytes) = unpack_workspace(workspace, needed)?;
         let lwork = (ws_bytes / core::mem::size_of::<Complex64>()) as i32;
 
-        let a_ptr = args.a.data.as_raw().0 as *mut cuComplex;
+        let a_ptr = args.a.data().as_raw().0 as *mut cuComplex;
         // W is real-valued even for Hermitian input.
-        let w_ptr = args.w.data.as_raw().0 as *mut f32;
-        let info_ptr = args.info.data.as_raw().0 as *mut i32;
+        let w_ptr = args.w.data().as_raw().0 as *mut f32;
+        let info_ptr = args.info.data().as_raw().0 as *mut i32;
 
         let status = unsafe {
             cusolverDnCheevd(
@@ -515,9 +515,9 @@ impl EighPlan<Complex128> {
         let (ws_ptr, ws_bytes) = unpack_workspace(workspace, needed)?;
         let lwork = (ws_bytes / core::mem::size_of::<Complex128>()) as i32;
 
-        let a_ptr = args.a.data.as_raw().0 as *mut cuDoubleComplex;
-        let w_ptr = args.w.data.as_raw().0 as *mut f64;
-        let info_ptr = args.info.data.as_raw().0 as *mut i32;
+        let a_ptr = args.a.data().as_raw().0 as *mut cuDoubleComplex;
+        let w_ptr = args.w.data().as_raw().0 as *mut f64;
+        let info_ptr = args.info.data().as_raw().0 as *mut i32;
 
         let status = unsafe {
             cusolverDnZheevd(

@@ -117,31 +117,11 @@ where
                 // BENCHMARKS.md with nothing in the output saying so.
                 {
                     let probe = FlashSdpaArgs::<T> {
-                        q: TensorRef {
-                            data: dq.as_slice(),
-                            shape: sq,
-                            stride: stq,
-                        },
-                        k: TensorRef {
-                            data: dk.as_slice(),
-                            shape: sk,
-                            stride: stk,
-                        },
-                        v: TensorRef {
-                            data: dv.as_slice(),
-                            shape: sv,
-                            stride: stv,
-                        },
-                        y: TensorMut {
-                            data: dy.as_slice_mut(),
-                            shape: sy,
-                            stride: sty,
-                        },
-                        lse: TensorMut {
-                            data: dlse.as_slice_mut(),
-                            shape: sl,
-                            stride: stl,
-                        },
+                        q: TensorRef::new(dq.as_slice(), sq, stq).unwrap(),
+                        k: TensorRef::new(dk.as_slice(), sk, stk).unwrap(),
+                        v: TensorRef::new(dv.as_slice(), sv, stv).unwrap(),
+                        y: TensorMut::new(dy.as_slice_mut(), sy, sty).unwrap(),
+                        lse: TensorMut::new(dlse.as_slice_mut(), sl, stl).unwrap(),
                         mask: None,
                         alibi_slopes: None,
                     };
@@ -156,31 +136,11 @@ where
                 group.bench_with_input(BenchmarkId::from_parameter(&shape), &(), |bb, _| {
                     warmup(&stream, || {
                         let args = FlashSdpaArgs::<T> {
-                            q: TensorRef {
-                                data: dq.as_slice(),
-                                shape: sq,
-                                stride: stq,
-                            },
-                            k: TensorRef {
-                                data: dk.as_slice(),
-                                shape: sk,
-                                stride: stk,
-                            },
-                            v: TensorRef {
-                                data: dv.as_slice(),
-                                shape: sv,
-                                stride: stv,
-                            },
-                            y: TensorMut {
-                                data: dy.as_slice_mut(),
-                                shape: sy,
-                                stride: sty,
-                            },
-                            lse: TensorMut {
-                                data: dlse.as_slice_mut(),
-                                shape: sl,
-                                stride: stl,
-                            },
+                            q: TensorRef::new(dq.as_slice(), sq, stq).unwrap(),
+                            k: TensorRef::new(dk.as_slice(), sk, stk).unwrap(),
+                            v: TensorRef::new(dv.as_slice(), sv, stv).unwrap(),
+                            y: TensorMut::new(dy.as_slice_mut(), sy, sty).unwrap(),
+                            lse: TensorMut::new(dlse.as_slice_mut(), sl, stl).unwrap(),
                             mask: None,
                             alibi_slopes: None,
                         };
@@ -191,31 +151,11 @@ where
                     bb.iter_custom(|iters| {
                         time_with_events(&ctx, &stream, iters, || {
                             let args = FlashSdpaArgs::<T> {
-                                q: TensorRef {
-                                    data: dq.as_slice(),
-                                    shape: sq,
-                                    stride: stq,
-                                },
-                                k: TensorRef {
-                                    data: dk.as_slice(),
-                                    shape: sk,
-                                    stride: stk,
-                                },
-                                v: TensorRef {
-                                    data: dv.as_slice(),
-                                    shape: sv,
-                                    stride: stv,
-                                },
-                                y: TensorMut {
-                                    data: dy.as_slice_mut(),
-                                    shape: sy,
-                                    stride: sty,
-                                },
-                                lse: TensorMut {
-                                    data: dlse.as_slice_mut(),
-                                    shape: sl,
-                                    stride: stl,
-                                },
+                                q: TensorRef::new(dq.as_slice(), sq, stq).unwrap(),
+                                k: TensorRef::new(dk.as_slice(), sk, stk).unwrap(),
+                                v: TensorRef::new(dv.as_slice(), sv, stv).unwrap(),
+                                y: TensorMut::new(dy.as_slice_mut(), sy, sty).unwrap(),
+                                lse: TensorMut::new(dlse.as_slice_mut(), sl, stl).unwrap(),
                                 mask: None,
                                 alibi_slopes: None,
                             };
@@ -351,31 +291,11 @@ where
                 // with nothing saying so.
                 {
                     let probe = FlashSdpaSm89Args::<T> {
-                        q: TensorRef {
-                            data: dq.as_slice(),
-                            shape: sq,
-                            stride: stq,
-                        },
-                        k: TensorRef {
-                            data: dk.as_slice(),
-                            shape: sk,
-                            stride: stk,
-                        },
-                        v: TensorRef {
-                            data: dv.as_slice(),
-                            shape: sv,
-                            stride: stv,
-                        },
-                        y: TensorMut {
-                            data: dy.as_slice_mut(),
-                            shape: sy,
-                            stride: sty,
-                        },
-                        lse: TensorMut {
-                            data: dlse.as_slice_mut(),
-                            shape: sl,
-                            stride: stl,
-                        },
+                        q: TensorRef::new(dq.as_slice(), sq, stq).unwrap(),
+                        k: TensorRef::new(dk.as_slice(), sk, stk).unwrap(),
+                        v: TensorRef::new(dv.as_slice(), sv, stv).unwrap(),
+                        y: TensorMut::new(dy.as_slice_mut(), sy, sty).unwrap(),
+                        lse: TensorMut::new(dlse.as_slice_mut(), sl, stl).unwrap(),
                     };
                     if let Err(e) = plan.run(&stream, Workspace::Borrowed(ws.as_slice_mut()), probe)
                     {
@@ -388,31 +308,11 @@ where
                 group.bench_with_input(BenchmarkId::from_parameter(&shape), &(), |bb, _| {
                     warmup(&stream, || {
                         let args = FlashSdpaSm89Args::<T> {
-                            q: TensorRef {
-                                data: dq.as_slice(),
-                                shape: sq,
-                                stride: stq,
-                            },
-                            k: TensorRef {
-                                data: dk.as_slice(),
-                                shape: sk,
-                                stride: stk,
-                            },
-                            v: TensorRef {
-                                data: dv.as_slice(),
-                                shape: sv,
-                                stride: stv,
-                            },
-                            y: TensorMut {
-                                data: dy.as_slice_mut(),
-                                shape: sy,
-                                stride: sty,
-                            },
-                            lse: TensorMut {
-                                data: dlse.as_slice_mut(),
-                                shape: sl,
-                                stride: stl,
-                            },
+                            q: TensorRef::new(dq.as_slice(), sq, stq).unwrap(),
+                            k: TensorRef::new(dk.as_slice(), sk, stk).unwrap(),
+                            v: TensorRef::new(dv.as_slice(), sv, stv).unwrap(),
+                            y: TensorMut::new(dy.as_slice_mut(), sy, sty).unwrap(),
+                            lse: TensorMut::new(dlse.as_slice_mut(), sl, stl).unwrap(),
                         };
                         plan.run(&stream, Workspace::Borrowed(ws.as_slice_mut()), args)
                             .expect("flash sdpa sm89 warmup run");
@@ -421,31 +321,11 @@ where
                     bb.iter_custom(|iters| {
                         time_with_events(&ctx, &stream, iters, || {
                             let args = FlashSdpaSm89Args::<T> {
-                                q: TensorRef {
-                                    data: dq.as_slice(),
-                                    shape: sq,
-                                    stride: stq,
-                                },
-                                k: TensorRef {
-                                    data: dk.as_slice(),
-                                    shape: sk,
-                                    stride: stk,
-                                },
-                                v: TensorRef {
-                                    data: dv.as_slice(),
-                                    shape: sv,
-                                    stride: stv,
-                                },
-                                y: TensorMut {
-                                    data: dy.as_slice_mut(),
-                                    shape: sy,
-                                    stride: sty,
-                                },
-                                lse: TensorMut {
-                                    data: dlse.as_slice_mut(),
-                                    shape: sl,
-                                    stride: stl,
-                                },
+                                q: TensorRef::new(dq.as_slice(), sq, stq).unwrap(),
+                                k: TensorRef::new(dk.as_slice(), sk, stk).unwrap(),
+                                v: TensorRef::new(dv.as_slice(), sv, stv).unwrap(),
+                                y: TensorMut::new(dy.as_slice_mut(), sy, sty).unwrap(),
+                                lse: TensorMut::new(dlse.as_slice_mut(), sl, stl).unwrap(),
                             };
                             plan.run(&stream, Workspace::Borrowed(ws.as_slice_mut()), args)
                                 .expect("flash sdpa sm89 run");

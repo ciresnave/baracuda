@@ -130,36 +130,12 @@ fn group_norm_f32_with_affine() {
         &stream,
         Workspace::None,
         GroupNormArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            gamma: Some(TensorRef {
-                data: dev_g.as_slice(),
-                shape: [c],
-                stride: [1],
-            }),
-            beta: Some(TensorRef {
-                data: dev_b.as_slice(),
-                shape: [c],
-                stride: [1],
-            }),
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            saved_mean: TensorMut {
-                data: dev_mean.as_slice_mut(),
-                shape: [g_count as i32],
-                stride: [1],
-            },
-            saved_rstd: TensorMut {
-                data: dev_rstd.as_slice_mut(),
-                shape: [g_count as i32],
-                stride: [1],
-            },
+            x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            gamma: Some(TensorRef::new(dev_g.as_slice(), [c], [1]).unwrap()),
+            beta: Some(TensorRef::new(dev_b.as_slice(), [c], [1]).unwrap()),
+            y: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
+            saved_mean: TensorMut::new(dev_mean.as_slice_mut(), [g_count as i32], [1]).unwrap(),
+            saved_rstd: TensorMut::new(dev_rstd.as_slice_mut(), [g_count as i32], [1]).unwrap(),
         },
     )
     .expect("run");
@@ -236,36 +212,12 @@ fn group_norm_f64_with_affine() {
         &stream,
         Workspace::None,
         GroupNormArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            gamma: Some(TensorRef {
-                data: dev_g.as_slice(),
-                shape: [c],
-                stride: [1],
-            }),
-            beta: Some(TensorRef {
-                data: dev_b.as_slice(),
-                shape: [c],
-                stride: [1],
-            }),
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            saved_mean: TensorMut {
-                data: dev_mean.as_slice_mut(),
-                shape: [g_count as i32],
-                stride: [1],
-            },
-            saved_rstd: TensorMut {
-                data: dev_rstd.as_slice_mut(),
-                shape: [g_count as i32],
-                stride: [1],
-            },
+            x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            gamma: Some(TensorRef::new(dev_g.as_slice(), [c], [1]).unwrap()),
+            beta: Some(TensorRef::new(dev_b.as_slice(), [c], [1]).unwrap()),
+            y: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
+            saved_mean: TensorMut::new(dev_mean.as_slice_mut(), [g_count as i32], [1]).unwrap(),
+            saved_rstd: TensorMut::new(dev_rstd.as_slice_mut(), [g_count as i32], [1]).unwrap(),
         },
     )
     .expect("run");
@@ -341,36 +293,12 @@ fn group_norm_f16_with_affine() {
         &stream,
         Workspace::None,
         GroupNormArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            gamma: Some(TensorRef {
-                data: dev_g.as_slice(),
-                shape: [c],
-                stride: [1],
-            }),
-            beta: Some(TensorRef {
-                data: dev_b.as_slice(),
-                shape: [c],
-                stride: [1],
-            }),
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            saved_mean: TensorMut {
-                data: dev_mean.as_slice_mut(),
-                shape: [g_count as i32],
-                stride: [1],
-            },
-            saved_rstd: TensorMut {
-                data: dev_rstd.as_slice_mut(),
-                shape: [g_count as i32],
-                stride: [1],
-            },
+            x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            gamma: Some(TensorRef::new(dev_g.as_slice(), [c], [1]).unwrap()),
+            beta: Some(TensorRef::new(dev_b.as_slice(), [c], [1]).unwrap()),
+            y: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
+            saved_mean: TensorMut::new(dev_mean.as_slice_mut(), [g_count as i32], [1]).unwrap(),
+            saved_rstd: TensorMut::new(dev_rstd.as_slice_mut(), [g_count as i32], [1]).unwrap(),
         },
     )
     .expect("run");
@@ -446,36 +374,12 @@ fn group_norm_bf16_with_affine() {
         &stream,
         Workspace::None,
         GroupNormArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            gamma: Some(TensorRef {
-                data: dev_g.as_slice(),
-                shape: [c],
-                stride: [1],
-            }),
-            beta: Some(TensorRef {
-                data: dev_b.as_slice(),
-                shape: [c],
-                stride: [1],
-            }),
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            saved_mean: TensorMut {
-                data: dev_mean.as_slice_mut(),
-                shape: [g_count as i32],
-                stride: [1],
-            },
-            saved_rstd: TensorMut {
-                data: dev_rstd.as_slice_mut(),
-                shape: [g_count as i32],
-                stride: [1],
-            },
+            x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            gamma: Some(TensorRef::new(dev_g.as_slice(), [c], [1]).unwrap()),
+            beta: Some(TensorRef::new(dev_b.as_slice(), [c], [1]).unwrap()),
+            y: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
+            saved_mean: TensorMut::new(dev_mean.as_slice_mut(), [g_count as i32], [1]).unwrap(),
+            saved_rstd: TensorMut::new(dev_rstd.as_slice_mut(), [g_count as i32], [1]).unwrap(),
         },
     )
     .expect("run");

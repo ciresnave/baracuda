@@ -109,26 +109,12 @@ fn run_sparse24_gemm(
         stream,
         Workspace::Borrowed(dws.as_slice_mut()),
         GemmSparse24Args {
-            w_compressed: TensorRef {
-                data: dwc.as_slice(),
-                shape: [M, K / 2],
-                stride: contiguous_stride([M, K / 2]),
-            },
-            w_metadata: TensorRef {
-                data: dwm.as_slice(),
-                shape: [M, K / 8],
-                stride: contiguous_stride([M, K / 8]),
-            },
-            x: TensorRef {
-                data: dx.as_slice(),
-                shape: [N, K],
-                stride: contiguous_stride([N, K]),
-            },
-            y: TensorMut {
-                data: dy.as_slice_mut(),
-                shape: [N, M],
-                stride: contiguous_stride([N, M]),
-            },
+            w_compressed: TensorRef::new(dwc.as_slice(), [M, K / 2], contiguous_stride([M, K / 2]))
+                .unwrap(),
+            w_metadata: TensorRef::new(dwm.as_slice(), [M, K / 8], contiguous_stride([M, K / 8]))
+                .unwrap(),
+            x: TensorRef::new(dx.as_slice(), [N, K], contiguous_stride([N, K])).unwrap(),
+            y: TensorMut::new(dy.as_slice_mut(), [N, M], contiguous_stride([N, M])).unwrap(),
         },
     )
     .expect("plan run");

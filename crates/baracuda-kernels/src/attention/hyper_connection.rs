@@ -247,32 +247,32 @@ impl<T: Element> HyperConnectionPlan<T> {
         let n = self.desc.n_streams;
         let c = self.desc.hidden_dim;
 
-        if args.x_expanded.shape != [b, n, c] {
+        if args.x_expanded.shape() != [b, n, c] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::HyperConnectionPlan: x_expanded shape mismatch with [B, n, C]",
             ));
         }
-        if args.out.shape != [b, n, c] {
+        if args.out.shape() != [b, n, c] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::HyperConnectionPlan: out shape mismatch with [B, n, C]",
             ));
         }
-        if args.rmsnorm_weight.shape != [c] {
+        if args.rmsnorm_weight.shape() != [c] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::HyperConnectionPlan: rmsnorm_weight shape mismatch with [C]",
             ));
         }
-        if args.h_pre.shape != [n] {
+        if args.h_pre.shape() != [n] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::HyperConnectionPlan: h_pre shape mismatch with [n]",
             ));
         }
-        if args.h_post.shape != [n] {
+        if args.h_post.shape() != [n] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::HyperConnectionPlan: h_post shape mismatch with [n]",
             ));
         }
-        if args.h_res.shape != [n, n] {
+        if args.h_res.shape() != [n, n] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::HyperConnectionPlan: h_res shape mismatch with [n, n]",
             ));
@@ -282,16 +282,16 @@ impl<T: Element> HyperConnectionPlan<T> {
         // x_expanded / out. We reject non-contiguous strides — adding
         // strided support is a kernel rewrite.
         let bnc = (b as i64) * (n as i64) * (c as i64);
-        if (args.x_expanded.data.len() as i64) < bnc {
+        if (args.x_expanded.data().len() as i64) < bnc {
             return Err(Error::BufferTooSmall {
                 needed: bnc as usize,
-                got: args.x_expanded.data.len(),
+                got: args.x_expanded.data().len(),
             });
         }
-        if (args.out.data.len() as i64) < bnc {
+        if (args.out.data().len() as i64) < bnc {
             return Err(Error::BufferTooSmall {
                 needed: bnc as usize,
-                got: args.out.data.len(),
+                got: args.out.data().len(),
             });
         }
         Ok(())
@@ -331,12 +331,12 @@ impl<T: Element> HyperConnectionPlan<T> {
             let status = unsafe {
                 baracuda_kernels_sys::baracuda_kernels_mhc_layer_static_bf16_run(
                     self.handle,
-                    args.x_expanded.data.as_raw().0 as *const c_void,
-                    args.rmsnorm_weight.data.as_raw().0 as *const c_void,
-                    args.h_pre.data.as_raw().0 as *const c_void,
-                    args.h_post.data.as_raw().0 as *const c_void,
-                    args.h_res.data.as_raw().0 as *const c_void,
-                    args.out.data.as_raw().0 as *mut c_void,
+                    args.x_expanded.data().as_raw().0 as *const c_void,
+                    args.rmsnorm_weight.data().as_raw().0 as *const c_void,
+                    args.h_pre.data().as_raw().0 as *const c_void,
+                    args.h_post.data().as_raw().0 as *const c_void,
+                    args.h_res.data().as_raw().0 as *const c_void,
+                    args.out.data().as_raw().0 as *mut c_void,
                     self.desc.batch,
                     self.desc.hidden_dim,
                     self.desc.n_streams,

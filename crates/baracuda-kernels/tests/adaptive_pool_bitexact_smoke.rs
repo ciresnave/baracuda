@@ -91,16 +91,8 @@ fn adaptive_avg_pool2d_5x5_to_3x3_f32_bitexact() {
         &stream,
         Workspace::None,
         AdaptivePool2dFwArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape: x_shape,
-                stride: contiguous_stride(x_shape),
-            },
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
+            x: TensorRef::new(dev_x.as_slice(), x_shape, contiguous_stride(x_shape)).unwrap(),
+            y: TensorMut::new(dev_y.as_slice_mut(), y_shape, contiguous_stride(y_shape)).unwrap(),
         },
     )
     .expect("fw");
@@ -169,16 +161,8 @@ fn adaptive_max_pool2d_5x5_to_3x3_f32_bitexact() {
         &stream,
         Workspace::None,
         AdaptivePool2dFwArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape: x_shape,
-                stride: contiguous_stride(x_shape),
-            },
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
+            x: TensorRef::new(dev_x.as_slice(), x_shape, contiguous_stride(x_shape)).unwrap(),
+            y: TensorMut::new(dev_y.as_slice_mut(), y_shape, contiguous_stride(y_shape)).unwrap(),
         },
     )
     .expect("fw");
@@ -262,16 +246,8 @@ fn adaptive_avg_pool3d_5x7x4_to_3x4x2_f32_bitexact() {
         &stream,
         Workspace::None,
         AdaptivePool3dFwArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape: x_shape,
-                stride: contiguous_stride(x_shape),
-            },
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
+            x: TensorRef::new(dev_x.as_slice(), x_shape, contiguous_stride(x_shape)).unwrap(),
+            y: TensorMut::new(dev_y.as_slice_mut(), y_shape, contiguous_stride(y_shape)).unwrap(),
         },
     )
     .expect("fw");
@@ -344,26 +320,10 @@ fn adaptive_avg_pool2d_5x5_to_3x3_f32_bw_bitexact() {
         &stream,
         Workspace::None,
         AdaptivePool2dBwArgs {
-            y: TensorRef {
-                data: dev_y.as_slice(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape: x_shape,
-                stride: contiguous_stride(x_shape),
-            },
-            dx: TensorMut {
-                data: dev_dx.as_slice_mut(),
-                shape: x_shape,
-                stride: contiguous_stride(x_shape),
-            },
+            y: TensorRef::new(dev_y.as_slice(), y_shape, contiguous_stride(y_shape)).unwrap(),
+            dy: TensorRef::new(dev_dy.as_slice(), y_shape, contiguous_stride(y_shape)).unwrap(),
+            x: TensorRef::new(dev_x.as_slice(), x_shape, contiguous_stride(x_shape)).unwrap(),
+            dx: TensorMut::new(dev_dx.as_slice_mut(), x_shape, contiguous_stride(x_shape)).unwrap(),
         },
     )
     .expect("bw");
@@ -410,16 +370,14 @@ mod spot_dtypes {
             &stream,
             Workspace::None,
             AdaptivePool1dFwArgs {
-                x: TensorRef {
-                    data: dev_x.as_slice(),
-                    shape: [1, 1, 5],
-                    stride: contiguous_stride([1, 1, 5]),
-                },
-                y: TensorMut {
-                    data: dev_y.as_slice_mut(),
-                    shape: [1, 1, 3],
-                    stride: contiguous_stride([1, 1, 3]),
-                },
+                x: TensorRef::new(dev_x.as_slice(), [1, 1, 5], contiguous_stride([1, 1, 5]))
+                    .unwrap(),
+                y: TensorMut::new(
+                    dev_y.as_slice_mut(),
+                    [1, 1, 3],
+                    contiguous_stride([1, 1, 3]),
+                )
+                .unwrap(),
             },
         )
         .expect("fw");
@@ -454,16 +412,14 @@ mod spot_dtypes {
             &stream,
             Workspace::None,
             AdaptivePool1dFwArgs {
-                x: TensorRef {
-                    data: dev_x.as_slice(),
-                    shape: [1, 1, 5],
-                    stride: contiguous_stride([1, 1, 5]),
-                },
-                y: TensorMut {
-                    data: dev_y.as_slice_mut(),
-                    shape: [1, 1, 3],
-                    stride: contiguous_stride([1, 1, 3]),
-                },
+                x: TensorRef::new(dev_x.as_slice(), [1, 1, 5], contiguous_stride([1, 1, 5]))
+                    .unwrap(),
+                y: TensorMut::new(
+                    dev_y.as_slice_mut(),
+                    [1, 1, 3],
+                    contiguous_stride([1, 1, 3]),
+                )
+                .unwrap(),
             },
         )
         .expect("fw");
@@ -499,16 +455,14 @@ mod spot_dtypes {
             &stream,
             Workspace::None,
             AdaptivePool1dFwArgs {
-                x: TensorRef {
-                    data: dev_x.as_slice(),
-                    shape: [1, 1, 5],
-                    stride: contiguous_stride([1, 1, 5]),
-                },
-                y: TensorMut {
-                    data: dev_y.as_slice_mut(),
-                    shape: [1, 1, 3],
-                    stride: contiguous_stride([1, 1, 3]),
-                },
+                x: TensorRef::new(dev_x.as_slice(), [1, 1, 5], contiguous_stride([1, 1, 5]))
+                    .unwrap(),
+                y: TensorMut::new(
+                    dev_y.as_slice_mut(),
+                    [1, 1, 3],
+                    contiguous_stride([1, 1, 3]),
+                )
+                .unwrap(),
             },
         )
         .expect("fw");

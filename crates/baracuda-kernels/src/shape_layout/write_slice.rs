@@ -248,12 +248,12 @@ impl<T: DeviceRepr + Copy + 'static, const N: usize> WriteSlicePlan<T, N> {
     pub fn can_implement(&self, args: &WriteSliceArgs<'_, T, N>) -> Result<()> {
         crate::view_check::check_fits(&args.dest)?;
         crate::view_check::check_fits(&args.source)?;
-        if args.dest.shape != self.desc.dest_shape {
+        if args.dest.shape() != self.desc.dest_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::WriteSlicePlan: dest shape mismatch with descriptor",
             ));
         }
-        if args.source.shape != self.desc.source_shape {
+        if args.source.shape() != self.desc.source_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::WriteSlicePlan: source shape mismatch with descriptor",
             ));
@@ -284,16 +284,16 @@ impl<T: DeviceRepr + Copy + 'static, const N: usize> WriteSlicePlan<T, N> {
         } else {
             source_numel
         };
-        if (args.dest.data.len() as i64) < dest_storage {
+        if (args.dest.data().len() as i64) < dest_storage {
             return Err(Error::BufferTooSmall {
                 needed: dest_storage as usize,
-                got: args.dest.data.len(),
+                got: args.dest.data().len(),
             });
         }
-        if (args.source.data.len() as i64) < source_storage {
+        if (args.source.data().len() as i64) < source_storage {
             return Err(Error::BufferTooSmall {
                 needed: source_storage as usize,
-                got: args.source.data.len(),
+                got: args.source.data().len(),
             });
         }
         Ok(())
@@ -329,8 +329,8 @@ impl<T: DeviceRepr + Copy + 'static, const N: usize> WriteSlicePlan<T, N> {
         if source_numel == 0 {
             return Ok(());
         }
-        let dest_ptr_u64 = args.dest.data.as_raw().0;
-        let source_ptr_u64 = args.source.data.as_raw().0;
+        let dest_ptr_u64 = args.dest.data().as_raw().0;
+        let source_ptr_u64 = args.source.data().as_raw().0;
         let stream_ptr = stream.as_raw();
 
         // -------------------- Fast paths --------------------

@@ -105,36 +105,12 @@ fn bench<T>(
 
         warmup(&stream, || {
             let args = BatchNormArgs::<T, 4> {
-                x: TensorRef {
-                    data: dev_x.as_slice(),
-                    shape: x_shape,
-                    stride: stx,
-                },
-                gamma: Some(TensorRef {
-                    data: dev_gamma.as_slice(),
-                    shape: c_shape,
-                    stride: stc,
-                }),
-                beta: Some(TensorRef {
-                    data: dev_beta.as_slice(),
-                    shape: c_shape,
-                    stride: stc,
-                }),
-                y: TensorMut {
-                    data: dev_y.as_slice_mut(),
-                    shape: x_shape,
-                    stride: stx,
-                },
-                saved_mean: TensorMut {
-                    data: dev_mean.as_slice_mut(),
-                    shape: c_shape,
-                    stride: stc,
-                },
-                saved_rstd: TensorMut {
-                    data: dev_rstd.as_slice_mut(),
-                    shape: c_shape,
-                    stride: stc,
-                },
+                x: TensorRef::new(dev_x.as_slice(), x_shape, stx).unwrap(),
+                gamma: Some(TensorRef::new(dev_gamma.as_slice(), c_shape, stc).unwrap()),
+                beta: Some(TensorRef::new(dev_beta.as_slice(), c_shape, stc).unwrap()),
+                y: TensorMut::new(dev_y.as_slice_mut(), x_shape, stx).unwrap(),
+                saved_mean: TensorMut::new(dev_mean.as_slice_mut(), c_shape, stc).unwrap(),
+                saved_rstd: TensorMut::new(dev_rstd.as_slice_mut(), c_shape, stc).unwrap(),
             };
             plan.run(&stream, Workspace::None, args)
                 .expect("baracuda batch_norm");
@@ -144,36 +120,12 @@ fn bench<T>(
         assert_cell_live(&format!("batch_norm/{dtype_label}/{label}"), &dev_y, numel);
         let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 50, || {
             let args = BatchNormArgs::<T, 4> {
-                x: TensorRef {
-                    data: dev_x.as_slice(),
-                    shape: x_shape,
-                    stride: stx,
-                },
-                gamma: Some(TensorRef {
-                    data: dev_gamma.as_slice(),
-                    shape: c_shape,
-                    stride: stc,
-                }),
-                beta: Some(TensorRef {
-                    data: dev_beta.as_slice(),
-                    shape: c_shape,
-                    stride: stc,
-                }),
-                y: TensorMut {
-                    data: dev_y.as_slice_mut(),
-                    shape: x_shape,
-                    stride: stx,
-                },
-                saved_mean: TensorMut {
-                    data: dev_mean.as_slice_mut(),
-                    shape: c_shape,
-                    stride: stc,
-                },
-                saved_rstd: TensorMut {
-                    data: dev_rstd.as_slice_mut(),
-                    shape: c_shape,
-                    stride: stc,
-                },
+                x: TensorRef::new(dev_x.as_slice(), x_shape, stx).unwrap(),
+                gamma: Some(TensorRef::new(dev_gamma.as_slice(), c_shape, stc).unwrap()),
+                beta: Some(TensorRef::new(dev_beta.as_slice(), c_shape, stc).unwrap()),
+                y: TensorMut::new(dev_y.as_slice_mut(), x_shape, stx).unwrap(),
+                saved_mean: TensorMut::new(dev_mean.as_slice_mut(), c_shape, stc).unwrap(),
+                saved_rstd: TensorMut::new(dev_rstd.as_slice_mut(), c_shape, stc).unwrap(),
             };
             plan.run(&stream, Workspace::None, args)
                 .expect("baracuda batch_norm");
@@ -194,36 +146,12 @@ fn bench<T>(
             bb.iter_custom(|iters| {
                 time_with_events(&ctx, &stream, iters, || {
                     let args = BatchNormArgs::<T, 4> {
-                        x: TensorRef {
-                            data: dev_x.as_slice(),
-                            shape: x_shape,
-                            stride: stx,
-                        },
-                        gamma: Some(TensorRef {
-                            data: dev_gamma.as_slice(),
-                            shape: c_shape,
-                            stride: stc,
-                        }),
-                        beta: Some(TensorRef {
-                            data: dev_beta.as_slice(),
-                            shape: c_shape,
-                            stride: stc,
-                        }),
-                        y: TensorMut {
-                            data: dev_y.as_slice_mut(),
-                            shape: x_shape,
-                            stride: stx,
-                        },
-                        saved_mean: TensorMut {
-                            data: dev_mean.as_slice_mut(),
-                            shape: c_shape,
-                            stride: stc,
-                        },
-                        saved_rstd: TensorMut {
-                            data: dev_rstd.as_slice_mut(),
-                            shape: c_shape,
-                            stride: stc,
-                        },
+                        x: TensorRef::new(dev_x.as_slice(), x_shape, stx).unwrap(),
+                        gamma: Some(TensorRef::new(dev_gamma.as_slice(), c_shape, stc).unwrap()),
+                        beta: Some(TensorRef::new(dev_beta.as_slice(), c_shape, stc).unwrap()),
+                        y: TensorMut::new(dev_y.as_slice_mut(), x_shape, stx).unwrap(),
+                        saved_mean: TensorMut::new(dev_mean.as_slice_mut(), c_shape, stc).unwrap(),
+                        saved_rstd: TensorMut::new(dev_rstd.as_slice_mut(), c_shape, stc).unwrap(),
                     };
                     plan.run(&stream, Workspace::None, args)
                         .expect("baracuda batch_norm");

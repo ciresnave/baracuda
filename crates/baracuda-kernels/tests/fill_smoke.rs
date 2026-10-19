@@ -38,11 +38,12 @@ where
     let plan =
         FillPlan::<T>::select(&stream, &desc, PlanPreference::default()).expect("select FillPlan");
     let args = FillArgs::<T> {
-        output: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: [numel as i32],
-            stride: contiguous_stride([numel as i32]),
-        },
+        output: TensorMut::new(
+            dev_y.as_slice_mut(),
+            [numel as i32],
+            contiguous_stride([numel as i32]),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("fill run");
     stream.synchronize().expect("sync");
@@ -72,11 +73,12 @@ fn fill_f32_huge() {
     };
     let plan = FillPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = FillArgs::<f32> {
-        output: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: [numel as i32],
-            stride: contiguous_stride([numel as i32]),
-        },
+        output: TensorMut::new(
+            dev_y.as_slice_mut(),
+            [numel as i32],
+            contiguous_stride([numel as i32]),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

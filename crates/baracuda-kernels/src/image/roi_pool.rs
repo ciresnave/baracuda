@@ -148,12 +148,12 @@ impl<T: Element> RoiPoolPlan<T> {
         crate::view_check::check_fits(&args.rois)?;
         crate::view_check::check_fits(&args.output)?;
         crate::view_check::check_fits(&args.argmax)?;
-        if args.input.shape != [self.desc.n, self.desc.c, self.desc.h, self.desc.w] {
+        if args.input.shape() != [self.desc.n, self.desc.c, self.desc.h, self.desc.w] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::RoiPoolPlan: input shape mismatch",
             ));
         }
-        if args.rois.shape != [self.desc.num_rois, 5] {
+        if args.rois.shape() != [self.desc.num_rois, 5] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::RoiPoolPlan: rois must be [num_rois, 5]",
             ));
@@ -164,7 +164,7 @@ impl<T: Element> RoiPoolPlan<T> {
             self.desc.pooled_h,
             self.desc.pooled_w,
         ];
-        if args.output.shape != out_shape || args.argmax.shape != out_shape {
+        if args.output.shape() != out_shape || args.argmax.shape() != out_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::RoiPoolPlan: output / argmax shape mismatch",
             ));
@@ -201,10 +201,10 @@ impl<T: Element> RoiPoolPlan<T> {
         if args.output.numel() == 0 {
             return Ok(());
         }
-        let input_ptr = args.input.data.as_raw().0 as *const c_void;
-        let rois_ptr = args.rois.data.as_raw().0 as *const c_void;
-        let out_ptr = args.output.data.as_raw().0 as *mut c_void;
-        let arg_ptr = args.argmax.data.as_raw().0 as *mut c_void;
+        let input_ptr = args.input.data().as_raw().0 as *const c_void;
+        let rois_ptr = args.rois.data().as_raw().0 as *const c_void;
+        let out_ptr = args.output.data().as_raw().0 as *mut c_void;
+        let arg_ptr = args.argmax.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         let status = match T::KIND {
             ElementKind::F32 => unsafe {

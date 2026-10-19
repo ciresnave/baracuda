@@ -39,16 +39,8 @@ fn hardshrink_f32_3d() {
     let plan =
         UnaryPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = UnaryArgs::<f32, 3> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
+        x: TensorRef::new(dev_x.as_slice(), shape, stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -90,16 +82,8 @@ fn hardshrink_f64_3d() {
     let plan =
         UnaryPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = UnaryArgs::<f64, 3> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
+        x: TensorRef::new(dev_x.as_slice(), shape, stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -134,16 +118,8 @@ fn hardshrink_f16_3d() {
     let plan =
         UnaryPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = UnaryArgs::<f16, 3> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
+        x: TensorRef::new(dev_x.as_slice(), shape, stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -178,16 +154,8 @@ fn hardshrink_bf16_3d() {
     let plan =
         UnaryPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = UnaryArgs::<bf16, 3> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
+        x: TensorRef::new(dev_x.as_slice(), shape, stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

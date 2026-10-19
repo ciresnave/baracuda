@@ -155,9 +155,9 @@ impl<T: Element, const N: usize> PReluBackwardPlan<T, N> {
         crate::view_check::check_dense(&args.weight)?;
         crate::view_check::check_dense(&args.dx)?;
         crate::view_check::check_dense(&args.dweight)?;
-        if args.x.shape != self.desc.input_shape
-            || args.dy.shape != self.desc.input_shape
-            || args.dx.shape != self.desc.input_shape
+        if args.x.shape() != self.desc.input_shape
+            || args.dy.shape() != self.desc.input_shape
+            || args.dx.shape() != self.desc.input_shape
         {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::PReluBackwardPlan: tensor shape mismatch",
@@ -168,7 +168,7 @@ impl<T: Element, const N: usize> PReluBackwardPlan<T, N> {
         } else {
             self.channel_extent
         };
-        if args.weight.shape[0] != expected_weight || args.dweight.shape[0] != expected_weight {
+        if args.weight.shape()[0] != expected_weight || args.dweight.shape()[0] != expected_weight {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::PReluBackwardPlan: weight shape mismatch",
             ));
@@ -178,11 +178,11 @@ impl<T: Element, const N: usize> PReluBackwardPlan<T, N> {
             return Ok(());
         }
         let stream_ptr = stream.as_raw();
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let x_ptr = args.x.data.as_raw().0 as *const c_void;
-        let weight_ptr = args.weight.data.as_raw().0 as *const c_void;
-        let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
-        let dweight_ptr = args.dweight.data.as_raw().0 as *mut c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let x_ptr = args.x.data().as_raw().0 as *const c_void;
+        let weight_ptr = args.weight.data().as_raw().0 as *const c_void;
+        let dx_ptr = args.dx.data().as_raw().0 as *mut c_void;
+        let dweight_ptr = args.dweight.data().as_raw().0 as *mut c_void;
         let scalar_flag: i32 = if self.scalar_weight { 1 } else { 0 };
         let status = match T::KIND {
             ElementKind::F32 => unsafe {

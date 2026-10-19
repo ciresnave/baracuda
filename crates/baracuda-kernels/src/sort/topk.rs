@@ -129,17 +129,17 @@ impl<T: Element> TopkPlan<T> {
         crate::view_check::check_fits(&args.indices)?;
         let in_shape = [self.desc.batch, self.desc.row_len];
         let out_shape = [self.desc.batch, self.desc.k];
-        if args.input.shape != in_shape {
+        if args.input.shape() != in_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::TopkPlan: input shape != [batch, row_len]",
             ));
         }
-        if args.values.shape != out_shape {
+        if args.values.shape() != out_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::TopkPlan: values shape != [batch, k]",
             ));
         }
-        if args.indices.shape != out_shape {
+        if args.indices.shape() != out_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::TopkPlan: indices shape != [batch, k]",
             ));
@@ -176,9 +176,9 @@ impl<T: Element> TopkPlan<T> {
         if self.desc.batch == 0 || self.desc.k == 0 {
             return Ok(());
         }
-        let in_ptr = args.input.data.as_raw().0 as *const c_void;
-        let vals_ptr = args.values.data.as_raw().0 as *mut c_void;
-        let idx_ptr = args.indices.data.as_raw().0 as *mut c_void;
+        let in_ptr = args.input.data().as_raw().0 as *const c_void;
+        let vals_ptr = args.values.data().as_raw().0 as *mut c_void;
+        let idx_ptr = args.indices.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         let largest_flag = if self.desc.largest { 1 } else { 0 };
 

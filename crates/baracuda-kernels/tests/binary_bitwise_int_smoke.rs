@@ -86,21 +86,9 @@ fn run_case_i32(kind: BinaryKind, shape: [i32; 2]) {
     let plan = BinaryPlan::<i32, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select BinaryPlan<i32, 2>");
     let args = BinaryArgs::<i32, 2> {
-        a: TensorRef {
-            data: dev_a.as_slice(),
-            shape,
-            stride,
-        },
-        b: TensorRef {
-            data: dev_b.as_slice(),
-            shape,
-            stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
+        a: TensorRef::new(dev_a.as_slice(), shape, stride).unwrap(),
+        b: TensorRef::new(dev_b.as_slice(), shape, stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args)
         .expect("binary bitwise i32 run");
@@ -187,21 +175,9 @@ fn run_case_i64(kind: BinaryKind, shape: [i32; 2]) {
     let plan = BinaryPlan::<i64, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select BinaryPlan<i64, 2>");
     let args = BinaryArgs::<i64, 2> {
-        a: TensorRef {
-            data: dev_a.as_slice(),
-            shape,
-            stride,
-        },
-        b: TensorRef {
-            data: dev_b.as_slice(),
-            shape,
-            stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
+        a: TensorRef::new(dev_a.as_slice(), shape, stride).unwrap(),
+        b: TensorRef::new(dev_b.as_slice(), shape, stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args)
         .expect("binary bitwise i64 run");

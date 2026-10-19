@@ -38,21 +38,24 @@ fn searchsorted_f32_lower_bound() {
         &stream,
         Workspace::None,
         SearchsortedArgs::<f32> {
-            sorted_seq: TensorRef {
-                data: dev_seq.as_slice(),
-                shape: [sorted.len() as i32],
-                stride: contiguous_stride([sorted.len() as i32]),
-            },
-            values: TensorRef {
-                data: dev_q.as_slice(),
-                shape: [queries.len() as i32],
-                stride: contiguous_stride([queries.len() as i32]),
-            },
-            output: TensorMut {
-                data: dev_out.as_slice_mut(),
-                shape: [queries.len() as i32],
-                stride: contiguous_stride([queries.len() as i32]),
-            },
+            sorted_seq: TensorRef::new(
+                dev_seq.as_slice(),
+                [sorted.len() as i32],
+                contiguous_stride([sorted.len() as i32]),
+            )
+            .unwrap(),
+            values: TensorRef::new(
+                dev_q.as_slice(),
+                [queries.len() as i32],
+                contiguous_stride([queries.len() as i32]),
+            )
+            .unwrap(),
+            output: TensorMut::new(
+                dev_out.as_slice_mut(),
+                [queries.len() as i32],
+                contiguous_stride([queries.len() as i32]),
+            )
+            .unwrap(),
         },
     )
     .expect("run");

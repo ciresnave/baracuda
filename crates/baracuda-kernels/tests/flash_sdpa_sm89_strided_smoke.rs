@@ -107,31 +107,11 @@ fn flash_sdpa_sm89_strided_f16_contig_fast_path() {
             &stream,
             Workspace::None,
             FlashSdpaArgs {
-                q: TensorRef {
-                    data: dq.as_slice(),
-                    shape: sq,
-                    stride: contiguous_stride(sq),
-                },
-                k: TensorRef {
-                    data: dk.as_slice(),
-                    shape: sk,
-                    stride: contiguous_stride(sk),
-                },
-                v: TensorRef {
-                    data: dv.as_slice(),
-                    shape: sv,
-                    stride: contiguous_stride(sv),
-                },
-                y: TensorMut {
-                    data: dy_ref.as_slice_mut(),
-                    shape: sy,
-                    stride: contiguous_stride(sy),
-                },
-                lse: TensorMut {
-                    data: dlse_ref.as_slice_mut(),
-                    shape: sl,
-                    stride: contiguous_stride(sl),
-                },
+                q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+                k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+                v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
+                y: TensorMut::new(dy_ref.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
+                lse: TensorMut::new(dlse_ref.as_slice_mut(), sl, contiguous_stride(sl)).unwrap(),
                 mask: None,
                 alibi_slopes: None,
             },
@@ -161,31 +141,11 @@ fn flash_sdpa_sm89_strided_f16_contig_fast_path() {
         &stream,
         Workspace::None,
         FlashSdpaSm89Args {
-            q: TensorRef {
-                data: dq.as_slice(),
-                shape: sq,
-                stride: contiguous_stride(sq),
-            },
-            k: TensorRef {
-                data: dk.as_slice(),
-                shape: sk,
-                stride: contiguous_stride(sk),
-            },
-            v: TensorRef {
-                data: dv.as_slice(),
-                shape: sv,
-                stride: contiguous_stride(sv),
-            },
-            y: TensorMut {
-                data: dy_sm89.as_slice_mut(),
-                shape: sy,
-                stride: contiguous_stride(sy),
-            },
-            lse: TensorMut {
-                data: dlse_sm89.as_slice_mut(),
-                shape: sl,
-                stride: contiguous_stride(sl),
-            },
+            q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+            k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+            v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
+            y: TensorMut::new(dy_sm89.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
+            lse: TensorMut::new(dlse_sm89.as_slice_mut(), sl, contiguous_stride(sl)).unwrap(),
         },
     )
     .expect("sm89 run");
@@ -279,31 +239,11 @@ fn flash_sdpa_sm89_strided_f16_transposed_q() {
             &stream,
             Workspace::None,
             FlashSdpaArgs {
-                q: TensorRef {
-                    data: dq_contig.as_slice(),
-                    shape: sq,
-                    stride: contiguous_stride(sq),
-                },
-                k: TensorRef {
-                    data: dk.as_slice(),
-                    shape: sk,
-                    stride: contiguous_stride(sk),
-                },
-                v: TensorRef {
-                    data: dv.as_slice(),
-                    shape: sv,
-                    stride: contiguous_stride(sv),
-                },
-                y: TensorMut {
-                    data: dy_ref.as_slice_mut(),
-                    shape: sy,
-                    stride: contiguous_stride(sy),
-                },
-                lse: TensorMut {
-                    data: dlse_ref.as_slice_mut(),
-                    shape: sl,
-                    stride: contiguous_stride(sl),
-                },
+                q: TensorRef::new(dq_contig.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+                k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+                v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
+                y: TensorMut::new(dy_ref.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
+                lse: TensorMut::new(dlse_ref.as_slice_mut(), sl, contiguous_stride(sl)).unwrap(),
                 mask: None,
                 alibi_slopes: None,
             },
@@ -333,31 +273,11 @@ fn flash_sdpa_sm89_strided_f16_transposed_q() {
         &stream,
         Workspace::None,
         FlashSdpaSm89Args {
-            q: TensorRef {
-                data: dq_phys.as_slice(),
-                shape: sq,
-                stride: stride_q,
-            },
-            k: TensorRef {
-                data: dk.as_slice(),
-                shape: sk,
-                stride: contiguous_stride(sk),
-            },
-            v: TensorRef {
-                data: dv.as_slice(),
-                shape: sv,
-                stride: contiguous_stride(sv),
-            },
-            y: TensorMut {
-                data: dy_sm89.as_slice_mut(),
-                shape: sy,
-                stride: contiguous_stride(sy),
-            },
-            lse: TensorMut {
-                data: dlse_sm89.as_slice_mut(),
-                shape: sl,
-                stride: contiguous_stride(sl),
-            },
+            q: TensorRef::new(dq_phys.as_slice(), sq, stride_q).unwrap(),
+            k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+            v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
+            y: TensorMut::new(dy_sm89.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
+            lse: TensorMut::new(dlse_sm89.as_slice_mut(), sl, contiguous_stride(sl)).unwrap(),
         },
     )
     .expect("sm89 strided run");
@@ -455,31 +375,11 @@ fn flash_sdpa_sm89_strided_f16_gqa_broadcast() {
             &stream,
             Workspace::None,
             FlashSdpaArgs {
-                q: TensorRef {
-                    data: dq.as_slice(),
-                    shape: sq,
-                    stride: contiguous_stride(sq),
-                },
-                k: TensorRef {
-                    data: dk_full.as_slice(),
-                    shape: sk,
-                    stride: contiguous_stride(sk),
-                },
-                v: TensorRef {
-                    data: dv_full.as_slice(),
-                    shape: sv,
-                    stride: contiguous_stride(sv),
-                },
-                y: TensorMut {
-                    data: dy_ref.as_slice_mut(),
-                    shape: sy,
-                    stride: contiguous_stride(sy),
-                },
-                lse: TensorMut {
-                    data: dlse_ref.as_slice_mut(),
-                    shape: sl,
-                    stride: contiguous_stride(sl),
-                },
+                q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+                k: TensorRef::new(dk_full.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+                v: TensorRef::new(dv_full.as_slice(), sv, contiguous_stride(sv)).unwrap(),
+                y: TensorMut::new(dy_ref.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
+                lse: TensorMut::new(dlse_ref.as_slice_mut(), sl, contiguous_stride(sl)).unwrap(),
                 mask: None,
                 alibi_slopes: None,
             },
@@ -518,31 +418,11 @@ fn flash_sdpa_sm89_strided_f16_gqa_broadcast() {
         &stream,
         Workspace::None,
         FlashSdpaSm89Args {
-            q: TensorRef {
-                data: dq.as_slice(),
-                shape: sq,
-                stride: contiguous_stride(sq),
-            },
-            k: TensorRef {
-                data: dk_one.as_slice(),
-                shape: sk,
-                stride: stride_k,
-            },
-            v: TensorRef {
-                data: dv_one.as_slice(),
-                shape: sv,
-                stride: stride_v,
-            },
-            y: TensorMut {
-                data: dy_sm89.as_slice_mut(),
-                shape: sy,
-                stride: contiguous_stride(sy),
-            },
-            lse: TensorMut {
-                data: dlse_sm89.as_slice_mut(),
-                shape: sl,
-                stride: contiguous_stride(sl),
-            },
+            q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+            k: TensorRef::new(dk_one.as_slice(), sk, stride_k).unwrap(),
+            v: TensorRef::new(dv_one.as_slice(), sv, stride_v).unwrap(),
+            y: TensorMut::new(dy_sm89.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
+            lse: TensorMut::new(dlse_sm89.as_slice_mut(), sl, contiguous_stride(sl)).unwrap(),
         },
     )
     .expect("sm89 gqa run");
@@ -626,31 +506,11 @@ fn flash_sdpa_sm89_strided_bf16_transposed_q_causal() {
             &stream,
             Workspace::None,
             FlashSdpaArgs {
-                q: TensorRef {
-                    data: dq_contig.as_slice(),
-                    shape: sq,
-                    stride: contiguous_stride(sq),
-                },
-                k: TensorRef {
-                    data: dk.as_slice(),
-                    shape: sk,
-                    stride: contiguous_stride(sk),
-                },
-                v: TensorRef {
-                    data: dv.as_slice(),
-                    shape: sv,
-                    stride: contiguous_stride(sv),
-                },
-                y: TensorMut {
-                    data: dy_ref.as_slice_mut(),
-                    shape: sy,
-                    stride: contiguous_stride(sy),
-                },
-                lse: TensorMut {
-                    data: dlse_ref.as_slice_mut(),
-                    shape: sl,
-                    stride: contiguous_stride(sl),
-                },
+                q: TensorRef::new(dq_contig.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+                k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+                v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
+                y: TensorMut::new(dy_ref.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
+                lse: TensorMut::new(dlse_ref.as_slice_mut(), sl, contiguous_stride(sl)).unwrap(),
                 mask: None,
                 alibi_slopes: None,
             },
@@ -679,31 +539,11 @@ fn flash_sdpa_sm89_strided_bf16_transposed_q_causal() {
         &stream,
         Workspace::None,
         FlashSdpaSm89Args {
-            q: TensorRef {
-                data: dq_phys.as_slice(),
-                shape: sq,
-                stride: stride_q,
-            },
-            k: TensorRef {
-                data: dk.as_slice(),
-                shape: sk,
-                stride: contiguous_stride(sk),
-            },
-            v: TensorRef {
-                data: dv.as_slice(),
-                shape: sv,
-                stride: contiguous_stride(sv),
-            },
-            y: TensorMut {
-                data: dy_sm89.as_slice_mut(),
-                shape: sy,
-                stride: contiguous_stride(sy),
-            },
-            lse: TensorMut {
-                data: dlse_sm89.as_slice_mut(),
-                shape: sl,
-                stride: contiguous_stride(sl),
-            },
+            q: TensorRef::new(dq_phys.as_slice(), sq, stride_q).unwrap(),
+            k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+            v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
+            y: TensorMut::new(dy_sm89.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
+            lse: TensorMut::new(dlse_sm89.as_slice_mut(), sl, contiguous_stride(sl)).unwrap(),
         },
     )
     .expect("sm89 causal run");
@@ -736,7 +576,9 @@ fn flash_sdpa_sm89_strided_rejects_non_unit_head_dim_stride() {
     let (ctx, stream) = setup();
     let scale = default_scale();
     let n = (B * H * Q * DK) as usize;
-    let host = vec![f16::ZERO; n];
+    // 2x: the bad stride below reaches twice the contiguous extent, and the view
+    // constructor refuses a view that reaches past its slice.
+    let host = vec![f16::ZERO; 2 * n];
     let dq = DeviceBuffer::from_slice(&ctx, &host).expect("up q");
     let dk_n = (B * H * K * DK) as usize;
     let dv_n = (B * H * K * DV) as usize;
@@ -778,31 +620,11 @@ fn flash_sdpa_sm89_strided_rejects_non_unit_head_dim_stride() {
         &stream,
         Workspace::None,
         FlashSdpaSm89Args {
-            q: TensorRef {
-                data: dq.as_slice(),
-                shape: sq,
-                stride: bad_stride_q,
-            },
-            k: TensorRef {
-                data: dk.as_slice(),
-                shape: sk,
-                stride: contiguous_stride(sk),
-            },
-            v: TensorRef {
-                data: dv.as_slice(),
-                shape: sv,
-                stride: contiguous_stride(sv),
-            },
-            y: TensorMut {
-                data: dy.as_slice_mut(),
-                shape: sy,
-                stride: contiguous_stride(sy),
-            },
-            lse: TensorMut {
-                data: dlse.as_slice_mut(),
-                shape: sl,
-                stride: contiguous_stride(sl),
-            },
+            q: TensorRef::new(dq.as_slice(), sq, bad_stride_q).unwrap(),
+            k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+            v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
+            y: TensorMut::new(dy.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
+            lse: TensorMut::new(dlse.as_slice_mut(), sl, contiguous_stride(sl)).unwrap(),
         },
     );
     assert!(

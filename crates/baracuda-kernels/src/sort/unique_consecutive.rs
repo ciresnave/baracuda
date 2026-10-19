@@ -128,22 +128,22 @@ impl<T: Element> UniqueConsecutivePlan<T> {
         crate::view_check::check_fits(&args.values)?;
         crate::view_check::check_fits(&args.counts)?;
         crate::view_check::check_fits(&args.counter)?;
-        if args.input.shape != [self.desc.batch, self.desc.row_len] {
+        if args.input.shape() != [self.desc.batch, self.desc.row_len] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::UniqueConsecutivePlan: input shape != [batch, row_len]",
             ));
         }
-        if args.values.shape != [self.desc.batch, self.desc.max_unique] {
+        if args.values.shape() != [self.desc.batch, self.desc.max_unique] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::UniqueConsecutivePlan: values shape != [batch, max_unique]",
             ));
         }
-        if args.counts.shape != [self.desc.batch, self.desc.max_unique] {
+        if args.counts.shape() != [self.desc.batch, self.desc.max_unique] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::UniqueConsecutivePlan: counts shape != [batch, max_unique]",
             ));
         }
-        if args.counter.shape != [self.desc.batch] {
+        if args.counter.shape() != [self.desc.batch] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::UniqueConsecutivePlan: counter shape != [batch]",
             ));
@@ -180,10 +180,10 @@ impl<T: Element> UniqueConsecutivePlan<T> {
         if self.desc.batch == 0 {
             return Ok(());
         }
-        let in_ptr = args.input.data.as_raw().0 as *const c_void;
-        let vals_ptr = args.values.data.as_raw().0 as *mut c_void;
-        let counts_ptr = args.counts.data.as_raw().0 as *mut c_void;
-        let counter_ptr = args.counter.data.as_raw().0 as *mut c_void;
+        let in_ptr = args.input.data().as_raw().0 as *const c_void;
+        let vals_ptr = args.values.data().as_raw().0 as *mut c_void;
+        let counts_ptr = args.counts.data().as_raw().0 as *mut c_void;
+        let counter_ptr = args.counter.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
         let status = match T::KIND {

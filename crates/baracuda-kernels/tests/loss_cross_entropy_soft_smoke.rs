@@ -85,22 +85,22 @@ fn loss_cross_entropy_soft_f32_mean() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         CrossEntropyLossArgs {
-            input: TensorRef {
-                data: dev_inp.as_slice(),
-                shape: [n_rows, class_extent],
-                stride: contiguous_stride([n_rows, class_extent]),
-            },
+            input: TensorRef::new(
+                dev_inp.as_slice(),
+                [n_rows, class_extent],
+                contiguous_stride([n_rows, class_extent]),
+            )
+            .unwrap(),
             target: None,
-            soft_target: Some(TensorRef {
-                data: dev_t.as_slice(),
-                shape: [n_rows, class_extent],
-                stride: contiguous_stride([n_rows, class_extent]),
-            }),
-            out: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: [1],
-                stride: [1],
-            },
+            soft_target: Some(
+                TensorRef::new(
+                    dev_t.as_slice(),
+                    [n_rows, class_extent],
+                    contiguous_stride([n_rows, class_extent]),
+                )
+                .unwrap(),
+            ),
+            out: TensorMut::new(dev_y.as_slice_mut(), [1], [1]).unwrap(),
         },
     )
     .unwrap();
@@ -147,22 +147,22 @@ fn loss_cross_entropy_soft_f64_mean() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         CrossEntropyLossArgs {
-            input: TensorRef {
-                data: dev_inp.as_slice(),
-                shape: [n_rows, class_extent],
-                stride: contiguous_stride([n_rows, class_extent]),
-            },
+            input: TensorRef::new(
+                dev_inp.as_slice(),
+                [n_rows, class_extent],
+                contiguous_stride([n_rows, class_extent]),
+            )
+            .unwrap(),
             target: None,
-            soft_target: Some(TensorRef {
-                data: dev_t.as_slice(),
-                shape: [n_rows, class_extent],
-                stride: contiguous_stride([n_rows, class_extent]),
-            }),
-            out: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: [1],
-                stride: [1],
-            },
+            soft_target: Some(
+                TensorRef::new(
+                    dev_t.as_slice(),
+                    [n_rows, class_extent],
+                    contiguous_stride([n_rows, class_extent]),
+                )
+                .unwrap(),
+            ),
+            out: TensorMut::new(dev_y.as_slice_mut(), [1], [1]).unwrap(),
         },
     )
     .unwrap();
@@ -207,22 +207,22 @@ fn loss_cross_entropy_soft_f16_mean() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         CrossEntropyLossArgs {
-            input: TensorRef {
-                data: dev_inp.as_slice(),
-                shape: [n_rows, class_extent],
-                stride: contiguous_stride([n_rows, class_extent]),
-            },
+            input: TensorRef::new(
+                dev_inp.as_slice(),
+                [n_rows, class_extent],
+                contiguous_stride([n_rows, class_extent]),
+            )
+            .unwrap(),
             target: None,
-            soft_target: Some(TensorRef {
-                data: dev_t.as_slice(),
-                shape: [n_rows, class_extent],
-                stride: contiguous_stride([n_rows, class_extent]),
-            }),
-            out: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: [1],
-                stride: [1],
-            },
+            soft_target: Some(
+                TensorRef::new(
+                    dev_t.as_slice(),
+                    [n_rows, class_extent],
+                    contiguous_stride([n_rows, class_extent]),
+                )
+                .unwrap(),
+            ),
+            out: TensorMut::new(dev_y.as_slice_mut(), [1], [1]).unwrap(),
         },
     )
     .unwrap();
@@ -273,22 +273,22 @@ fn loss_cross_entropy_soft_bf16_mean() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         CrossEntropyLossArgs {
-            input: TensorRef {
-                data: dev_inp.as_slice(),
-                shape: [n_rows, class_extent],
-                stride: contiguous_stride([n_rows, class_extent]),
-            },
+            input: TensorRef::new(
+                dev_inp.as_slice(),
+                [n_rows, class_extent],
+                contiguous_stride([n_rows, class_extent]),
+            )
+            .unwrap(),
             target: None,
-            soft_target: Some(TensorRef {
-                data: dev_t.as_slice(),
-                shape: [n_rows, class_extent],
-                stride: contiguous_stride([n_rows, class_extent]),
-            }),
-            out: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: [1],
-                stride: [1],
-            },
+            soft_target: Some(
+                TensorRef::new(
+                    dev_t.as_slice(),
+                    [n_rows, class_extent],
+                    contiguous_stride([n_rows, class_extent]),
+                )
+                .unwrap(),
+            ),
+            out: TensorMut::new(dev_y.as_slice_mut(), [1], [1]).unwrap(),
         },
     )
     .unwrap();

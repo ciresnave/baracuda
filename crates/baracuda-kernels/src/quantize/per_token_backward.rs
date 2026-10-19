@@ -122,20 +122,20 @@ impl<TIn: Element> QuantizePerTokenBackwardPlan<TIn> {
         crate::view_check::check_fits(&args.zero_point)?;
         crate::view_check::check_fits(&args.d_input)?;
         let expect = [self.desc.n, self.desc.d];
-        if args.d_output.shape != expect
-            || args.input.shape != expect
-            || args.d_input.shape != expect
+        if args.d_output.shape() != expect
+            || args.input.shape() != expect
+            || args.d_input.shape() != expect
         {
             return Err(Error::InvalidProblem(
                 "QuantizePerTokenBackwardPlan: tensor shape != [n, d]",
             ));
         }
-        if args.scale.shape != [self.desc.n] {
+        if args.scale.shape() != [self.desc.n] {
             return Err(Error::InvalidProblem(
                 "QuantizePerTokenBackwardPlan: scale shape != [n]",
             ));
         }
-        if args.zero_point.shape != [self.desc.n] {
+        if args.zero_point.shape() != [self.desc.n] {
             return Err(Error::InvalidProblem(
                 "QuantizePerTokenBackwardPlan: zero_point shape != [n]",
             ));
@@ -173,11 +173,11 @@ impl<TIn: Element> QuantizePerTokenBackwardPlan<TIn> {
         if total == 0 {
             return Ok(());
         }
-        let dy_ptr = args.d_output.data.as_raw().0 as *const c_void;
-        let x_ptr = args.input.data.as_raw().0 as *const c_void;
-        let sc_ptr = args.scale.data.as_raw().0 as *const c_void;
-        let zp_ptr = args.zero_point.data.as_raw().0 as *const c_void;
-        let dx_ptr = args.d_input.data.as_raw().0 as *mut c_void;
+        let dy_ptr = args.d_output.data().as_raw().0 as *const c_void;
+        let x_ptr = args.input.data().as_raw().0 as *const c_void;
+        let sc_ptr = args.scale.data().as_raw().0 as *const c_void;
+        let zp_ptr = args.zero_point.data().as_raw().0 as *const c_void;
+        let dx_ptr = args.d_input.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
         let status = match TIn::KIND {

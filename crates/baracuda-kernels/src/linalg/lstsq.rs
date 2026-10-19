@@ -432,28 +432,28 @@ impl<T: Element> LstSqPlan<T> {
         let m = self.desc.m;
         let n = self.desc.n;
         let nrhs = self.desc.nrhs;
-        if args.a.shape != [m, n] {
+        if args.a.shape() != [m, n] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::LstSqPlan: A shape != [M, N]",
             ));
         }
-        if args.b.shape != [m, nrhs] {
+        if args.b.shape() != [m, nrhs] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::LstSqPlan: B shape != [M, NRHS]",
             ));
         }
-        if args.x.shape != [n, nrhs] {
+        if args.x.shape() != [n, nrhs] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::LstSqPlan: X shape != [N, NRHS]",
             ));
         }
-        if args.info.shape != [1] {
+        if args.info.shape() != [1] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::LstSqPlan: info shape != [1]",
             ));
         }
         if let Some(ref bkp) = args.a_backup {
-            if bkp.shape != [m, n] {
+            if bkp.shape() != [m, n] {
                 return Err(Error::InvalidProblem(
                     "baracuda-kernels::LstSqPlan: a_backup shape != [M, N]",
                 ));
@@ -512,10 +512,10 @@ macro_rules! impl_lstsq_run {
                     }
                 };
 
-                let a_ptr = args.a.data.as_raw().0 as *mut $T;
-                let b_ptr = args.b.data.as_raw().0 as *mut $T;
-                let x_ptr = args.x.data.as_raw().0 as *mut $T;
-                let info_ptr = args.info.data.as_raw().0 as *mut i32;
+                let a_ptr = args.a.data().as_raw().0 as *mut $T;
+                let b_ptr = args.b.data().as_raw().0 as *mut $T;
+                let x_ptr = args.x.data().as_raw().0 as *mut $T;
+                let info_ptr = args.info.data().as_raw().0 as *mut i32;
 
                 let mut niters: i32 = 0;
                 let status = unsafe {
@@ -579,8 +579,8 @@ macro_rules! impl_lstsq_run {
 
                 // 1. Restore A from caller's backup (D2D copy).
                 let a_bytes = (m as usize) * (n as usize) * elem_size;
-                let backup_ptr = backup.data.as_raw().0 as *const c_void;
-                let a_dev_ptr = args.a.data.as_raw().0 as *mut c_void;
+                let backup_ptr = backup.data().as_raw().0 as *const c_void;
+                let a_dev_ptr = args.a.data().as_raw().0 as *mut c_void;
                 unsafe {
                     copy_d2d(a_dev_ptr, backup_ptr, a_bytes, stream)?;
                 }

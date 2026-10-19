@@ -164,12 +164,12 @@ impl<T: Element> CascadeAttentionPlan<T> {
         crate::view_check::check_fits(&args.s_other)?;
         let v_shape = [self.desc.seq_len, self.desc.num_heads, self.desc.head_dim];
         let s_shape = [self.desc.seq_len, self.desc.num_heads];
-        if args.v.shape != v_shape || args.v_other.shape != v_shape {
+        if args.v.shape() != v_shape || args.v_other.shape() != v_shape {
             return Err(Error::InvalidProblem(
                 "CascadeAttentionPlan: v / v_other shape mismatch",
             ));
         }
-        if args.s.shape != s_shape || args.s_other.shape != s_shape {
+        if args.s.shape() != s_shape || args.s_other.shape() != s_shape {
             return Err(Error::InvalidProblem(
                 "CascadeAttentionPlan: s / s_other shape mismatch",
             ));
@@ -222,10 +222,10 @@ impl<T: Element> CascadeAttentionPlan<T> {
         #[cfg(feature = "flashinfer")]
         {
             let stream_ptr = stream.as_raw() as *mut c_void;
-            let v_ptr = args.v.data.as_raw().0 as *mut c_void;
-            let s_ptr = args.s.data.as_raw().0 as *mut c_void;
-            let v_other_ptr = args.v_other.data.as_raw().0 as *const c_void;
-            let s_other_ptr = args.s_other.data.as_raw().0 as *const c_void;
+            let v_ptr = args.v.data().as_raw().0 as *mut c_void;
+            let s_ptr = args.s.data().as_raw().0 as *mut c_void;
+            let v_other_ptr = args.v_other.data().as_raw().0 as *const c_void;
+            let s_other_ptr = args.s_other.data().as_raw().0 as *const c_void;
 
             let status = match T::KIND {
                 ElementKind::F16 => unsafe {
@@ -407,22 +407,22 @@ impl<T: Element> CascadeMergeStatesPlan<T> {
         ];
         let v_merged_shape = [self.desc.seq_len, self.desc.num_heads, self.desc.head_dim];
         let s_merged_shape = [self.desc.seq_len, self.desc.num_heads];
-        if args.v.shape != v_shape {
+        if args.v.shape() != v_shape {
             return Err(Error::InvalidProblem(
                 "CascadeMergeStatesPlan: v shape mismatch",
             ));
         }
-        if args.s.shape != s_shape {
+        if args.s.shape() != s_shape {
             return Err(Error::InvalidProblem(
                 "CascadeMergeStatesPlan: s shape mismatch",
             ));
         }
-        if args.v_merged.shape != v_merged_shape {
+        if args.v_merged.shape() != v_merged_shape {
             return Err(Error::InvalidProblem(
                 "CascadeMergeStatesPlan: v_merged shape mismatch",
             ));
         }
-        if args.s_merged.shape != s_merged_shape {
+        if args.s_merged.shape() != s_merged_shape {
             return Err(Error::InvalidProblem(
                 "CascadeMergeStatesPlan: s_merged shape mismatch",
             ));
@@ -475,10 +475,10 @@ impl<T: Element> CascadeMergeStatesPlan<T> {
         #[cfg(feature = "flashinfer")]
         {
             let stream_ptr = stream.as_raw() as *mut c_void;
-            let v_ptr = args.v.data.as_raw().0 as *const c_void;
-            let s_ptr = args.s.data.as_raw().0 as *const c_void;
-            let v_merged_ptr = args.v_merged.data.as_raw().0 as *mut c_void;
-            let s_merged_ptr = args.s_merged.data.as_raw().0 as *mut c_void;
+            let v_ptr = args.v.data().as_raw().0 as *const c_void;
+            let s_ptr = args.s.data().as_raw().0 as *const c_void;
+            let v_merged_ptr = args.v_merged.data().as_raw().0 as *mut c_void;
+            let s_merged_ptr = args.s_merged.data().as_raw().0 as *mut c_void;
 
             let status = match T::KIND {
                 ElementKind::F16 => unsafe {

@@ -37,16 +37,18 @@ fn argsort_f32_basic() {
         &stream,
         Workspace::None,
         ArgsortArgs::<f32> {
-            input: TensorRef {
-                data: dev_in.as_slice(),
-                shape: [batch, row_len],
-                stride: contiguous_stride([batch, row_len]),
-            },
-            indices: TensorMut {
-                data: dev_i.as_slice_mut(),
-                shape: [batch, row_len],
-                stride: contiguous_stride([batch, row_len]),
-            },
+            input: TensorRef::new(
+                dev_in.as_slice(),
+                [batch, row_len],
+                contiguous_stride([batch, row_len]),
+            )
+            .unwrap(),
+            indices: TensorMut::new(
+                dev_i.as_slice_mut(),
+                [batch, row_len],
+                contiguous_stride([batch, row_len]),
+            )
+            .unwrap(),
         },
     )
     .expect("run");

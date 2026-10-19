@@ -41,16 +41,18 @@ fn argmax_1d() {
         ArgReducePlan::<f32, 1>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let output_shape = [1i32];
     let args = ArgReduceArgs::<f32, 1> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: output_shape,
-            stride: contiguous_stride(output_shape),
-        },
+        x: TensorRef::new(
+            dev_x.as_slice(),
+            input_shape,
+            contiguous_stride(input_shape),
+        )
+        .unwrap(),
+        y: TensorMut::new(
+            dev_y.as_slice_mut(),
+            output_shape,
+            contiguous_stride(output_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -83,16 +85,18 @@ fn argmin_1d() {
         ArgReducePlan::<f32, 1>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let output_shape = [1i32];
     let args = ArgReduceArgs::<f32, 1> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: output_shape,
-            stride: contiguous_stride(output_shape),
-        },
+        x: TensorRef::new(
+            dev_x.as_slice(),
+            input_shape,
+            contiguous_stride(input_shape),
+        )
+        .unwrap(),
+        y: TensorMut::new(
+            dev_y.as_slice_mut(),
+            output_shape,
+            contiguous_stride(output_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -145,16 +149,8 @@ fn argmax_3d_axis_1() {
     let plan =
         ArgReducePlan::<f32, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = ArgReduceArgs::<f32, 3> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape: input_shape,
-            stride: in_strides,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: output_shape,
-            stride: out_strides,
-        },
+        x: TensorRef::new(dev_x.as_slice(), input_shape, in_strides).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), output_shape, out_strides).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -186,16 +182,18 @@ fn argmax_ties_pick_first() {
         ArgReducePlan::<f32, 1>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let output_shape = [1i32];
     let args = ArgReduceArgs::<f32, 1> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: output_shape,
-            stride: contiguous_stride(output_shape),
-        },
+        x: TensorRef::new(
+            dev_x.as_slice(),
+            input_shape,
+            contiguous_stride(input_shape),
+        )
+        .unwrap(),
+        y: TensorMut::new(
+            dev_y.as_slice_mut(),
+            output_shape,
+            contiguous_stride(output_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

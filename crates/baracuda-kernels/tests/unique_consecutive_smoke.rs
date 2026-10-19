@@ -44,26 +44,26 @@ fn unique_consecutive_i32_basic() {
         &stream,
         Workspace::None,
         UniqueConsecutiveArgs::<i32> {
-            input: TensorRef {
-                data: dev_in.as_slice(),
-                shape: [batch, row_len],
-                stride: contiguous_stride([batch, row_len]),
-            },
-            values: TensorMut {
-                data: dev_v.as_slice_mut(),
-                shape: [batch, max_unique],
-                stride: contiguous_stride([batch, max_unique]),
-            },
-            counts: TensorMut {
-                data: dev_c.as_slice_mut(),
-                shape: [batch, max_unique],
-                stride: contiguous_stride([batch, max_unique]),
-            },
-            counter: TensorMut {
-                data: dev_n.as_slice_mut(),
-                shape: [batch],
-                stride: contiguous_stride([batch]),
-            },
+            input: TensorRef::new(
+                dev_in.as_slice(),
+                [batch, row_len],
+                contiguous_stride([batch, row_len]),
+            )
+            .unwrap(),
+            values: TensorMut::new(
+                dev_v.as_slice_mut(),
+                [batch, max_unique],
+                contiguous_stride([batch, max_unique]),
+            )
+            .unwrap(),
+            counts: TensorMut::new(
+                dev_c.as_slice_mut(),
+                [batch, max_unique],
+                contiguous_stride([batch, max_unique]),
+            )
+            .unwrap(),
+            counter: TensorMut::new(dev_n.as_slice_mut(), [batch], contiguous_stride([batch]))
+                .unwrap(),
         },
     )
     .expect("run");

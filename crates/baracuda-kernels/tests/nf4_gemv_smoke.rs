@@ -106,26 +106,26 @@ fn nf4_gemv_m1_f16() {
     let weight_bytes_len = packed_u8.len() as i32;
     let absmax_len = absmax.len() as i32;
     let args = Nf4MmvqArgs::<f16> {
-        weight: TensorRef {
-            data: dev_w.as_slice(),
-            shape: [weight_bytes_len],
-            stride: contiguous_stride([weight_bytes_len]),
-        },
-        absmax: TensorRef {
-            data: dev_amax.as_slice(),
-            shape: [absmax_len],
-            stride: contiguous_stride([absmax_len]),
-        },
-        activation: TensorRef {
-            data: dev_y.as_slice(),
-            shape: [k as i32],
-            stride: contiguous_stride([k as i32]),
-        },
-        output: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: [n as i32],
-            stride: contiguous_stride([n as i32]),
-        },
+        weight: TensorRef::new(
+            dev_w.as_slice(),
+            [weight_bytes_len],
+            contiguous_stride([weight_bytes_len]),
+        )
+        .unwrap(),
+        absmax: TensorRef::new(
+            dev_amax.as_slice(),
+            [absmax_len],
+            contiguous_stride([absmax_len]),
+        )
+        .unwrap(),
+        activation: TensorRef::new(dev_y.as_slice(), [k as i32], contiguous_stride([k as i32]))
+            .unwrap(),
+        output: TensorMut::new(
+            dev_out.as_slice_mut(),
+            [n as i32],
+            contiguous_stride([n as i32]),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("gemv run");
     stream.synchronize().expect("sync");
@@ -193,26 +193,26 @@ fn nf4_gemv_m1_bf16() {
     let weight_bytes_len = packed_u8.len() as i32;
     let absmax_len = absmax.len() as i32;
     let args = Nf4MmvqArgs::<bf16> {
-        weight: TensorRef {
-            data: dev_w.as_slice(),
-            shape: [weight_bytes_len],
-            stride: contiguous_stride([weight_bytes_len]),
-        },
-        absmax: TensorRef {
-            data: dev_amax.as_slice(),
-            shape: [absmax_len],
-            stride: contiguous_stride([absmax_len]),
-        },
-        activation: TensorRef {
-            data: dev_y.as_slice(),
-            shape: [k as i32],
-            stride: contiguous_stride([k as i32]),
-        },
-        output: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: [n as i32],
-            stride: contiguous_stride([n as i32]),
-        },
+        weight: TensorRef::new(
+            dev_w.as_slice(),
+            [weight_bytes_len],
+            contiguous_stride([weight_bytes_len]),
+        )
+        .unwrap(),
+        absmax: TensorRef::new(
+            dev_amax.as_slice(),
+            [absmax_len],
+            contiguous_stride([absmax_len]),
+        )
+        .unwrap(),
+        activation: TensorRef::new(dev_y.as_slice(), [k as i32], contiguous_stride([k as i32]))
+            .unwrap(),
+        output: TensorMut::new(
+            dev_out.as_slice_mut(),
+            [n as i32],
+            contiguous_stride([n as i32]),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("gemv run");
     stream.synchronize().expect("sync");

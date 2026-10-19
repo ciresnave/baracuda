@@ -48,21 +48,9 @@ fn dropout_backward_f32_p_half() {
     let plan = DropoutBackwardPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = DropoutBackwardArgs::<f32, 1> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape,
-            stride,
-        },
-        mask: TensorRef {
-            data: dev_mask.as_slice(),
-            shape,
-            stride,
-        },
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape,
-            stride,
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), shape, stride).unwrap(),
+        mask: TensorRef::new(dev_mask.as_slice(), shape, stride).unwrap(),
+        dx: TensorMut::new(dev_dx.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args)
         .expect("dropout BW run");
@@ -119,21 +107,9 @@ fn dropout_backward_f64_p_one_third() {
     let plan =
         DropoutBackwardPlan::<f64, 1>::select(&stream, &desc, PlanPreference::default()).unwrap();
     let args = DropoutBackwardArgs::<f64, 1> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape,
-            stride,
-        },
-        mask: TensorRef {
-            data: dev_mask.as_slice(),
-            shape,
-            stride,
-        },
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape,
-            stride,
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), shape, stride).unwrap(),
+        mask: TensorRef::new(dev_mask.as_slice(), shape, stride).unwrap(),
+        dx: TensorMut::new(dev_dx.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).unwrap();
     stream.synchronize().unwrap();

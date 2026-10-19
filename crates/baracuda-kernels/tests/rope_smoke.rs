@@ -108,17 +108,9 @@ fn rope_f32_default_positions() {
         &stream,
         Workspace::None,
         RopeArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
             positions: None,
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            y: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
         },
     )
     .expect("run");
@@ -199,21 +191,9 @@ fn rope_f64_explicit_positions() {
         &stream,
         Workspace::None,
         RopeArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            positions: Some(TensorRef {
-                data: dev_pos.as_slice(),
-                shape: [seq],
-                stride: [1],
-            }),
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            positions: Some(TensorRef::new(dev_pos.as_slice(), [seq], [1]).unwrap()),
+            y: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
         },
     )
     .expect("run");
@@ -274,17 +254,9 @@ fn rope_f16_default_positions() {
         &stream,
         Workspace::None,
         RopeArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
             positions: None,
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            y: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
         },
     )
     .expect("run");
@@ -345,17 +317,9 @@ fn rope_bf16_default_positions() {
         &stream,
         Workspace::None,
         RopeArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
             positions: None,
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            y: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
         },
     )
     .expect("run");

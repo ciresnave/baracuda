@@ -147,10 +147,10 @@ impl<T: Element> CosineEmbeddingLossPlan<T> {
         }
         let (ws_ptr, ws_bytes) = unpack_workspace(workspace, self.workspace_size())?;
         let stream_ptr = stream.as_raw();
-        let x1_ptr = args.x1.data.as_raw().0 as *const c_void;
-        let x2_ptr = args.x2.data.as_raw().0 as *const c_void;
-        let t_ptr = args.t.data.as_raw().0 as *const c_void;
-        let out_ptr = args.out.data.as_raw().0 as *mut c_void;
+        let x1_ptr = args.x1.data().as_raw().0 as *const c_void;
+        let x2_ptr = args.x2.data().as_raw().0 as *const c_void;
+        let t_ptr = args.t.data().as_raw().0 as *const c_void;
+        let out_ptr = args.out.data().as_raw().0 as *mut c_void;
         let mode = self.desc.reduction as i32;
         let margin = self.desc.margin;
         let n_rows = self.desc.n_rows as i64;
@@ -362,12 +362,12 @@ impl<T: Element> CosineEmbeddingLossBackwardPlan<T> {
         };
         let margin = self.desc.margin;
         let stream_ptr = stream.as_raw();
-        let x1_ptr = args.x1.data.as_raw().0 as *const c_void;
-        let x2_ptr = args.x2.data.as_raw().0 as *const c_void;
-        let t_ptr = args.t.data.as_raw().0 as *const c_void;
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let dx1_ptr = args.dx1.data.as_raw().0 as *mut c_void;
-        let dx2_ptr = args.dx2.data.as_raw().0 as *mut c_void;
+        let x1_ptr = args.x1.data().as_raw().0 as *const c_void;
+        let x2_ptr = args.x2.data().as_raw().0 as *const c_void;
+        let t_ptr = args.t.data().as_raw().0 as *const c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let dx1_ptr = args.dx1.data().as_raw().0 as *mut c_void;
+        let dx2_ptr = args.dx2.data().as_raw().0 as *mut c_void;
         let row_stride_x: i64 = d_extent as i64;
         let status = match T::KIND {
             ElementKind::F32 => unsafe {

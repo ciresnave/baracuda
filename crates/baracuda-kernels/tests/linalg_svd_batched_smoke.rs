@@ -73,31 +73,11 @@ fn svd_batched_f32_basic() {
 
     let a_shape = [b, n, n];
     let args = BatchedSvdArgs::<f32> {
-        a: TensorMut {
-            data: dev_a.as_slice_mut(),
-            shape: a_shape,
-            stride: contiguous_stride(a_shape),
-        },
-        s: TensorMut {
-            data: dev_s.as_slice_mut(),
-            shape: [b, n],
-            stride: contiguous_stride([b, n]),
-        },
-        u: TensorMut {
-            data: dev_u.as_slice_mut(),
-            shape: a_shape,
-            stride: contiguous_stride(a_shape),
-        },
-        v: TensorMut {
-            data: dev_v.as_slice_mut(),
-            shape: a_shape,
-            stride: contiguous_stride(a_shape),
-        },
-        info: TensorMut {
-            data: dev_info.as_slice_mut(),
-            shape: [b],
-            stride: [1],
-        },
+        a: TensorMut::new(dev_a.as_slice_mut(), a_shape, contiguous_stride(a_shape)).unwrap(),
+        s: TensorMut::new(dev_s.as_slice_mut(), [b, n], contiguous_stride([b, n])).unwrap(),
+        u: TensorMut::new(dev_u.as_slice_mut(), a_shape, contiguous_stride(a_shape)).unwrap(),
+        v: TensorMut::new(dev_v.as_slice_mut(), a_shape, contiguous_stride(a_shape)).unwrap(),
+        info: TensorMut::new(dev_info.as_slice_mut(), [b], [1]).unwrap(),
     };
     plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
         .expect("run batched SVD f32");
@@ -200,31 +180,16 @@ fn svd_batched_f64_values_only() {
     let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_bytes).expect("alloc ws");
 
     let args = BatchedSvdArgs::<f64> {
-        a: TensorMut {
-            data: dev_a.as_slice_mut(),
-            shape: [b, n, n],
-            stride: contiguous_stride([b, n, n]),
-        },
-        s: TensorMut {
-            data: dev_s.as_slice_mut(),
-            shape: [b, n],
-            stride: contiguous_stride([b, n]),
-        },
-        u: TensorMut {
-            data: dev_u.as_slice_mut(),
-            shape: [1, 1, 1],
-            stride: [1, 1, 1],
-        },
-        v: TensorMut {
-            data: dev_v.as_slice_mut(),
-            shape: [1, 1, 1],
-            stride: [1, 1, 1],
-        },
-        info: TensorMut {
-            data: dev_info.as_slice_mut(),
-            shape: [b],
-            stride: [1],
-        },
+        a: TensorMut::new(
+            dev_a.as_slice_mut(),
+            [b, n, n],
+            contiguous_stride([b, n, n]),
+        )
+        .unwrap(),
+        s: TensorMut::new(dev_s.as_slice_mut(), [b, n], contiguous_stride([b, n])).unwrap(),
+        u: TensorMut::new(dev_u.as_slice_mut(), [1, 1, 1], [1, 1, 1]).unwrap(),
+        v: TensorMut::new(dev_v.as_slice_mut(), [1, 1, 1], [1, 1, 1]).unwrap(),
+        info: TensorMut::new(dev_info.as_slice_mut(), [b], [1]).unwrap(),
     };
     plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
         .expect("run batched SVD f64");

@@ -104,26 +104,10 @@ fn fma_f32_3d() {
     let plan = TernaryPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select TernaryPlan<f32, 3>");
     let args = TernaryArgs::<f32, 3> {
-        a: TensorRef {
-            data: dev_a.as_slice(),
-            shape,
-            stride,
-        },
-        b: TensorRef {
-            data: dev_b.as_slice(),
-            shape,
-            stride,
-        },
-        c: TensorRef {
-            data: dev_c.as_slice(),
-            shape,
-            stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
+        a: TensorRef::new(dev_a.as_slice(), shape, stride).unwrap(),
+        b: TensorRef::new(dev_b.as_slice(), shape, stride).unwrap(),
+        c: TensorRef::new(dev_c.as_slice(), shape, stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args)
         .expect("fma f32 run");
@@ -179,26 +163,10 @@ fn fma_f16_3d() {
     let plan = TernaryPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select TernaryPlan<f16, 3>");
     let args = TernaryArgs::<f16, 3> {
-        a: TensorRef {
-            data: dev_a.as_slice(),
-            shape,
-            stride,
-        },
-        b: TensorRef {
-            data: dev_b.as_slice(),
-            shape,
-            stride,
-        },
-        c: TensorRef {
-            data: dev_c.as_slice(),
-            shape,
-            stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
+        a: TensorRef::new(dev_a.as_slice(), shape, stride).unwrap(),
+        b: TensorRef::new(dev_b.as_slice(), shape, stride).unwrap(),
+        c: TensorRef::new(dev_c.as_slice(), shape, stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args)
         .expect("fma f16 run");
@@ -248,26 +216,10 @@ fn fma_bf16_3d() {
     let plan = TernaryPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select TernaryPlan<bf16, 3>");
     let args = TernaryArgs::<bf16, 3> {
-        a: TensorRef {
-            data: dev_a.as_slice(),
-            shape,
-            stride,
-        },
-        b: TensorRef {
-            data: dev_b.as_slice(),
-            shape,
-            stride,
-        },
-        c: TensorRef {
-            data: dev_c.as_slice(),
-            shape,
-            stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
+        a: TensorRef::new(dev_a.as_slice(), shape, stride).unwrap(),
+        b: TensorRef::new(dev_b.as_slice(), shape, stride).unwrap(),
+        c: TensorRef::new(dev_c.as_slice(), shape, stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args)
         .expect("fma bf16 run");
@@ -317,26 +269,10 @@ fn fma_f64_3d() {
     let plan = TernaryPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select TernaryPlan<f64, 3>");
     let args = TernaryArgs::<f64, 3> {
-        a: TensorRef {
-            data: dev_a.as_slice(),
-            shape,
-            stride,
-        },
-        b: TensorRef {
-            data: dev_b.as_slice(),
-            shape,
-            stride,
-        },
-        c: TensorRef {
-            data: dev_c.as_slice(),
-            shape,
-            stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
+        a: TensorRef::new(dev_a.as_slice(), shape, stride).unwrap(),
+        b: TensorRef::new(dev_b.as_slice(), shape, stride).unwrap(),
+        c: TensorRef::new(dev_c.as_slice(), shape, stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args)
         .expect("fma f64 run");
@@ -412,26 +348,10 @@ fn fma_f32_strided_broadcast_c() {
     let plan = TernaryPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select TernaryPlan<f32, 2>");
     let args = TernaryArgs::<f32, 2> {
-        a: TensorRef {
-            data: dev_a.as_slice(),
-            shape: a_shape,
-            stride: a_stride,
-        },
-        b: TensorRef {
-            data: dev_b.as_slice(),
-            shape: b_shape,
-            stride: b_stride,
-        },
-        c: TensorRef {
-            data: dev_c.as_slice(),
-            shape: c_shape,
-            stride: c_stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: y_shape,
-            stride: y_stride,
-        },
+        a: TensorRef::new(dev_a.as_slice(), a_shape, a_stride).unwrap(),
+        b: TensorRef::new(dev_b.as_slice(), b_shape, b_stride).unwrap(),
+        c: TensorRef::new(dev_c.as_slice(), c_shape, c_stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), y_shape, y_stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args)
         .expect("fma f32 strided run");

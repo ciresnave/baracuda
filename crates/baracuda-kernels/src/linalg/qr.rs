@@ -291,22 +291,22 @@ impl<T: Element> QrPlan<T> {
     fn check_args(&self, args: &QrArgs<'_, T>) -> Result<()> {
         let m = self.desc.m;
         let n = self.desc.n;
-        if args.a.shape != [m, n] {
+        if args.a.shape() != [m, n] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::QrPlan: A shape != [M, N]",
             ));
         }
-        if args.q.shape != [m, m] {
+        if args.q.shape() != [m, m] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::QrPlan: Q shape != [M, M]",
             ));
         }
-        if args.r.shape != [m, n] {
+        if args.r.shape() != [m, n] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::QrPlan: R shape != [M, N]",
             ));
         }
-        if args.info.shape != [1] {
+        if args.info.shape() != [1] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::QrPlan: info shape != [1]",
             ));
@@ -370,8 +370,8 @@ macro_rules! impl_qr_run {
                 let tail_ptr = unsafe { (ws_ptr as *mut u8).add(tau_bytes) as *mut $T };
                 let lwork = (tail_bytes / elem_size) as i32;
 
-                let a_ptr = args.a.data.as_raw().0 as *mut $T;
-                let info_ptr = args.info.data.as_raw().0 as *mut i32;
+                let a_ptr = args.a.data().as_raw().0 as *mut $T;
+                let info_ptr = args.info.data().as_raw().0 as *mut i32;
 
                 // 1. geqrf — overwrites `a` with R (upper) + Householder
                 //    vectors (strict lower), populates `tau`.
@@ -402,7 +402,7 @@ macro_rules! impl_qr_run {
                         }
                     }
                 }
-                let r_ptr = args.r.data.as_raw().0 as *mut $T;
+                let r_ptr = args.r.data().as_raw().0 as *mut $T;
                 unsafe {
                     copy_h2d_typed(
                         r_ptr as *mut c_void,
@@ -417,7 +417,7 @@ macro_rules! impl_qr_run {
                 let m_sz = (m as usize) * (m as usize);
                 let mut host_id: Vec<$T> = vec![<$T as Default>::default(); m_sz];
                 fill_identity(&mut host_id, m as usize);
-                let q_ptr = args.q.data.as_raw().0 as *mut $T;
+                let q_ptr = args.q.data().as_raw().0 as *mut $T;
                 let q_bytes = m_sz * elem_size;
                 unsafe {
                     copy_h2d_typed(

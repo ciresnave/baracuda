@@ -91,16 +91,8 @@ fn triu_f32_3x3_diagonal_0() {
     let plan =
         TriuPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = TriuArgs::<f32, 2> {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        output: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        input: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        output: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -130,16 +122,8 @@ fn triu_f32_3x3_diagonal_1() {
     let plan =
         TriuPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = TriuArgs::<f32, 2> {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        output: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        input: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        output: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -169,16 +153,8 @@ fn triu_f32_3x4_diagonal_neg1() {
     let plan =
         TriuPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = TriuArgs::<f32, 2> {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        output: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        input: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        output: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -212,16 +188,8 @@ fn tril_f32_3x3_diagonal_0() {
     let plan =
         TrilPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = TrilArgs::<f32, 2> {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        output: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        input: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        output: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -251,16 +219,8 @@ fn tril_f32_3x3_diagonal_neg2() {
     let plan =
         TrilPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = TrilArgs::<f32, 2> {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        output: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        input: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        output: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -294,16 +254,8 @@ fn triu_batched_f32_2x3x4_diagonal_0() {
     let plan =
         TriuPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = TriuArgs::<f32, 3> {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        output: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        input: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        output: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -334,16 +286,8 @@ fn triu_bw_f32_3x3_diagonal_0() {
     let plan = TriuBackwardPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = TriuBackwardArgs::<f32, 2> {
-        grad_output: TensorRef {
-            data: dev_dy.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        grad_input: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        grad_output: TensorRef::new(dev_dy.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        grad_input: TensorMut::new(dev_dx.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -373,16 +317,8 @@ fn tril_bw_f32_3x3_diagonal_neg1() {
     let plan = TrilBackwardPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = TrilBackwardArgs::<f32, 2> {
-        grad_output: TensorRef {
-            data: dev_dy.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        grad_input: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        grad_output: TensorRef::new(dev_dy.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        grad_input: TensorMut::new(dev_dx.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -412,16 +348,8 @@ fn triu_i32_3x3_diagonal_0() {
     let plan =
         TriuPlan::<i32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = TriuArgs::<i32, 2> {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        output: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        input: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        output: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

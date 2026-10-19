@@ -179,23 +179,23 @@ impl<T: Element, const N: usize> RMSNormBackwardPlan<T, N> {
         if let Some(t) = &args.dgamma {
             crate::view_check::check_fits(t)?;
         }
-        if args.dy.shape != self.desc.input_shape {
+        if args.dy.shape() != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::RMSNormBackwardPlan: dy shape mismatch",
             ));
         }
-        if args.x.shape != self.desc.input_shape {
+        if args.x.shape() != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::RMSNormBackwardPlan: x shape mismatch",
             ));
         }
-        if args.dx.shape != self.desc.input_shape {
+        if args.dx.shape() != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::RMSNormBackwardPlan: dx shape mismatch",
             ));
         }
         let rms_shape = self.desc.rms_shape();
-        if args.rms.shape != rms_shape {
+        if args.rms.shape() != rms_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::RMSNormBackwardPlan: rms shape mismatch",
             ));
@@ -203,15 +203,16 @@ impl<T: Element, const N: usize> RMSNormBackwardPlan<T, N> {
         let total_extent = self.desc.norm_total_extent() as i64;
         match (&args.gamma, &args.dgamma, self.desc.has_gamma) {
             (Some(g), Some(dg), true) => {
-                if g.shape[0] as i64 != total_extent || dg.shape[0] as i64 != total_extent {
+                if g.shape()[0] as i64 != total_extent || dg.shape()[0] as i64 != total_extent {
                     return Err(Error::InvalidProblem(
                         "baracuda-kernels::RMSNormBackwardPlan: gamma / dgamma length != norm_total_extent",
                     ));
                 }
-                if (g.data.len() as i64) < total_extent || (dg.data.len() as i64) < total_extent {
+                if (g.data().len() as i64) < total_extent || (dg.data().len() as i64) < total_extent
+                {
                     return Err(Error::BufferTooSmall {
                         needed: total_extent as usize,
-                        got: g.data.len().min(dg.data.len()),
+                        got: g.data().len().min(dg.data().len()),
                     });
                 }
             }
@@ -224,10 +225,10 @@ impl<T: Element, const N: usize> RMSNormBackwardPlan<T, N> {
             }
         }
         let numel = args.dx.numel();
-        let dy_len = args.dy.data.len() as i64;
-        let x_len = args.x.data.len() as i64;
-        let dx_len = args.dx.data.len() as i64;
-        let rms_len = args.rms.data.len() as i64;
+        let dy_len = args.dy.data().len() as i64;
+        let x_len = args.x.data().len() as i64;
+        let dx_len = args.dx.data().len() as i64;
+        let rms_len = args.rms.data().len() as i64;
         let rms_numel = args.rms.numel();
         if dy_len < numel || x_len < numel || dx_len < numel {
             return Err(Error::BufferTooSmall {
@@ -273,24 +274,24 @@ impl<T: Element, const N: usize> RMSNormBackwardPlan<T, N> {
             return Ok(());
         }
         let stream_ptr = stream.as_raw();
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let x_ptr = args.x.data.as_raw().0 as *const c_void;
-        let rms_ptr = args.rms.data.as_raw().0 as *const c_void;
-        let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let x_ptr = args.x.data().as_raw().0 as *const c_void;
+        let rms_ptr = args.rms.data().as_raw().0 as *const c_void;
+        let dx_ptr = args.dx.data().as_raw().0 as *mut c_void;
         let gamma_ptr = match &args.gamma {
-            Some(g) => g.data.as_raw().0 as *const c_void,
+            Some(g) => g.data().as_raw().0 as *const c_void,
             None => core::ptr::null(),
         };
         let dgamma_ptr = match &mut args.dgamma {
-            Some(dg) => dg.data.as_raw().0 as *mut c_void,
+            Some(dg) => dg.data().as_raw().0 as *mut c_void,
             None => core::ptr::null_mut(),
         };
 
         let shape = self.desc.input_shape;
-        let stride_dy = args.dy.stride;
-        let stride_x = args.x.stride;
-        let stride_rms = args.rms.stride;
-        let stride_dx = args.dx.stride;
+        let stride_dy = args.dy.stride();
+        let stride_x = args.x.stride();
+        let stride_rms = args.rms.stride();
+        let stride_dx = args.dx.stride();
         let rank = N as i32;
         let mask = self.desc.norm_axes_mask as i32;
         let total_extent = self.desc.norm_total_extent();

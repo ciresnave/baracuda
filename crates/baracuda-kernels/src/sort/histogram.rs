@@ -104,12 +104,12 @@ impl<T: Element> HistogramPlan<T> {
     pub fn can_implement(&self, args: &HistogramArgs<'_, T>) -> Result<()> {
         crate::view_check::check_fits(&args.input)?;
         crate::view_check::check_fits(&args.output)?;
-        if (args.input.shape[0] as i64) != self.desc.numel {
+        if (args.input.shape()[0] as i64) != self.desc.numel {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::HistogramPlan: input shape[0] != descriptor numel",
             ));
         }
-        if args.output.shape != [self.desc.num_bins] {
+        if args.output.shape() != [self.desc.num_bins] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::HistogramPlan: output shape != [num_bins]",
             ));
@@ -146,8 +146,8 @@ impl<T: Element> HistogramPlan<T> {
         if self.desc.num_bins == 0 {
             return Ok(());
         }
-        let in_ptr = args.input.data.as_raw().0 as *const c_void;
-        let out_ptr = args.output.data.as_raw().0 as *mut c_void;
+        let in_ptr = args.input.data().as_raw().0 as *const c_void;
+        let out_ptr = args.output.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
         let status = match T::KIND {

@@ -120,17 +120,17 @@ impl<T: Element, const N: usize> BinaryParamPlan<T, N> {
         crate::view_check::check_fits(&args.a)?;
         crate::view_check::check_fits(&args.b)?;
         crate::view_check::check_fits(&args.y)?;
-        if args.a.shape != self.desc.shape {
+        if args.a.shape() != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::BinaryParamPlan: A shape mismatch",
             ));
         }
-        if args.b.shape != self.desc.shape {
+        if args.b.shape() != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::BinaryParamPlan: B shape mismatch",
             ));
         }
-        if args.y.shape != self.desc.shape {
+        if args.y.shape() != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::BinaryParamPlan: Y shape mismatch",
             ));
@@ -142,9 +142,9 @@ impl<T: Element, const N: usize> BinaryParamPlan<T, N> {
             ));
         }
         let numel = args.y.numel();
-        let a_len = args.a.data.len() as i64;
-        let b_len = args.b.data.len() as i64;
-        let y_len = args.y.data.len() as i64;
+        let a_len = args.a.data().len() as i64;
+        let b_len = args.b.data().len() as i64;
+        let y_len = args.y.data().len() as i64;
         if a_len < numel || b_len < numel || y_len < numel {
             return Err(Error::BufferTooSmall {
                 needed: numel as usize,
@@ -182,9 +182,9 @@ impl<T: Element, const N: usize> BinaryParamPlan<T, N> {
         if numel == 0 {
             return Ok(());
         }
-        let a_ptr = args.a.data.as_raw().0 as *const c_void;
-        let b_ptr = args.b.data.as_raw().0 as *const c_void;
-        let y_ptr = args.y.data.as_raw().0 as *mut c_void;
+        let a_ptr = args.a.data().as_raw().0 as *const c_void;
+        let b_ptr = args.b.data().as_raw().0 as *const c_void;
+        let y_ptr = args.y.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         let p = self.desc.param;
 

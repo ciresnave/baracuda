@@ -145,7 +145,7 @@ impl<T: Element> AlibiBackwardPlan<T> {
             self.desc.query_len,
             self.desc.key_len,
         ];
-        if args.dy.shape != want_shape {
+        if args.dy.shape() != want_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::AlibiBackwardPlan: dy shape mismatch",
             ));
@@ -161,7 +161,7 @@ impl<T: Element> AlibiBackwardPlan<T> {
             ));
         }
         if let Some(ref d) = args.dscores {
-            if d.shape != want_shape {
+            if d.shape() != want_shape {
                 return Err(Error::InvalidProblem(
                     "baracuda-kernels::AlibiBackwardPlan: dscores shape mismatch",
                 ));
@@ -172,31 +172,31 @@ impl<T: Element> AlibiBackwardPlan<T> {
                 ));
             }
             let numel = args.dy.numel();
-            if (d.data.len() as i64) < numel {
+            if (d.data().len() as i64) < numel {
                 return Err(Error::BufferTooSmall {
                     needed: numel as usize,
-                    got: d.data.len(),
+                    got: d.data().len(),
                 });
             }
         }
         if let Some(ref s) = args.dslopes {
-            if s.shape != [self.desc.num_heads] {
+            if s.shape() != [self.desc.num_heads] {
                 return Err(Error::InvalidProblem(
                     "baracuda-kernels::AlibiBackwardPlan: dslopes shape must be [num_heads]",
                 ));
             }
-            if (s.data.len() as i64) < self.desc.num_heads as i64 {
+            if (s.data().len() as i64) < self.desc.num_heads as i64 {
                 return Err(Error::BufferTooSmall {
                     needed: self.desc.num_heads as usize,
-                    got: s.data.len(),
+                    got: s.data().len(),
                 });
             }
         }
         let numel = args.dy.numel();
-        if (args.dy.data.len() as i64) < numel {
+        if (args.dy.data().len() as i64) < numel {
             return Err(Error::BufferTooSmall {
                 needed: numel as usize,
-                got: args.dy.data.len(),
+                got: args.dy.data().len(),
             });
         }
         Ok(())
@@ -233,13 +233,13 @@ impl<T: Element> AlibiBackwardPlan<T> {
             return Ok(());
         }
         let stream_ptr = stream.as_raw();
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
         let da_ptr = match &args.dscores {
-            Some(d) => d.data.as_raw().0 as *mut c_void,
+            Some(d) => d.data().as_raw().0 as *mut c_void,
             None => core::ptr::null_mut(),
         };
         let dslope_ptr = match &args.dslopes {
-            Some(s) => s.data.as_raw().0 as *mut c_void,
+            Some(s) => s.data().as_raw().0 as *mut c_void,
             None => core::ptr::null_mut(),
         };
 

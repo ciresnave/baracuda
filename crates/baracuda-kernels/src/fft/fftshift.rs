@@ -193,35 +193,35 @@ impl<T: Element> FftShiftPlan<T> {
         crate::view_check::check_dense(&args.x)?;
         crate::view_check::check_dense(&args.y)?;
         let expected = [self.desc.batch, self.desc.n];
-        if args.x.shape != expected {
+        if args.x.shape() != expected {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FftShiftPlan: x shape != [batch, n]",
             ));
         }
-        if args.y.shape != expected {
+        if args.y.shape() != expected {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FftShiftPlan: y shape != [batch, n]",
             ));
         }
         let numel = (self.desc.batch as i64) * (self.desc.n as i64);
-        if (args.x.data.len() as i64) < numel {
+        if (args.x.data().len() as i64) < numel {
             return Err(Error::BufferTooSmall {
                 needed: numel as usize,
-                got: args.x.data.len(),
+                got: args.x.data().len(),
             });
         }
-        if (args.y.data.len() as i64) < numel {
+        if (args.y.data().len() as i64) < numel {
             return Err(Error::BufferTooSmall {
                 needed: numel as usize,
-                got: args.y.data.len(),
+                got: args.y.data().len(),
             });
         }
         if numel == 0 {
             return Ok(());
         }
 
-        let x_ptr = args.x.data.as_raw().0 as *const c_void;
-        let y_ptr = args.y.data.as_raw().0 as *mut c_void;
+        let x_ptr = args.x.data().as_raw().0 as *const c_void;
+        let y_ptr = args.y.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         let batch = self.desc.batch as i64;
         let n = self.desc.n;

@@ -176,19 +176,19 @@ impl<T: Element, const N: usize> ScanBackwardPlan<T, N> {
         if let Some(t) = &args.y {
             crate::view_check::check_fits(t)?;
         }
-        if args.dy.shape != self.desc.input_shape {
+        if args.dy.shape() != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::ScanBackwardPlan: dy shape mismatch",
             ));
         }
-        if args.dx.shape != self.desc.input_shape {
+        if args.dx.shape() != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::ScanBackwardPlan: dx shape mismatch",
             ));
         }
         let numel = args.dx.numel();
-        let dy_len = args.dy.data.len() as i64;
-        let dx_len = args.dx.data.len() as i64;
+        let dy_len = args.dy.data().len() as i64;
+        let dx_len = args.dx.data().len() as i64;
         if dy_len < numel || dx_len < numel {
             return Err(Error::BufferTooSmall {
                 needed: numel as usize,
@@ -201,15 +201,15 @@ impl<T: Element, const N: usize> ScanBackwardPlan<T, N> {
                 "baracuda-kernels::ScanBackwardPlan: Cumprod / Cummax / Cummin BW \
                  require args.x (saved forward input)",
             ))?;
-            if x.shape != self.desc.input_shape {
+            if x.shape() != self.desc.input_shape {
                 return Err(Error::InvalidProblem(
                     "baracuda-kernels::ScanBackwardPlan: args.x shape mismatch",
                 ));
             }
-            if (x.data.len() as i64) < numel {
+            if (x.data().len() as i64) < numel {
                 return Err(Error::BufferTooSmall {
                     needed: numel as usize,
-                    got: x.data.len(),
+                    got: x.data().len(),
                 });
             }
         }
@@ -218,15 +218,15 @@ impl<T: Element, const N: usize> ScanBackwardPlan<T, N> {
                 "baracuda-kernels::ScanBackwardPlan: Cumprod BW requires args.y \
                  (saved forward output)",
             ))?;
-            if y.shape != self.desc.input_shape {
+            if y.shape() != self.desc.input_shape {
                 return Err(Error::InvalidProblem(
                     "baracuda-kernels::ScanBackwardPlan: args.y shape mismatch",
                 ));
             }
-            if (y.data.len() as i64) < numel {
+            if (y.data().len() as i64) < numel {
                 return Err(Error::BufferTooSmall {
                     needed: numel as usize,
-                    got: y.data.len(),
+                    got: y.data().len(),
                 });
             }
         }
@@ -261,14 +261,14 @@ impl<T: Element, const N: usize> ScanBackwardPlan<T, N> {
         if numel == 0 {
             return Ok(());
         }
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let dx_ptr = args.dx.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
         let axis = self.desc.scan_axis as usize;
         let shape = self.desc.input_shape;
-        let stride_dy = args.dy.stride;
-        let stride_dx = args.dx.stride;
+        let stride_dy = args.dy.stride();
+        let stride_dx = args.dx.stride();
         let rank = N as i32;
         let scan_extent = shape[axis];
         let reverse_flag = if self.desc.reverse { 1i32 } else { 0 };
@@ -321,10 +321,10 @@ impl<T: Element, const N: usize> ScanBackwardPlan<T, N> {
                 let y_ref = args
                     .y
                     .expect("Cumprod BW requires saved y — validated above");
-                let stride_x = x_ref.stride;
-                let stride_y = y_ref.stride;
-                let x_ptr = x_ref.data.as_raw().0 as *const c_void;
-                let y_ptr = y_ref.data.as_raw().0 as *const c_void;
+                let stride_x = x_ref.stride();
+                let stride_y = y_ref.stride();
+                let x_ptr = x_ref.data().as_raw().0 as *const c_void;
+                let y_ptr = y_ref.data().as_raw().0 as *const c_void;
                 macro_rules! dispatch_cumprod_bw {
                     ($sym:ident) => {
                         unsafe {
@@ -378,10 +378,10 @@ impl<T: Element, const N: usize> ScanBackwardPlan<T, N> {
                 let y_ref = args
                     .y
                     .expect("LogCumsumExp BW requires saved y — validated above");
-                let stride_x = x_ref.stride;
-                let stride_y = y_ref.stride;
-                let x_ptr = x_ref.data.as_raw().0 as *const c_void;
-                let y_ptr = y_ref.data.as_raw().0 as *const c_void;
+                let stride_x = x_ref.stride();
+                let stride_y = y_ref.stride();
+                let x_ptr = x_ref.data().as_raw().0 as *const c_void;
+                let y_ptr = y_ref.data().as_raw().0 as *const c_void;
                 macro_rules! dispatch_lcse_bw {
                     ($sym:ident) => {
                         unsafe {
@@ -432,8 +432,8 @@ impl<T: Element, const N: usize> ScanBackwardPlan<T, N> {
                 let x_ref = args
                     .x
                     .expect("Cummax/Cummin BW requires saved x — validated above");
-                let stride_x = x_ref.stride;
-                let x_ptr = x_ref.data.as_raw().0 as *const c_void;
+                let stride_x = x_ref.stride();
+                let x_ptr = x_ref.data().as_raw().0 as *const c_void;
                 macro_rules! dispatch_extrema_bw {
                     ($sym:ident) => {
                         unsafe {

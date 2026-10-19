@@ -110,13 +110,13 @@ impl<TIn: Element, TOut: IntElement> DequantizePerChannelBackwardPlan<TIn, TOut>
         crate::view_check::check_fits(&args.scale)?;
         crate::view_check::check_fits(&args.d_output)?;
         crate::view_check::check_fits(&args.d_input)?;
-        if args.d_output.shape != self.desc.shape || args.d_input.shape != self.desc.shape {
+        if args.d_output.shape() != self.desc.shape || args.d_input.shape() != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "DequantizePerChannelBackwardPlan: tensor shape mismatch",
             ));
         }
         let c = self.desc.shape[self.desc.axis as usize];
-        if args.scale.shape != [c] {
+        if args.scale.shape() != [c] {
             return Err(Error::InvalidProblem(
                 "DequantizePerChannelBackwardPlan: scale shape != [C]",
             ));
@@ -154,9 +154,9 @@ impl<TIn: Element, TOut: IntElement> DequantizePerChannelBackwardPlan<TIn, TOut>
         if numel == 0 {
             return Ok(());
         }
-        let sc_ptr = args.scale.data.as_raw().0 as *const c_void;
-        let dy_ptr = args.d_output.data.as_raw().0 as *const c_void;
-        let dq_ptr = args.d_input.data.as_raw().0 as *mut c_void;
+        let sc_ptr = args.scale.data().as_raw().0 as *const c_void;
+        let dy_ptr = args.d_output.data().as_raw().0 as *const c_void;
+        let dq_ptr = args.d_input.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         let shape4 = self.desc.shape.as_ptr();
         let axis = self.desc.axis as i32;

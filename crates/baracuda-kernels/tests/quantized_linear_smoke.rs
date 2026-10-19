@@ -131,36 +131,24 @@ fn quantized_linear_w8a8_f32_basic() {
     let plan = QuantizedLinearPlan::<f32, S8>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = QuantizedLinearArgs::<f32, S8> {
-        activation: TensorRef {
-            data: dev_a.as_slice(),
-            shape: [m, k],
-            stride: contiguous_stride([m, k]),
-        },
-        weight_q: TensorRef {
-            data: dev_wq,
-            shape: [c_out, k],
-            stride: contiguous_stride([c_out, k]),
-        },
-        weight_scale: TensorRef {
-            data: dev_w_scale.as_slice(),
-            shape: [c_out],
-            stride: contiguous_stride([c_out]),
-        },
-        output: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: [m, c_out],
-            stride: contiguous_stride([m, c_out]),
-        },
-        act_q_scratch: TensorMut {
-            data: dev_act_q.as_slice_mut(),
-            shape: [m, k],
-            stride: contiguous_stride([m, k]),
-        },
-        act_scale_scratch: TensorMut {
-            data: dev_act_scale.as_slice_mut(),
-            shape: [m],
-            stride: contiguous_stride([m]),
-        },
+        activation: TensorRef::new(dev_a.as_slice(), [m, k], contiguous_stride([m, k])).unwrap(),
+        weight_q: TensorRef::new(dev_wq, [c_out, k], contiguous_stride([c_out, k])).unwrap(),
+        weight_scale: TensorRef::new(dev_w_scale.as_slice(), [c_out], contiguous_stride([c_out]))
+            .unwrap(),
+        output: TensorMut::new(
+            dev_out.as_slice_mut(),
+            [m, c_out],
+            contiguous_stride([m, c_out]),
+        )
+        .unwrap(),
+        act_q_scratch: TensorMut::new(dev_act_q.as_slice_mut(), [m, k], contiguous_stride([m, k]))
+            .unwrap(),
+        act_scale_scratch: TensorMut::new(
+            dev_act_scale.as_slice_mut(),
+            [m],
+            contiguous_stride([m]),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

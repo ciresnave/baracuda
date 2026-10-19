@@ -133,16 +133,16 @@ impl<TIn: Element, TOut: Element> CastPlan<TIn, TOut> {
                 "baracuda-kernels::CastPlan: output numel mismatch with descriptor",
             ));
         }
-        if (args.input.data.len() as i64) < expected {
+        if (args.input.data().len() as i64) < expected {
             return Err(Error::BufferTooSmall {
                 needed: expected as usize,
-                got: args.input.data.len(),
+                got: args.input.data().len(),
             });
         }
-        if (args.output.data.len() as i64) < expected {
+        if (args.output.data().len() as i64) < expected {
             return Err(Error::BufferTooSmall {
                 needed: expected as usize,
-                got: args.output.data.len(),
+                got: args.output.data().len(),
             });
         }
         Ok(())
@@ -178,8 +178,8 @@ impl<TIn: Element, TOut: Element> CastPlan<TIn, TOut> {
         if numel == 0 {
             return Ok(());
         }
-        let x_ptr = args.input.data.as_raw().0 as *const c_void;
-        let y_ptr = args.output.data.as_raw().0 as *mut c_void;
+        let x_ptr = args.input.data().as_raw().0 as *const c_void;
+        let y_ptr = args.output.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
         // Dispatch table — each cell calls the matching

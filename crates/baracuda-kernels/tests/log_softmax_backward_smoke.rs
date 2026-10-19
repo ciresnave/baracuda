@@ -102,21 +102,9 @@ fn log_softmax_bw_f32_2d_axis_1() {
         &stream,
         Workspace::None,
         SoftmaxBackwardArgs {
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            y: TensorRef {
-                data: dev_y.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            dx: TensorMut {
-                data: dev_dx.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            dy: TensorRef::new(dev_dy.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            y: TensorRef::new(dev_y.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            dx: TensorMut::new(dev_dx.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
         },
     )
     .expect("run");
@@ -187,21 +175,9 @@ fn log_softmax_bw_f64_2d_axis_0() {
         &stream,
         Workspace::None,
         SoftmaxBackwardArgs {
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            y: TensorRef {
-                data: dev_y.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            dx: TensorMut {
-                data: dev_dx.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            dy: TensorRef::new(dev_dy.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            y: TensorRef::new(dev_y.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            dx: TensorMut::new(dev_dx.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
         },
     )
     .expect("run");
@@ -248,21 +224,9 @@ fn log_softmax_bw_f16_2d() {
         &stream,
         Workspace::None,
         SoftmaxBackwardArgs {
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            y: TensorRef {
-                data: dev_y.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            dx: TensorMut {
-                data: dev_dx.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            dy: TensorRef::new(dev_dy.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            y: TensorRef::new(dev_y.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            dx: TensorMut::new(dev_dx.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
         },
     )
     .expect("run");
@@ -307,21 +271,9 @@ fn log_softmax_bw_bf16_2d() {
         &stream,
         Workspace::None,
         SoftmaxBackwardArgs {
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            y: TensorRef {
-                data: dev_y.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            dx: TensorMut {
-                data: dev_dx.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            dy: TensorRef::new(dev_dy.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            y: TensorRef::new(dev_y.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            dx: TensorMut::new(dev_dx.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
         },
     )
     .expect("run");

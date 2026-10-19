@@ -42,21 +42,9 @@ fn masked_fill_backward_f32_2d() {
     let plan = MaskedFillBackwardPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = MaskedFillBackwardArgs::<f32, 2> {
-        dout: TensorRef {
-            data: dev_dout.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        mask: TensorRef {
-            data: dev_mask.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        dsrc: TensorMut {
-            data: dev_dsrc.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        dout: TensorRef::new(dev_dout.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        mask: TensorRef::new(dev_mask.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        dsrc: TensorMut::new(dev_dsrc.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -95,21 +83,9 @@ fn masked_fill_backward_f64_1d() {
     let plan = MaskedFillBackwardPlan::<f64, 1>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = MaskedFillBackwardArgs::<f64, 1> {
-        dout: TensorRef {
-            data: dev_dout.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        mask: TensorRef {
-            data: dev_mask.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        dsrc: TensorMut {
-            data: dev_dsrc.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        dout: TensorRef::new(dev_dout.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        mask: TensorRef::new(dev_mask.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        dsrc: TensorMut::new(dev_dsrc.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -148,21 +124,9 @@ fn masked_fill_backward_i32_1d() {
     let plan = MaskedFillBackwardPlan::<i32, 1>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = MaskedFillBackwardArgs::<i32, 1> {
-        dout: TensorRef {
-            data: dev_dout.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        mask: TensorRef {
-            data: dev_mask.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        dsrc: TensorMut {
-            data: dev_dsrc.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        dout: TensorRef::new(dev_dout.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        mask: TensorRef::new(dev_mask.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        dsrc: TensorMut::new(dev_dsrc.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

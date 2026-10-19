@@ -98,21 +98,9 @@ fn bench<T>(
 
         warmup(&stream, || {
             let args = ConcatArgs::<T, 3> {
-                a: TensorRef {
-                    data: dev_a.as_slice(),
-                    shape: a_shape,
-                    stride: sta,
-                },
-                b: TensorRef {
-                    data: dev_b.as_slice(),
-                    shape: b_shape,
-                    stride: stb,
-                },
-                y: TensorMut {
-                    data: dev_y.as_slice_mut(),
-                    shape: y_shape,
-                    stride: sty,
-                },
+                a: TensorRef::new(dev_a.as_slice(), a_shape, sta).unwrap(),
+                b: TensorRef::new(dev_b.as_slice(), b_shape, stb).unwrap(),
+                y: TensorMut::new(dev_y.as_slice_mut(), y_shape, sty).unwrap(),
             };
             plan.run(&stream, Workspace::None, args)
                 .expect("baracuda concat");
@@ -122,21 +110,9 @@ fn bench<T>(
         assert_cell_live(&format!("concat/{dtype_label}/{label}"), &dev_y, y_numel);
         let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 50, || {
             let args = ConcatArgs::<T, 3> {
-                a: TensorRef {
-                    data: dev_a.as_slice(),
-                    shape: a_shape,
-                    stride: sta,
-                },
-                b: TensorRef {
-                    data: dev_b.as_slice(),
-                    shape: b_shape,
-                    stride: stb,
-                },
-                y: TensorMut {
-                    data: dev_y.as_slice_mut(),
-                    shape: y_shape,
-                    stride: sty,
-                },
+                a: TensorRef::new(dev_a.as_slice(), a_shape, sta).unwrap(),
+                b: TensorRef::new(dev_b.as_slice(), b_shape, stb).unwrap(),
+                y: TensorMut::new(dev_y.as_slice_mut(), y_shape, sty).unwrap(),
             };
             plan.run(&stream, Workspace::None, args)
                 .expect("baracuda concat");
@@ -157,21 +133,9 @@ fn bench<T>(
             bb.iter_custom(|iters| {
                 time_with_events(&ctx, &stream, iters, || {
                     let args = ConcatArgs::<T, 3> {
-                        a: TensorRef {
-                            data: dev_a.as_slice(),
-                            shape: a_shape,
-                            stride: sta,
-                        },
-                        b: TensorRef {
-                            data: dev_b.as_slice(),
-                            shape: b_shape,
-                            stride: stb,
-                        },
-                        y: TensorMut {
-                            data: dev_y.as_slice_mut(),
-                            shape: y_shape,
-                            stride: sty,
-                        },
+                        a: TensorRef::new(dev_a.as_slice(), a_shape, sta).unwrap(),
+                        b: TensorRef::new(dev_b.as_slice(), b_shape, stb).unwrap(),
+                        y: TensorMut::new(dev_y.as_slice_mut(), y_shape, sty).unwrap(),
                     };
                     plan.run(&stream, Workspace::None, args)
                         .expect("baracuda concat");

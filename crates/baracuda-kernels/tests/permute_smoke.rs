@@ -51,16 +51,18 @@ fn permute_2d_transpose() {
     let plan =
         PermutePlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = PermuteArgs::<f32, 2> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: output_shape,
-            stride: contiguous_stride(output_shape),
-        },
+        x: TensorRef::new(
+            dev_x.as_slice(),
+            input_shape,
+            contiguous_stride(input_shape),
+        )
+        .unwrap(),
+        y: TensorMut::new(
+            dev_y.as_slice_mut(),
+            output_shape,
+            contiguous_stride(output_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -107,16 +109,18 @@ fn permute_3d_rotate() {
     let plan =
         PermutePlan::<f32, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = PermuteArgs::<f32, 3> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: output_shape,
-            stride: contiguous_stride(output_shape),
-        },
+        x: TensorRef::new(
+            dev_x.as_slice(),
+            input_shape,
+            contiguous_stride(input_shape),
+        )
+        .unwrap(),
+        y: TensorMut::new(
+            dev_y.as_slice_mut(),
+            output_shape,
+            contiguous_stride(output_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -165,16 +169,18 @@ fn permute_4d_nhwc_to_nchw() {
     let plan =
         PermutePlan::<f32, 4>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = PermuteArgs::<f32, 4> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: output_shape,
-            stride: contiguous_stride(output_shape),
-        },
+        x: TensorRef::new(
+            dev_x.as_slice(),
+            input_shape,
+            contiguous_stride(input_shape),
+        )
+        .unwrap(),
+        y: TensorMut::new(
+            dev_y.as_slice_mut(),
+            output_shape,
+            contiguous_stride(output_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -206,16 +212,8 @@ fn permute_identity_is_copy() {
     let plan =
         PermutePlan::<f32, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = PermuteArgs::<f32, 3> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

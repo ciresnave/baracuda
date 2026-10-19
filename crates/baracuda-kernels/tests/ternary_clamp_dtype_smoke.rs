@@ -68,26 +68,10 @@ fn clamp_f16_3d() {
     let plan = TernaryPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select TernaryPlan<f16, 3>");
     let args = TernaryArgs::<f16, 3> {
-        a: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride,
-        },
-        b: TensorRef {
-            data: dev_lo.as_slice(),
-            shape,
-            stride,
-        },
-        c: TensorRef {
-            data: dev_hi.as_slice(),
-            shape,
-            stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
+        a: TensorRef::new(dev_x.as_slice(), shape, stride).unwrap(),
+        b: TensorRef::new(dev_lo.as_slice(), shape, stride).unwrap(),
+        c: TensorRef::new(dev_hi.as_slice(), shape, stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args)
         .expect("clamp f16 run");
@@ -139,26 +123,10 @@ fn clamp_bf16_3d() {
     let plan = TernaryPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select TernaryPlan<bf16, 3>");
     let args = TernaryArgs::<bf16, 3> {
-        a: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride,
-        },
-        b: TensorRef {
-            data: dev_lo.as_slice(),
-            shape,
-            stride,
-        },
-        c: TensorRef {
-            data: dev_hi.as_slice(),
-            shape,
-            stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
+        a: TensorRef::new(dev_x.as_slice(), shape, stride).unwrap(),
+        b: TensorRef::new(dev_lo.as_slice(), shape, stride).unwrap(),
+        c: TensorRef::new(dev_hi.as_slice(), shape, stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args)
         .expect("clamp bf16 run");
@@ -208,26 +176,10 @@ fn clamp_f64_3d() {
     let plan = TernaryPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select TernaryPlan<f64, 3>");
     let args = TernaryArgs::<f64, 3> {
-        a: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride,
-        },
-        b: TensorRef {
-            data: dev_lo.as_slice(),
-            shape,
-            stride,
-        },
-        c: TensorRef {
-            data: dev_hi.as_slice(),
-            shape,
-            stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
+        a: TensorRef::new(dev_x.as_slice(), shape, stride).unwrap(),
+        b: TensorRef::new(dev_lo.as_slice(), shape, stride).unwrap(),
+        c: TensorRef::new(dev_hi.as_slice(), shape, stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args)
         .expect("clamp f64 run");

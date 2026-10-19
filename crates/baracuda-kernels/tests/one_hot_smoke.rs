@@ -45,16 +45,13 @@ fn one_hot_f32_2d() {
     let plan =
         OneHotPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = OneHotArgs::<f32, 2> {
-        src: TensorRef {
-            data: dev_src.as_slice(),
-            shape: [4i32],
-            stride: contiguous_stride([4i32]),
-        },
-        out: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: out_shape,
-            stride: contiguous_stride(out_shape),
-        },
+        src: TensorRef::new(dev_src.as_slice(), [4i32], contiguous_stride([4i32])).unwrap(),
+        out: TensorMut::new(
+            dev_out.as_slice_mut(),
+            out_shape,
+            contiguous_stride(out_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -91,16 +88,13 @@ fn one_hot_f64_2d_with_oob() {
     let plan =
         OneHotPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = OneHotArgs::<f64, 2> {
-        src: TensorRef {
-            data: dev_src.as_slice(),
-            shape: [5i32],
-            stride: contiguous_stride([5i32]),
-        },
-        out: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: out_shape,
-            stride: contiguous_stride(out_shape),
-        },
+        src: TensorRef::new(dev_src.as_slice(), [5i32], contiguous_stride([5i32])).unwrap(),
+        out: TensorMut::new(
+            dev_out.as_slice_mut(),
+            out_shape,
+            contiguous_stride(out_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -136,16 +130,13 @@ fn one_hot_i32_2d() {
     let plan =
         OneHotPlan::<i32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = OneHotArgs::<i32, 2> {
-        src: TensorRef {
-            data: dev_src.as_slice(),
-            shape: [6i32],
-            stride: contiguous_stride([6i32]),
-        },
-        out: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: out_shape,
-            stride: contiguous_stride(out_shape),
-        },
+        src: TensorRef::new(dev_src.as_slice(), [6i32], contiguous_stride([6i32])).unwrap(),
+        out: TensorMut::new(
+            dev_out.as_slice_mut(),
+            out_shape,
+            contiguous_stride(out_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -179,16 +170,13 @@ fn one_hot_bool_2d() {
     let plan =
         OneHotPlan::<Bool, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = OneHotArgs::<Bool, 2> {
-        src: TensorRef {
-            data: dev_src.as_slice(),
-            shape: [4i32],
-            stride: contiguous_stride([4i32]),
-        },
-        out: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: out_shape,
-            stride: contiguous_stride(out_shape),
-        },
+        src: TensorRef::new(dev_src.as_slice(), [4i32], contiguous_stride([4i32])).unwrap(),
+        out: TensorMut::new(
+            dev_out.as_slice_mut(),
+            out_shape,
+            contiguous_stride(out_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

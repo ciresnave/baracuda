@@ -41,8 +41,8 @@ impl OperandDescExt for OperandDesc {
         let mut shape = [0i64; MAX_RANK];
         let mut strides = [0i64; MAX_RANK];
         for d in 0..N {
-            shape[d] = i64::from(view.shape[d]);
-            strides[d] = view.stride[d];
+            shape[d] = i64::from(view.shape()[d]);
+            strides[d] = view.stride()[d];
         }
         // `OperandDesc` is `#[non_exhaustive]` in unpopped-vocab 0.2.0 — construct
         // via `new` (the plain non-quant/non-symbolic constructor), which zero-pads

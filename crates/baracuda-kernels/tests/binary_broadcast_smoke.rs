@@ -105,21 +105,9 @@ fn broadcast_add_row_bias() {
         BinaryPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
 
     let args = BinaryArgs::<f32, 2> {
-        a: TensorRef {
-            data: dev_a.as_slice(),
-            shape: a_shape,
-            stride: a_stride,
-        },
-        b: TensorRef {
-            data: dev_b.as_slice(),
-            shape: b_shape,
-            stride: b_stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: y_shape,
-            stride: y_stride,
-        },
+        a: TensorRef::new(dev_a.as_slice(), a_shape, a_stride).unwrap(),
+        b: TensorRef::new(dev_b.as_slice(), b_shape, b_stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), y_shape, y_stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -179,21 +167,9 @@ fn broadcast_add_col_bias() {
     let plan =
         BinaryPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = BinaryArgs::<f32, 2> {
-        a: TensorRef {
-            data: dev_a.as_slice(),
-            shape: a_shape,
-            stride: a_stride,
-        },
-        b: TensorRef {
-            data: dev_b.as_slice(),
-            shape: b_shape,
-            stride: b_stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: y_shape,
-            stride: y_stride,
-        },
+        a: TensorRef::new(dev_a.as_slice(), a_shape, a_stride).unwrap(),
+        b: TensorRef::new(dev_b.as_slice(), b_shape, b_stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), y_shape, y_stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -250,21 +226,9 @@ fn broadcast_add_scalar() {
     let plan =
         BinaryPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = BinaryArgs::<f32, 2> {
-        a: TensorRef {
-            data: dev_a.as_slice(),
-            shape: a_shape,
-            stride: a_stride,
-        },
-        b: TensorRef {
-            data: dev_b.as_slice(),
-            shape: b_shape,
-            stride: b_stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: y_shape,
-            stride: y_stride,
-        },
+        a: TensorRef::new(dev_a.as_slice(), a_shape, a_stride).unwrap(),
+        b: TensorRef::new(dev_b.as_slice(), b_shape, b_stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), y_shape, y_stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -328,21 +292,9 @@ fn broadcast_add_rank3_seq_only() {
     let plan =
         BinaryPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = BinaryArgs::<f32, 3> {
-        a: TensorRef {
-            data: dev_a.as_slice(),
-            shape: a_shape,
-            stride: a_stride,
-        },
-        b: TensorRef {
-            data: dev_b.as_slice(),
-            shape: b_shape,
-            stride: b_stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: y_shape,
-            stride: y_stride,
-        },
+        a: TensorRef::new(dev_a.as_slice(), a_shape, a_stride).unwrap(),
+        b: TensorRef::new(dev_b.as_slice(), b_shape, b_stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), y_shape, y_stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -405,21 +357,9 @@ fn strided_add_transposed_b() {
     let plan =
         BinaryPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = BinaryArgs::<f32, 2> {
-        a: TensorRef {
-            data: dev_a.as_slice(),
-            shape: a_shape,
-            stride: a_stride,
-        },
-        b: TensorRef {
-            data: dev_b.as_slice(),
-            shape: b_shape,
-            stride: b_stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: y_shape,
-            stride: y_stride,
-        },
+        a: TensorRef::new(dev_a.as_slice(), a_shape, a_stride).unwrap(),
+        b: TensorRef::new(dev_b.as_slice(), b_shape, b_stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), y_shape, y_stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

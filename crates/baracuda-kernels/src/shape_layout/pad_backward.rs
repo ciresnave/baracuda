@@ -172,13 +172,13 @@ impl<T: Element, const N: usize> PadBackwardPlan<T, N> {
     pub fn can_implement(&self, args: &PadBackwardArgs<'_, T, N>) -> Result<()> {
         crate::view_check::check_fits(&args.dy)?;
         crate::view_check::check_fits(&args.dx)?;
-        if args.dx.shape != self.desc.input_shape {
+        if args.dx.shape() != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::PadBackwardPlan: dx shape mismatch with descriptor input_shape",
             ));
         }
         let expected_dy = self.desc.dy_shape();
-        if args.dy.shape != expected_dy {
+        if args.dy.shape() != expected_dy {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::PadBackwardPlan: dy shape mismatch with derived output shape \
                  (= input_shape + pad_low + pad_high per axis)",
@@ -191,16 +191,16 @@ impl<T: Element, const N: usize> PadBackwardPlan<T, N> {
         }
         let dx_numel = args.dx.numel();
         let dy_numel = args.dy.numel();
-        if (args.dx.data.len() as i64) < dx_numel {
+        if (args.dx.data().len() as i64) < dx_numel {
             return Err(Error::BufferTooSmall {
                 needed: dx_numel as usize,
-                got: args.dx.data.len(),
+                got: args.dx.data().len(),
             });
         }
-        if (args.dy.data.len() as i64) < dy_numel {
+        if (args.dy.data().len() as i64) < dy_numel {
             return Err(Error::BufferTooSmall {
                 needed: dy_numel as usize,
-                got: args.dy.data.len(),
+                got: args.dy.data().len(),
             });
         }
         Ok(())
@@ -234,14 +234,14 @@ impl<T: Element, const N: usize> PadBackwardPlan<T, N> {
         if input_numel == 0 {
             return Ok(());
         }
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let dx_ptr = args.dx.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
         let input_shape = self.desc.input_shape;
         let pad_low = self.desc.pad_low;
-        let stride_dy = args.dy.stride;
-        let stride_dx = args.dx.stride;
+        let stride_dy = args.dy.stride();
+        let stride_dx = args.dx.stride();
         let rank = N as i32;
 
         let status = match T::KIND {

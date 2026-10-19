@@ -157,12 +157,12 @@ impl<T: Element, const N: usize> UnaryParamPlan<T, N> {
     pub fn can_implement(&self, args: &UnaryParamArgs<'_, T, N>) -> Result<()> {
         crate::view_check::check_fits(&args.x)?;
         crate::view_check::check_fits(&args.y)?;
-        if args.x.shape != self.desc.shape {
+        if args.x.shape() != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::UnaryParamPlan: X shape mismatch with descriptor",
             ));
         }
-        if args.y.shape != self.desc.shape {
+        if args.y.shape() != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::UnaryParamPlan: Y shape mismatch with descriptor",
             ));
@@ -177,8 +177,8 @@ impl<T: Element, const N: usize> UnaryParamPlan<T, N> {
             ));
         }
         let numel = args.y.numel();
-        let x_len = args.x.data.len() as i64;
-        let y_len = args.y.data.len() as i64;
+        let x_len = args.x.data().len() as i64;
+        let y_len = args.y.data().len() as i64;
         if x_len < numel || y_len < numel {
             return Err(Error::BufferTooSmall {
                 needed: numel as usize,
@@ -218,8 +218,8 @@ impl<T: Element, const N: usize> UnaryParamPlan<T, N> {
         if numel == 0 {
             return Ok(());
         }
-        let x_ptr = args.x.data.as_raw().0 as *const c_void;
-        let y_ptr = args.y.data.as_raw().0 as *mut c_void;
+        let x_ptr = args.x.data().as_raw().0 as *const c_void;
+        let y_ptr = args.y.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         let p0 = self.desc.params[0];
         let p1 = self.desc.params[1];
@@ -355,9 +355,9 @@ impl<T: Element, const N: usize> UnaryParamPlan<T, N> {
         p0: f32,
         p1: f32,
     ) -> Result<()> {
-        let shape = args.y.shape;
-        let stride_x = args.x.stride;
-        let stride_y = args.y.stride;
+        let shape = args.y.shape();
+        let stride_x = args.x.stride();
+        let stride_y = args.y.stride();
         let rank = N as i32;
 
         let status = match (self.desc.kind, T::KIND) {

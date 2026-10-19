@@ -243,17 +243,17 @@ impl<TIn: Element, TOut: IntElement> DynamicRangeQuantizePlan<TIn, TOut> {
         crate::view_check::check_fits(&args.input)?;
         crate::view_check::check_fits(&args.scale_out)?;
         crate::view_check::check_fits(&args.output)?;
-        if args.input.shape != [self.desc.n, self.desc.d] {
+        if args.input.shape() != [self.desc.n, self.desc.d] {
             return Err(Error::InvalidProblem(
                 "DynamicRangeQuantizePlan: input shape != [n, d]",
             ));
         }
-        if args.output.shape != [self.desc.n, self.desc.d] {
+        if args.output.shape() != [self.desc.n, self.desc.d] {
             return Err(Error::InvalidProblem(
                 "DynamicRangeQuantizePlan: output shape != [n, d]",
             ));
         }
-        if args.scale_out.shape != [self.desc.n] {
+        if args.scale_out.shape() != [self.desc.n] {
             return Err(Error::InvalidProblem(
                 "DynamicRangeQuantizePlan: scale_out shape != [n]",
             ));
@@ -291,9 +291,9 @@ impl<TIn: Element, TOut: IntElement> DynamicRangeQuantizePlan<TIn, TOut> {
         if total == 0 {
             return Ok(());
         }
-        let in_ptr = args.input.data.as_raw().0 as *const c_void;
-        let sc_ptr = args.scale_out.data.as_raw().0 as *mut c_void;
-        let out_ptr = args.output.data.as_raw().0 as *mut c_void;
+        let in_ptr = args.input.data().as_raw().0 as *const c_void;
+        let sc_ptr = args.scale_out.data().as_raw().0 as *mut c_void;
+        let out_ptr = args.output.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
         let status = match (TIn::KIND, TOut::KIND) {

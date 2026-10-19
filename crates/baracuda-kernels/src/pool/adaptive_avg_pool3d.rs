@@ -152,8 +152,8 @@ impl<T: Element> AdaptiveAvgPool3dPlan<T> {
     ) -> Result<()> {
         check_fw_args(&self.desc, &args)?;
         let stream_ptr = stream.as_raw() as *mut c_void;
-        let x_ptr = args.x.data.as_raw().0 as *const c_void;
-        let y_ptr = args.y.data.as_raw().0 as *mut c_void;
+        let x_ptr = args.x.data().as_raw().0 as *const c_void;
+        let y_ptr = args.y.data().as_raw().0 as *mut c_void;
         let nc = self.desc.batch * self.desc.channels;
         let status = dispatch_avg_fw::<T>(
             x_ptr,
@@ -180,8 +180,8 @@ impl<T: Element> AdaptiveAvgPool3dPlan<T> {
     ) -> Result<()> {
         check_bw_args(&self.desc, &args)?;
         let stream_ptr = stream.as_raw() as *mut c_void;
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let dx_ptr = args.dx.data().as_raw().0 as *mut c_void;
         let nc = self.desc.batch * self.desc.channels;
         let status = dispatch_avg_bw::<T>(
             dy_ptr,
@@ -245,12 +245,12 @@ pub(crate) fn check_fw_args<T: Element>(
         desc.h_out,
         desc.w_out,
     ];
-    if args.x.shape != x_shape {
+    if args.x.shape() != x_shape {
         return Err(Error::InvalidProblem(
             "baracuda-kernels::AdaptivePool3dPlan: x shape != [N, C, D_in, H_in, W_in]",
         ));
     }
-    if args.y.shape != y_shape {
+    if args.y.shape() != y_shape {
         return Err(Error::InvalidProblem(
             "baracuda-kernels::AdaptivePool3dPlan: y shape != [N, C, D_out, H_out, W_out]",
         ));
@@ -270,12 +270,12 @@ pub(crate) fn check_bw_args<T: Element>(
         desc.h_out,
         desc.w_out,
     ];
-    if args.x.shape != x_shape || args.dx.shape != x_shape {
+    if args.x.shape() != x_shape || args.dx.shape() != x_shape {
         return Err(Error::InvalidProblem(
             "baracuda-kernels::AdaptivePool3dPlan: x/dx shape != [N, C, D_in, H_in, W_in]",
         ));
     }
-    if args.y.shape != y_shape || args.dy.shape != y_shape {
+    if args.y.shape() != y_shape || args.dy.shape() != y_shape {
         return Err(Error::InvalidProblem(
             "baracuda-kernels::AdaptivePool3dPlan: y/dy shape != [N, C, D_out, H_out, W_out]",
         ));

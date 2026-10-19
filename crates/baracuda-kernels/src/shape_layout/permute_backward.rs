@@ -158,13 +158,13 @@ impl<T: Element, const N: usize> PermuteBackwardPlan<T, N> {
     pub fn can_implement(&self, args: &PermuteBackwardArgs<'_, T, N>) -> Result<()> {
         crate::view_check::check_fits(&args.dy)?;
         crate::view_check::check_fits(&args.dx)?;
-        if args.dx.shape != self.desc.input_shape {
+        if args.dx.shape() != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::PermuteBackwardPlan: dx shape != desc.input_shape",
             ));
         }
         let expected_dy = self.desc.dy_shape();
-        if args.dy.shape != expected_dy {
+        if args.dy.shape() != expected_dy {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::PermuteBackwardPlan: dy shape != input_shape.permute(dims)",
             ));
@@ -175,16 +175,16 @@ impl<T: Element, const N: usize> PermuteBackwardPlan<T, N> {
             ));
         }
         let numel = args.dx.numel();
-        if (args.dx.data.len() as i64) < numel {
+        if (args.dx.data().len() as i64) < numel {
             return Err(Error::BufferTooSmall {
                 needed: numel as usize,
-                got: args.dx.data.len(),
+                got: args.dx.data().len(),
             });
         }
-        if (args.dy.data.len() as i64) < numel {
+        if (args.dy.data().len() as i64) < numel {
             return Err(Error::BufferTooSmall {
                 needed: numel as usize,
-                got: args.dy.data.len(),
+                got: args.dy.data().len(),
             });
         }
         Ok(())
@@ -220,8 +220,8 @@ impl<T: Element, const N: usize> PermuteBackwardPlan<T, N> {
         if numel == 0 {
             return Ok(());
         }
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let dx_ptr = args.dx.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
         // Reuse forward permute: walks "x" = dy and writes "y" = dx,
@@ -229,8 +229,8 @@ impl<T: Element, const N: usize> PermuteBackwardPlan<T, N> {
         // is the dy coord that ended up at the matching input axis.
         let dy_shape = self.desc.dy_shape();
         let inv_dims = self.desc.inverse_dims();
-        let stride_dy = args.dy.stride;
-        let stride_dx = args.dx.stride;
+        let stride_dy = args.dy.stride();
+        let stride_dx = args.dx.stride();
         let rank = N as i32;
 
         let status = match T::KIND {

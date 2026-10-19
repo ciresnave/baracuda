@@ -10,7 +10,7 @@
 //! `cargo test -p baracuda-kernels --features sm89,device-tests --test soundness_family_views`
 #![cfg(feature = "device-tests")]
 
-use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
+use baracuda_driver::{Context, Device, DeviceBuffer, DeviceSlice, DeviceSliceMut, Stream, init};
 use baracuda_kernels::{
     AlibiArgs, AlibiDescriptor, AlibiPlan, Bool, CholeskyArgs, CholeskyDescriptor, CholeskyPlan,
     Complex64, DequantizePerTensorArgs, DequantizePerTensorDescriptor, DequantizePerTensorPlan,
@@ -22,9 +22,32 @@ use baracuda_kernels::{
     RMSNormPlan, ReduceArgs, ReduceDescriptor, ReduceKind, ReducePlan, S8, ScanArgs,
     ScanDescriptor, ScanKind, ScanPlan, SegmentSumArgs, SegmentSumDescriptor, SegmentSumPlan,
     SoftmaxArgs, SoftmaxDescriptor, SoftmaxKind, SoftmaxPlan, SortArgs, SortDescriptor, SortPlan,
-    TensorMut, TensorRef, UnaryArgs, UnaryDescriptor, UnaryKind, UnaryPlan, Workspace,
+    TensorMut, TensorRef, UnaryArgs, UnaryDescriptor, UnaryKind, UnaryPlan, VectorRef, Workspace,
     contiguous_stride,
 };
+
+/// Build a view WITHOUT the constructor's bounds check. These tests exist to
+/// prove each plan rejects an out-of-bounds view on its own (defence in depth),
+/// and `TensorRef::new` / `TensorMut::new` would refuse to build one.
+fn bad_ref<'a, T: baracuda_types::DeviceRepr + Copy + 'static, const N: usize>(
+    data: DeviceSlice<'a, T>,
+    shape: [i32; N],
+    stride: [i64; N],
+) -> TensorRef<'a, T, N> {
+    // SAFETY: deliberately out of bounds. The view is only ever handed to a plan
+    // whose own check must return `Err` before any kernel is launched.
+    unsafe { TensorRef::new_unchecked(data, shape, stride) }
+}
+
+/// Mutable counterpart of [`bad_ref`].
+fn bad_mut<'a, T: baracuda_types::DeviceRepr + Copy + 'static, const N: usize>(
+    data: DeviceSliceMut<'a, T>,
+    shape: [i32; N],
+    stride: [i64; N],
+) -> TensorMut<'a, T, N> {
+    // SAFETY: as for [`bad_ref`].
+    unsafe { TensorMut::new_unchecked(data, shape, stride) }
+}
 
 #[cfg(feature = "mamba")]
 use baracuda_kernels::{CausalConv1dArgs, CausalConv1dDescriptor, CausalConv1dPlan};
@@ -69,21 +92,9 @@ fn attention_rejects_view_longer_than_its_slice() {
         &stream,
         Workspace::None,
         AlibiArgs {
-            scores: TensorRef {
-                data: scores.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            slopes: TensorRef {
-                data: slopes.as_slice(),
-                shape: [heads],
-                stride: [1],
-            },
-            out: TensorMut {
-                data: out.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            scores: bad_ref(scores.as_slice(), shape, contiguous_stride(shape)),
+            slopes: bad_ref(slopes.as_slice(), [heads], [1]),
+            out: bad_mut(out.as_slice_mut(), shape, contiguous_stride(shape)),
         },
     );
     assert!(res.is_err(), "AlibiPlan::run accepted a short scores slice");
@@ -112,22 +123,10 @@ fn causal_conv1d_rejects_view_longer_than_its_slice() {
         &stream,
         Workspace::None,
         CausalConv1dArgs {
-            x: TensorRef {
-                data: x.as_slice(),
-                shape: shape_x,
-                stride: contiguous_stride(shape_x),
-            },
-            weight: TensorRef {
-                data: weight.as_slice(),
-                shape: shape_w,
-                stride: contiguous_stride(shape_w),
-            },
+            x: bad_ref(x.as_slice(), shape_x, contiguous_stride(shape_x)),
+            weight: bad_ref(weight.as_slice(), shape_w, contiguous_stride(shape_w)),
             bias: None,
-            y: TensorMut {
-                data: y.as_slice_mut(),
-                shape: shape_x,
-                stride: contiguous_stride(shape_x),
-            },
+            y: bad_mut(y.as_slice_mut(), shape_x, contiguous_stride(shape_x)),
         },
     );
     assert!(
@@ -167,16 +166,8 @@ fn conv_rejects_view_longer_than_its_slice() {
         &stream,
         Workspace::None,
         Im2ColArgs {
-            input: TensorRef {
-                data: x.as_slice(),
-                shape: x_shape,
-                stride: contiguous_stride(x_shape),
-            },
-            output: TensorMut {
-                data: y.as_slice_mut(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
+            input: bad_ref(x.as_slice(), x_shape, contiguous_stride(x_shape)),
+            output: bad_mut(y.as_slice_mut(), y_shape, contiguous_stride(y_shape)),
         },
     );
     assert!(res.is_err(), "Im2ColPlan::run accepted a short input slice");
@@ -197,16 +188,8 @@ fn elementwise_rejects_view_longer_than_its_slice() {
     };
     let plan = UnaryPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default()).unwrap();
     let args = UnaryArgs::<f32, 1> {
-        x: TensorRef {
-            data: x.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        y: TensorMut {
-            data: y.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        x: bad_ref(x.as_slice(), shape, contiguous_stride(shape)),
+        y: bad_mut(y.as_slice_mut(), shape, contiguous_stride(shape)),
     };
     assert!(
         plan.can_implement(&args).is_err(),
@@ -237,21 +220,9 @@ fn embedding_rejects_view_longer_than_its_slice() {
         &stream,
         Workspace::None,
         EmbeddingArgs::<f32> {
-            weight: TensorRef {
-                data: weight.as_slice(),
-                shape: [v, d],
-                stride: contiguous_stride([v, d]),
-            },
-            indices: TensorRef {
-                data: indices.as_slice(),
-                shape: [n],
-                stride: contiguous_stride([n]),
-            },
-            output: TensorMut {
-                data: out.as_slice_mut(),
-                shape: [n, d],
-                stride: contiguous_stride([n, d]),
-            },
+            weight: bad_ref(weight.as_slice(), [v, d], contiguous_stride([v, d])),
+            indices: bad_ref(indices.as_slice(), [n], contiguous_stride([n])),
+            output: bad_mut(out.as_slice_mut(), [n, d], contiguous_stride([n, d])),
         },
     );
     assert!(
@@ -279,16 +250,8 @@ fn fft_rejects_view_longer_than_its_slice() {
         &stream,
         Workspace::None,
         FftArgs::<Complex64> {
-            x: TensorRef {
-                data: x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            y: TensorMut {
-                data: y.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            x: bad_ref(x.as_slice(), shape, contiguous_stride(shape)),
+            y: bad_mut(y.as_slice_mut(), shape, contiguous_stride(shape)),
         },
     );
     assert!(res.is_err(), "FftPlan::run accepted a short x slice");
@@ -344,6 +307,63 @@ fn gemm_rejects_view_longer_than_its_slice() {
     );
 }
 
+/// FP8 GEMM bias: `len` says N but the slice holds half of it, so the epilogue
+/// would read past the vector. A, B and D are valid, so only the bias can be
+/// what is rejected.
+#[test]
+fn gemm_bias_vector_shorter_than_n_is_rejected() {
+    let (ctx, stream) = setup();
+    let (m, n, k) = (128i32, 128i32, 128i32);
+    let a = DeviceBuffer::from_slice(&ctx, &vec![0u8; (m * k) as usize]).unwrap();
+    let b = DeviceBuffer::from_slice(&ctx, &vec![0u8; (k * n) as usize]).unwrap();
+    let bias = zeros_f32(&ctx, n as usize / 2);
+    let mut d: DeviceBuffer<Fp8E4M3FN> = DeviceBuffer::zeros(&ctx, (m * n) as usize).unwrap();
+    let desc = Fp8GemmDescriptor {
+        m,
+        n,
+        k,
+        layout: LayoutSku::Rcr,
+        epilogue: EpilogueKind::Bias,
+    };
+    let plan = Fp8GemmPlan::<Fp8E4M3FN>::select(&stream, &desc, PlanPreference::default()).unwrap();
+    let res = plan.run(
+        &stream,
+        Workspace::None,
+        Fp8GemmArgs::<Fp8E4M3FN> {
+            a: MatrixRef {
+                data: a.view_as::<Fp8E4M3FN>(),
+                rows: m,
+                cols: k,
+                ld: k as i64,
+            },
+            b: MatrixRef {
+                data: b.view_as::<Fp8E4M3FN>(),
+                rows: k,
+                cols: n,
+                ld: k as i64,
+            },
+            c: None,
+            d: MatrixMut {
+                data: d.as_slice_mut(),
+                rows: m,
+                cols: n,
+                ld: n as i64,
+            },
+            bias: Some(VectorRef {
+                data: bias.as_slice(),
+                len: n,
+                stride: 1,
+            }),
+            alpha: 1.0,
+            beta: 0.0,
+        },
+    );
+    assert!(
+        res.is_err(),
+        "Fp8GemmPlan::run accepted a bias vector shorter than N"
+    );
+}
+
 #[test]
 fn image_rejects_view_longer_than_its_slice() {
     let (ctx, stream) = setup();
@@ -364,16 +384,16 @@ fn image_rejects_view_longer_than_its_slice() {
         &stream,
         Workspace::None,
         PixelShuffleArgs {
-            input: TensorRef {
-                data: input.as_slice(),
-                shape: [n, cin, h, w],
-                stride: contiguous_stride([n, cin, h, w]),
-            },
-            output: TensorMut {
-                data: output.as_slice_mut(),
-                shape: [n, c, h * r, w * r],
-                stride: contiguous_stride([n, c, h * r, w * r]),
-            },
+            input: bad_ref(
+                input.as_slice(),
+                [n, cin, h, w],
+                contiguous_stride([n, cin, h, w]),
+            ),
+            output: bad_mut(
+                output.as_slice_mut(),
+                [n, c, h * r, w * r],
+                contiguous_stride([n, c, h * r, w * r]),
+            ),
         },
     );
     assert!(
@@ -396,21 +416,9 @@ fn indexing_rejects_view_longer_than_its_slice() {
         &stream,
         Workspace::None,
         MaskedFillArgs::<f32, 2> {
-            src: TensorRef {
-                data: src.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            mask: TensorRef {
-                data: mask.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            out: TensorMut {
-                data: out.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            src: bad_ref(src.as_slice(), shape, contiguous_stride(shape)),
+            mask: bad_ref(mask.as_slice(), shape, contiguous_stride(shape)),
+            out: bad_mut(out.as_slice_mut(), shape, contiguous_stride(shape)),
         },
     );
     assert!(
@@ -438,16 +446,8 @@ fn linalg_rejects_view_longer_than_its_slice() {
         &stream,
         Workspace::Borrowed(ws.as_slice_mut()),
         CholeskyArgs::<f32> {
-            a: TensorMut {
-                data: a.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            info: TensorMut {
-                data: info.as_slice_mut(),
-                shape: [1i32],
-                stride: [1],
-            },
+            a: bad_mut(a.as_slice_mut(), shape, contiguous_stride(shape)),
+            info: bad_mut(info.as_slice_mut(), [1i32], [1]),
         },
     );
     assert!(res.is_err(), "CholeskyPlan::run accepted a short a slice");
@@ -475,26 +475,10 @@ fn norm_rejects_view_longer_than_its_slice() {
         &stream,
         Workspace::None,
         RMSNormArgs {
-            x: TensorRef {
-                data: x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            gamma: Some(TensorRef {
-                data: gamma.as_slice(),
-                shape: [8i32],
-                stride: [1],
-            }),
-            y: TensorMut {
-                data: y.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            rms: TensorMut {
-                data: rms.as_slice_mut(),
-                shape: rms_shape,
-                stride: contiguous_stride(rms_shape),
-            },
+            x: bad_ref(x.as_slice(), shape, contiguous_stride(shape)),
+            gamma: Some(bad_ref(gamma.as_slice(), [8i32], [1])),
+            y: bad_mut(y.as_slice_mut(), shape, contiguous_stride(shape)),
+            rms: bad_mut(rms.as_slice_mut(), rms_shape, contiguous_stride(rms_shape)),
         },
     );
     assert!(res.is_err(), "RMSNormPlan::run accepted a short x slice");
@@ -518,18 +502,10 @@ fn quantize_rejects_view_longer_than_its_slice() {
         &stream,
         Workspace::None,
         DequantizePerTensorArgs::<f32, S8> {
-            input: TensorRef {
-                data: q.as_slice(),
-                shape: [numel],
-                stride: contiguous_stride([numel]),
-            },
+            input: bad_ref(q.as_slice(), [numel], contiguous_stride([numel])),
             scale: 0.5,
             zero_point: 0,
-            output: TensorMut {
-                data: x.as_slice_mut(),
-                shape: [numel],
-                stride: contiguous_stride([numel]),
-            },
+            output: bad_mut(x.as_slice_mut(), [numel], contiguous_stride([numel])),
         },
     );
     assert!(
@@ -559,21 +535,9 @@ fn random_rejects_view_longer_than_its_slice() {
         &stream,
         Workspace::Borrowed(ws.as_slice_mut()),
         DropoutArgs::<f32, 1> {
-            x: TensorRef {
-                data: x.as_slice(),
-                shape,
-                stride,
-            },
-            y: TensorMut {
-                data: y.as_slice_mut(),
-                shape,
-                stride,
-            },
-            mask: TensorMut {
-                data: mask.as_slice_mut(),
-                shape,
-                stride,
-            },
+            x: bad_ref(x.as_slice(), shape, stride),
+            y: bad_mut(y.as_slice_mut(), shape, stride),
+            mask: bad_mut(mask.as_slice_mut(), shape, stride),
         },
     );
     assert!(res.is_err(), "DropoutPlan::run accepted a short mask slice");
@@ -598,16 +562,12 @@ fn reduce_rejects_view_longer_than_its_slice() {
         &stream,
         Workspace::None,
         ReduceArgs::<f32, 2> {
-            x: TensorRef {
-                data: x.as_slice(),
-                shape: input_shape,
-                stride: contiguous_stride(input_shape),
-            },
-            y: TensorMut {
-                data: y.as_slice_mut(),
-                shape: output_shape,
-                stride: contiguous_stride(output_shape),
-            },
+            x: bad_ref(x.as_slice(), input_shape, contiguous_stride(input_shape)),
+            y: bad_mut(
+                y.as_slice_mut(),
+                output_shape,
+                contiguous_stride(output_shape),
+            ),
         },
     );
     assert!(res.is_err(), "ReducePlan::run accepted a short x slice");
@@ -631,16 +591,8 @@ fn scan_rejects_view_longer_than_its_slice() {
         &stream,
         Workspace::None,
         ScanArgs::<f32, 1> {
-            x: TensorRef {
-                data: x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            y: TensorMut {
-                data: y.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            x: bad_ref(x.as_slice(), shape, contiguous_stride(shape)),
+            y: bad_mut(y.as_slice_mut(), shape, contiguous_stride(shape)),
         },
     );
     assert!(res.is_err(), "ScanPlan::run accepted a short x slice");
@@ -664,21 +616,9 @@ fn segment_rejects_view_longer_than_its_slice() {
         &stream,
         Workspace::None,
         SegmentSumArgs::<f32> {
-            input: TensorRef {
-                data: input.as_slice(),
-                shape: [n, d],
-                stride: contiguous_stride([n, d]),
-            },
-            segment_ids: TensorRef {
-                data: seg.as_slice(),
-                shape: [n],
-                stride: contiguous_stride([n]),
-            },
-            output: TensorMut {
-                data: out.as_slice_mut(),
-                shape: [ns, d],
-                stride: contiguous_stride([ns, d]),
-            },
+            input: bad_ref(input.as_slice(), [n, d], contiguous_stride([n, d])),
+            segment_ids: bad_ref(seg.as_slice(), [n], contiguous_stride([n])),
+            output: bad_mut(out.as_slice_mut(), [ns, d], contiguous_stride([ns, d])),
         },
     );
     assert!(
@@ -703,16 +643,8 @@ fn shape_layout_rejects_view_longer_than_its_slice() {
         &stream,
         Workspace::None,
         FlipArgs::<f32, 1> {
-            x: TensorRef {
-                data: x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            y: TensorMut {
-                data: y.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            x: bad_ref(x.as_slice(), shape, contiguous_stride(shape)),
+            y: bad_mut(y.as_slice_mut(), shape, contiguous_stride(shape)),
         },
     );
     assert!(res.is_err(), "FlipPlan::run accepted a short x slice");
@@ -735,16 +667,8 @@ fn softmax_rejects_view_longer_than_its_slice() {
         &stream,
         Workspace::None,
         SoftmaxArgs {
-            x: TensorRef {
-                data: x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            y: TensorMut {
-                data: y.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            x: bad_ref(x.as_slice(), shape, contiguous_stride(shape)),
+            y: bad_mut(y.as_slice_mut(), shape, contiguous_stride(shape)),
         },
     );
     assert!(res.is_err(), "SoftmaxPlan::run accepted a short x slice");
@@ -770,21 +694,9 @@ fn sort_rejects_view_longer_than_its_slice() {
         &stream,
         Workspace::None,
         SortArgs::<f32> {
-            input: TensorRef {
-                data: input.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            values: TensorMut {
-                data: values.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            indices: TensorMut {
-                data: indices.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            input: bad_ref(input.as_slice(), shape, contiguous_stride(shape)),
+            values: bad_mut(values.as_slice_mut(), shape, contiguous_stride(shape)),
+            indices: bad_mut(indices.as_slice_mut(), shape, contiguous_stride(shape)),
         },
     );
     assert!(res.is_err(), "SortPlan::run accepted a short input slice");

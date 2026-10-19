@@ -129,9 +129,9 @@ impl<T: Element> MultilabelMarginLossPlan<T> {
         }
         let (ws_ptr, ws_bytes) = unpack_workspace(workspace, self.workspace_size())?;
         let stream_ptr = stream.as_raw();
-        let input_ptr = args.input.data.as_raw().0 as *const c_void;
-        let target_ptr = args.target.data.as_raw().0 as *const c_void;
-        let out_ptr = args.out.data.as_raw().0 as *mut c_void;
+        let input_ptr = args.input.data().as_raw().0 as *const c_void;
+        let target_ptr = args.target.data().as_raw().0 as *const c_void;
+        let out_ptr = args.out.data().as_raw().0 as *mut c_void;
         let mode = self.desc.reduction as i32;
         let n_rows = self.desc.n_rows as i64;
         let class_extent = self.desc.class_extent;
@@ -330,10 +330,10 @@ impl<T: Element> MultilabelMarginLossBackwardPlan<T> {
             LossReduction::Sum => 1.0,
         };
         let stream_ptr = stream.as_raw();
-        let input_ptr = args.input.data.as_raw().0 as *const c_void;
-        let target_ptr = args.target.data.as_raw().0 as *const c_void;
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let dinput_ptr = args.dinput.data.as_raw().0 as *mut c_void;
+        let input_ptr = args.input.data().as_raw().0 as *const c_void;
+        let target_ptr = args.target.data().as_raw().0 as *const c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let dinput_ptr = args.dinput.data().as_raw().0 as *mut c_void;
         let row_stride_in: i64 = class_extent as i64;
         let row_stride_tgt: i64 = class_extent as i64;
         let status = match T::KIND {

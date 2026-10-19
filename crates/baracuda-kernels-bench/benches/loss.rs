@@ -140,21 +140,9 @@ macro_rules! percell_loss_bench {
                             &stream,
                             Workspace::Borrowed(dev_ws.as_slice_mut()),
                             $Args::<T, 2> {
-                                pred: TensorRef {
-                                    data: dev_p.as_slice(),
-                                    shape: ishape,
-                                    stride: st,
-                                },
-                                target: TensorRef {
-                                    data: dev_t.as_slice(),
-                                    shape: ishape,
-                                    stride: st,
-                                },
-                                out: TensorMut {
-                                    data: dev_y.as_slice_mut(),
-                                    shape: [1, 1],
-                                    stride: [1, 1],
-                                },
+                                pred: TensorRef::new(dev_p.as_slice(), ishape, st).unwrap(),
+                                target: TensorRef::new(dev_t.as_slice(), ishape, st).unwrap(),
+                                out: TensorMut::new(dev_y.as_slice_mut(), [1, 1], [1, 1]).unwrap(),
                             },
                         )
                         .expect(concat!("baracuda ", $op));
@@ -246,22 +234,10 @@ fn bench_cross_entropy<T: LossElem>(
                         &stream,
                         Workspace::Borrowed(dev_ws.as_slice_mut()),
                         CrossEntropyLossArgs {
-                            input: TensorRef {
-                                data: dev_inp.as_slice(),
-                                shape: ishape,
-                                stride: ist,
-                            },
-                            target: Some(TensorRef {
-                                data: dev_t.as_slice(),
-                                shape: tshape,
-                                stride: tst,
-                            }),
+                            input: TensorRef::new(dev_inp.as_slice(), ishape, ist).unwrap(),
+                            target: Some(TensorRef::new(dev_t.as_slice(), tshape, tst).unwrap()),
                             soft_target: None,
-                            out: TensorMut {
-                                data: dev_y.as_slice_mut(),
-                                shape: [1],
-                                stride: [1],
-                            },
+                            out: TensorMut::new(dev_y.as_slice_mut(), [1], [1]).unwrap(),
                         },
                     )
                     .expect("baracuda cross_entropy");
@@ -320,21 +296,9 @@ fn bench_nll<T: LossElem>(c: &mut Criterion, dt: &'static str, baseline: Option<
                     &stream,
                     Workspace::Borrowed(dev_ws.as_slice_mut()),
                     NllLossArgs {
-                        input: TensorRef {
-                            data: dev_inp.as_slice(),
-                            shape: ishape,
-                            stride: ist,
-                        },
-                        target: TensorRef {
-                            data: dev_t.as_slice(),
-                            shape: tshape,
-                            stride: tst,
-                        },
-                        out: TensorMut {
-                            data: dev_y.as_slice_mut(),
-                            shape: [1],
-                            stride: [1],
-                        },
+                        input: TensorRef::new(dev_inp.as_slice(), ishape, ist).unwrap(),
+                        target: TensorRef::new(dev_t.as_slice(), tshape, tst).unwrap(),
+                        out: TensorMut::new(dev_y.as_slice_mut(), [1], [1]).unwrap(),
                     },
                 )
                 .expect("baracuda nll");

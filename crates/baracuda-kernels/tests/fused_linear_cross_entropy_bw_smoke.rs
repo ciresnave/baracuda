@@ -99,36 +99,28 @@ fn flce_bw_f32_grad_input_finite_diff() {
         &stream,
         Workspace::None,
         FusedLinearCrossEntropyArgs {
-            input: TensorRef {
-                data: dev_input.as_slice(),
-                shape: [bt, h],
-                stride: contiguous_stride([bt, h]),
-            },
-            weight: TensorRef {
-                data: dev_weight.as_slice(),
-                shape: [v, h],
-                stride: contiguous_stride([v, h]),
-            },
-            target: TensorRef {
-                data: dev_target.as_slice(),
-                shape: [bt],
-                stride: contiguous_stride([bt]),
-            },
-            out: TensorMut {
-                data: dev_out.as_slice_mut(),
-                shape: [1],
-                stride: [1],
-            },
-            grad_input: Some(TensorMut {
-                data: dev_grad_input.as_slice_mut(),
-                shape: [bt, h],
-                stride: contiguous_stride([bt, h]),
-            }),
-            grad_weight: Some(TensorMut {
-                data: dev_grad_weight.as_slice_mut(),
-                shape: [v, h],
-                stride: contiguous_stride([v, h]),
-            }),
+            input: TensorRef::new(dev_input.as_slice(), [bt, h], contiguous_stride([bt, h]))
+                .unwrap(),
+            weight: TensorRef::new(dev_weight.as_slice(), [v, h], contiguous_stride([v, h]))
+                .unwrap(),
+            target: TensorRef::new(dev_target.as_slice(), [bt], contiguous_stride([bt])).unwrap(),
+            out: TensorMut::new(dev_out.as_slice_mut(), [1], [1]).unwrap(),
+            grad_input: Some(
+                TensorMut::new(
+                    dev_grad_input.as_slice_mut(),
+                    [bt, h],
+                    contiguous_stride([bt, h]),
+                )
+                .unwrap(),
+            ),
+            grad_weight: Some(
+                TensorMut::new(
+                    dev_grad_weight.as_slice_mut(),
+                    [v, h],
+                    contiguous_stride([v, h]),
+                )
+                .unwrap(),
+            ),
         },
     )
     .unwrap();
@@ -148,16 +140,22 @@ fn flce_bw_f32_grad_input_finite_diff() {
             Workspace::None,
             FusedLinearCrossEntropyBackwardArgs {
                 dy_scalar: 1.0,
-                grad_input: Some(TensorMut {
-                    data: dev_grad_input.as_slice_mut(),
-                    shape: [bt, h],
-                    stride: contiguous_stride([bt, h]),
-                }),
-                grad_weight: Some(TensorMut {
-                    data: dev_grad_weight.as_slice_mut(),
-                    shape: [v, h],
-                    stride: contiguous_stride([v, h]),
-                }),
+                grad_input: Some(
+                    TensorMut::new(
+                        dev_grad_input.as_slice_mut(),
+                        [bt, h],
+                        contiguous_stride([bt, h]),
+                    )
+                    .unwrap(),
+                ),
+                grad_weight: Some(
+                    TensorMut::new(
+                        dev_grad_weight.as_slice_mut(),
+                        [v, h],
+                        contiguous_stride([v, h]),
+                    )
+                    .unwrap(),
+                ),
             },
         )
         .unwrap();
@@ -291,36 +289,28 @@ fn flce_bw_f32_dy_scalar_2_doubles_gradients() {
         &stream,
         Workspace::None,
         FusedLinearCrossEntropyArgs {
-            input: TensorRef {
-                data: dev_input.as_slice(),
-                shape: [bt, h],
-                stride: contiguous_stride([bt, h]),
-            },
-            weight: TensorRef {
-                data: dev_weight.as_slice(),
-                shape: [v, h],
-                stride: contiguous_stride([v, h]),
-            },
-            target: TensorRef {
-                data: dev_target.as_slice(),
-                shape: [bt],
-                stride: contiguous_stride([bt]),
-            },
-            out: TensorMut {
-                data: dev_out_1.as_slice_mut(),
-                shape: [1],
-                stride: [1],
-            },
-            grad_input: Some(TensorMut {
-                data: dev_grad_input_1.as_slice_mut(),
-                shape: [bt, h],
-                stride: contiguous_stride([bt, h]),
-            }),
-            grad_weight: Some(TensorMut {
-                data: dev_grad_weight_1.as_slice_mut(),
-                shape: [v, h],
-                stride: contiguous_stride([v, h]),
-            }),
+            input: TensorRef::new(dev_input.as_slice(), [bt, h], contiguous_stride([bt, h]))
+                .unwrap(),
+            weight: TensorRef::new(dev_weight.as_slice(), [v, h], contiguous_stride([v, h]))
+                .unwrap(),
+            target: TensorRef::new(dev_target.as_slice(), [bt], contiguous_stride([bt])).unwrap(),
+            out: TensorMut::new(dev_out_1.as_slice_mut(), [1], [1]).unwrap(),
+            grad_input: Some(
+                TensorMut::new(
+                    dev_grad_input_1.as_slice_mut(),
+                    [bt, h],
+                    contiguous_stride([bt, h]),
+                )
+                .unwrap(),
+            ),
+            grad_weight: Some(
+                TensorMut::new(
+                    dev_grad_weight_1.as_slice_mut(),
+                    [v, h],
+                    contiguous_stride([v, h]),
+                )
+                .unwrap(),
+            ),
         },
     )
     .unwrap();
@@ -345,36 +335,29 @@ fn flce_bw_f32_dy_scalar_2_doubles_gradients() {
             &stream,
             Workspace::None,
             FusedLinearCrossEntropyArgs {
-                input: TensorRef {
-                    data: dev_input.as_slice(),
-                    shape: [bt, h],
-                    stride: contiguous_stride([bt, h]),
-                },
-                weight: TensorRef {
-                    data: dev_weight.as_slice(),
-                    shape: [v, h],
-                    stride: contiguous_stride([v, h]),
-                },
-                target: TensorRef {
-                    data: dev_target.as_slice(),
-                    shape: [bt],
-                    stride: contiguous_stride([bt]),
-                },
-                out: TensorMut {
-                    data: dev_out_2.as_slice_mut(),
-                    shape: [1],
-                    stride: [1],
-                },
-                grad_input: Some(TensorMut {
-                    data: dev_grad_input_2.as_slice_mut(),
-                    shape: [bt, h],
-                    stride: contiguous_stride([bt, h]),
-                }),
-                grad_weight: Some(TensorMut {
-                    data: dev_grad_weight_2.as_slice_mut(),
-                    shape: [v, h],
-                    stride: contiguous_stride([v, h]),
-                }),
+                input: TensorRef::new(dev_input.as_slice(), [bt, h], contiguous_stride([bt, h]))
+                    .unwrap(),
+                weight: TensorRef::new(dev_weight.as_slice(), [v, h], contiguous_stride([v, h]))
+                    .unwrap(),
+                target: TensorRef::new(dev_target.as_slice(), [bt], contiguous_stride([bt]))
+                    .unwrap(),
+                out: TensorMut::new(dev_out_2.as_slice_mut(), [1], [1]).unwrap(),
+                grad_input: Some(
+                    TensorMut::new(
+                        dev_grad_input_2.as_slice_mut(),
+                        [bt, h],
+                        contiguous_stride([bt, h]),
+                    )
+                    .unwrap(),
+                ),
+                grad_weight: Some(
+                    TensorMut::new(
+                        dev_grad_weight_2.as_slice_mut(),
+                        [v, h],
+                        contiguous_stride([v, h]),
+                    )
+                    .unwrap(),
+                ),
             },
         )
         .unwrap();
@@ -391,16 +374,22 @@ fn flce_bw_f32_dy_scalar_2_doubles_gradients() {
             Workspace::None,
             FusedLinearCrossEntropyBackwardArgs {
                 dy_scalar: 2.0,
-                grad_input: Some(TensorMut {
-                    data: dev_grad_input_2.as_slice_mut(),
-                    shape: [bt, h],
-                    stride: contiguous_stride([bt, h]),
-                }),
-                grad_weight: Some(TensorMut {
-                    data: dev_grad_weight_2.as_slice_mut(),
-                    shape: [v, h],
-                    stride: contiguous_stride([v, h]),
-                }),
+                grad_input: Some(
+                    TensorMut::new(
+                        dev_grad_input_2.as_slice_mut(),
+                        [bt, h],
+                        contiguous_stride([bt, h]),
+                    )
+                    .unwrap(),
+                ),
+                grad_weight: Some(
+                    TensorMut::new(
+                        dev_grad_weight_2.as_slice_mut(),
+                        [v, h],
+                        contiguous_stride([v, h]),
+                    )
+                    .unwrap(),
+                ),
             },
         )
         .unwrap();

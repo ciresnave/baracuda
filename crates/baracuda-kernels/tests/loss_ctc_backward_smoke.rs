@@ -89,36 +89,29 @@ where
     let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(ctx, aux_bytes).expect("alloc ws");
     let loss_shape = [loss_numel as i32];
     let args = CtcLossArgs::<T> {
-        log_probs: TensorRef {
-            data: dev_lp.as_slice(),
-            shape: lp_shape,
-            stride: contiguous_stride(lp_shape),
-        },
-        targets: TensorRef {
-            data: dev_tgt.as_slice(),
-            shape: tgt_shape,
-            stride: contiguous_stride(tgt_shape),
-        },
-        input_lengths: TensorRef {
-            data: dev_in_lens.as_slice(),
-            shape: in_lens_shape,
-            stride: contiguous_stride(in_lens_shape),
-        },
-        target_lengths: TensorRef {
-            data: dev_tgt_lens.as_slice(),
-            shape: tgt_lens_shape,
-            stride: contiguous_stride(tgt_lens_shape),
-        },
-        loss: TensorMut {
-            data: dev_loss.as_slice_mut(),
-            shape: loss_shape,
-            stride: contiguous_stride(loss_shape),
-        },
-        alpha: TensorMut {
-            data: dev_alpha.as_slice_mut(),
-            shape: [alpha_bytes as i32],
-            stride: [1],
-        },
+        log_probs: TensorRef::new(dev_lp.as_slice(), lp_shape, contiguous_stride(lp_shape))
+            .unwrap(),
+        targets: TensorRef::new(dev_tgt.as_slice(), tgt_shape, contiguous_stride(tgt_shape))
+            .unwrap(),
+        input_lengths: TensorRef::new(
+            dev_in_lens.as_slice(),
+            in_lens_shape,
+            contiguous_stride(in_lens_shape),
+        )
+        .unwrap(),
+        target_lengths: TensorRef::new(
+            dev_tgt_lens.as_slice(),
+            tgt_lens_shape,
+            contiguous_stride(tgt_lens_shape),
+        )
+        .unwrap(),
+        loss: TensorMut::new(
+            dev_loss.as_slice_mut(),
+            loss_shape,
+            contiguous_stride(loss_shape),
+        )
+        .unwrap(),
+        alpha: TensorMut::new(dev_alpha.as_slice_mut(), [alpha_bytes as i32], [1]).unwrap(),
     };
     let ws = if aux_bytes > 0 {
         Workspace::Borrowed(dev_ws.as_slice_mut())
@@ -180,36 +173,29 @@ where
     let loss_shape = [loss_numel as i32];
     {
         let fw_args = CtcLossArgs::<T> {
-            log_probs: TensorRef {
-                data: dev_lp.as_slice(),
-                shape: lp_shape,
-                stride: contiguous_stride(lp_shape),
-            },
-            targets: TensorRef {
-                data: dev_tgt.as_slice(),
-                shape: tgt_shape,
-                stride: contiguous_stride(tgt_shape),
-            },
-            input_lengths: TensorRef {
-                data: dev_in_lens.as_slice(),
-                shape: in_lens_shape,
-                stride: contiguous_stride(in_lens_shape),
-            },
-            target_lengths: TensorRef {
-                data: dev_tgt_lens.as_slice(),
-                shape: tgt_lens_shape,
-                stride: contiguous_stride(tgt_lens_shape),
-            },
-            loss: TensorMut {
-                data: dev_loss.as_slice_mut(),
-                shape: loss_shape,
-                stride: contiguous_stride(loss_shape),
-            },
-            alpha: TensorMut {
-                data: dev_alpha.as_slice_mut(),
-                shape: [alpha_bytes as i32],
-                stride: [1],
-            },
+            log_probs: TensorRef::new(dev_lp.as_slice(), lp_shape, contiguous_stride(lp_shape))
+                .unwrap(),
+            targets: TensorRef::new(dev_tgt.as_slice(), tgt_shape, contiguous_stride(tgt_shape))
+                .unwrap(),
+            input_lengths: TensorRef::new(
+                dev_in_lens.as_slice(),
+                in_lens_shape,
+                contiguous_stride(in_lens_shape),
+            )
+            .unwrap(),
+            target_lengths: TensorRef::new(
+                dev_tgt_lens.as_slice(),
+                tgt_lens_shape,
+                contiguous_stride(tgt_lens_shape),
+            )
+            .unwrap(),
+            loss: TensorMut::new(
+                dev_loss.as_slice_mut(),
+                loss_shape,
+                contiguous_stride(loss_shape),
+            )
+            .unwrap(),
+            alpha: TensorMut::new(dev_alpha.as_slice_mut(), [alpha_bytes as i32], [1]).unwrap(),
         };
         let ws = if aux_bytes > 0 {
             Workspace::Borrowed(dev_ws.as_slice_mut())
@@ -238,46 +224,36 @@ where
     let mut dev_bw_ws: DeviceBuffer<u8> =
         DeviceBuffer::zeros(ctx, bw_ws_bytes.max(1)).expect("alloc bw ws");
     let bw_args = CtcLossBackwardArgs::<T> {
-        log_probs: TensorRef {
-            data: dev_lp.as_slice(),
-            shape: lp_shape,
-            stride: contiguous_stride(lp_shape),
-        },
-        targets: TensorRef {
-            data: dev_tgt.as_slice(),
-            shape: tgt_shape,
-            stride: contiguous_stride(tgt_shape),
-        },
-        input_lengths: TensorRef {
-            data: dev_in_lens.as_slice(),
-            shape: in_lens_shape,
-            stride: contiguous_stride(in_lens_shape),
-        },
-        target_lengths: TensorRef {
-            data: dev_tgt_lens.as_slice(),
-            shape: tgt_lens_shape,
-            stride: contiguous_stride(tgt_lens_shape),
-        },
-        per_sample_loss: TensorRef {
-            data: dev_ws.as_slice(),
-            shape: [aux_bytes as i32],
-            stride: [1],
-        },
-        alpha: TensorRef {
-            data: dev_alpha.as_slice(),
-            shape: [alpha_bytes as i32],
-            stride: [1],
-        },
-        dloss: TensorRef {
-            data: dev_dloss.as_slice(),
-            shape: loss_shape,
-            stride: contiguous_stride(loss_shape),
-        },
-        dlog_probs: TensorMut {
-            data: dev_dlp.as_slice_mut(),
-            shape: lp_shape,
-            stride: contiguous_stride(lp_shape),
-        },
+        log_probs: TensorRef::new(dev_lp.as_slice(), lp_shape, contiguous_stride(lp_shape))
+            .unwrap(),
+        targets: TensorRef::new(dev_tgt.as_slice(), tgt_shape, contiguous_stride(tgt_shape))
+            .unwrap(),
+        input_lengths: TensorRef::new(
+            dev_in_lens.as_slice(),
+            in_lens_shape,
+            contiguous_stride(in_lens_shape),
+        )
+        .unwrap(),
+        target_lengths: TensorRef::new(
+            dev_tgt_lens.as_slice(),
+            tgt_lens_shape,
+            contiguous_stride(tgt_lens_shape),
+        )
+        .unwrap(),
+        per_sample_loss: TensorRef::new(dev_ws.as_slice(), [aux_bytes as i32], [1]).unwrap(),
+        alpha: TensorRef::new(dev_alpha.as_slice(), [alpha_bytes as i32], [1]).unwrap(),
+        dloss: TensorRef::new(
+            dev_dloss.as_slice(),
+            loss_shape,
+            contiguous_stride(loss_shape),
+        )
+        .unwrap(),
+        dlog_probs: TensorMut::new(
+            dev_dlp.as_slice_mut(),
+            lp_shape,
+            contiguous_stride(lp_shape),
+        )
+        .unwrap(),
         mean_denom: host_tgt_lens.iter().sum(),
     };
     let bw_ws = if bw_ws_bytes > 0 {

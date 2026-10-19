@@ -47,18 +47,10 @@ fn dequantize_per_tensor_s8_f32_exact_inverse() {
         DequantizePerTensorPlan::<f32, S8>::select(&stream, &desc, PlanPreference::default())
             .expect("select");
     let args = DequantizePerTensorArgs::<f32, S8> {
-        input: TensorRef {
-            data: dev_q.as_slice(),
-            shape: [numel],
-            stride: contiguous_stride([numel]),
-        },
+        input: TensorRef::new(dev_q.as_slice(), [numel], contiguous_stride([numel])).unwrap(),
         scale,
         zero_point,
-        output: TensorMut {
-            data: dev_x.as_slice_mut(),
-            shape: [numel],
-            stride: contiguous_stride([numel]),
-        },
+        output: TensorMut::new(dev_x.as_slice_mut(), [numel], contiguous_stride([numel])).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

@@ -205,16 +205,9 @@ fn im2col_2d_f32_3x3_stride1() {
         &stream,
         Workspace::None,
         Im2ColArgs {
-            input: TensorRef {
-                data: dev_x.as_slice(),
-                shape: x_shape,
-                stride: contiguous_stride(x_shape),
-            },
-            output: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
+            input: TensorRef::new(dev_x.as_slice(), x_shape, contiguous_stride(x_shape)).unwrap(),
+            output: TensorMut::new(dev_y.as_slice_mut(), y_shape, contiguous_stride(y_shape))
+                .unwrap(),
         },
     )
     .expect("run");
@@ -281,16 +274,9 @@ fn im2col_2d_f32_3x3_stride2_pad1() {
         &stream,
         Workspace::None,
         Im2ColArgs {
-            input: TensorRef {
-                data: dev_x.as_slice(),
-                shape: x_shape,
-                stride: contiguous_stride(x_shape),
-            },
-            output: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
+            input: TensorRef::new(dev_x.as_slice(), x_shape, contiguous_stride(x_shape)).unwrap(),
+            output: TensorMut::new(dev_y.as_slice_mut(), y_shape, contiguous_stride(y_shape))
+                .unwrap(),
         },
     )
     .expect("run");
@@ -357,16 +343,9 @@ fn im2col_2d_f32_with_dilation() {
         &stream,
         Workspace::None,
         Im2ColArgs {
-            input: TensorRef {
-                data: dev_x.as_slice(),
-                shape: x_shape,
-                stride: contiguous_stride(x_shape),
-            },
-            output: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
+            input: TensorRef::new(dev_x.as_slice(), x_shape, contiguous_stride(x_shape)).unwrap(),
+            output: TensorMut::new(dev_y.as_slice_mut(), y_shape, contiguous_stride(y_shape))
+                .unwrap(),
         },
     )
     .expect("run");
@@ -426,16 +405,9 @@ fn im2col_1d_f32_basic() {
         &stream,
         Workspace::None,
         Im2Col1dArgs {
-            input: TensorRef {
-                data: dev_x.as_slice(),
-                shape: x_shape,
-                stride: contiguous_stride(x_shape),
-            },
-            output: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
+            input: TensorRef::new(dev_x.as_slice(), x_shape, contiguous_stride(x_shape)).unwrap(),
+            output: TensorMut::new(dev_y.as_slice_mut(), y_shape, contiguous_stride(y_shape))
+                .unwrap(),
         },
     )
     .expect("run");
@@ -502,16 +474,14 @@ fn col2im_1d_f32_roundtrip() {
         &stream,
         Workspace::None,
         Col2Im1dArgs {
-            input: TensorRef {
-                data: dev_col.as_slice(),
-                shape: in_shape,
-                stride: contiguous_stride(in_shape),
-            },
-            output: TensorMut {
-                data: dev_out.as_slice_mut(),
-                shape: out_shape,
-                stride: contiguous_stride(out_shape),
-            },
+            input: TensorRef::new(dev_col.as_slice(), in_shape, contiguous_stride(in_shape))
+                .unwrap(),
+            output: TensorMut::new(
+                dev_out.as_slice_mut(),
+                out_shape,
+                contiguous_stride(out_shape),
+            )
+            .unwrap(),
         },
     )
     .expect("run");
@@ -575,16 +545,14 @@ fn col2im_1d_f32_roundtrip() {
             &stream,
             Workspace::None,
             Col2Im1dArgs {
-                input: TensorRef {
-                    data: dev_col2.as_slice(),
-                    shape: in_shape2,
-                    stride: contiguous_stride(in_shape2),
-                },
-                output: TensorMut {
-                    data: dev_out2.as_slice_mut(),
-                    shape: out_shape,
-                    stride: contiguous_stride(out_shape),
-                },
+                input: TensorRef::new(dev_col2.as_slice(), in_shape2, contiguous_stride(in_shape2))
+                    .unwrap(),
+                output: TensorMut::new(
+                    dev_out2.as_slice_mut(),
+                    out_shape,
+                    contiguous_stride(out_shape),
+                )
+                .unwrap(),
             },
         )
         .expect("run2");
@@ -653,16 +621,9 @@ fn im2col_2d_f16_basic() {
         &stream,
         Workspace::None,
         Im2ColArgs {
-            input: TensorRef {
-                data: dev_x.as_slice(),
-                shape: x_shape,
-                stride: contiguous_stride(x_shape),
-            },
-            output: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
+            input: TensorRef::new(dev_x.as_slice(), x_shape, contiguous_stride(x_shape)).unwrap(),
+            output: TensorMut::new(dev_y.as_slice_mut(), y_shape, contiguous_stride(y_shape))
+                .unwrap(),
         },
     )
     .expect("run");
@@ -729,16 +690,9 @@ fn im2col_2d_bf16_basic() {
         &stream,
         Workspace::None,
         Im2ColArgs {
-            input: TensorRef {
-                data: dev_x.as_slice(),
-                shape: x_shape,
-                stride: contiguous_stride(x_shape),
-            },
-            output: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
+            input: TensorRef::new(dev_x.as_slice(), x_shape, contiguous_stride(x_shape)).unwrap(),
+            output: TensorMut::new(dev_y.as_slice_mut(), y_shape, contiguous_stride(y_shape))
+                .unwrap(),
         },
     )
     .expect("run");

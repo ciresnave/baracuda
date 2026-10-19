@@ -119,21 +119,22 @@ impl<T: Element> EmbeddingBagMaxBackwardPlan<T> {
         crate::view_check::check_fits(&args.dout)?;
         crate::view_check::check_fits(&args.output_index)?;
         crate::view_check::check_fits(&args.dweight)?;
-        if args.dout.shape[0] != self.desc.num_bags || args.dout.shape[1] != self.desc.embedding_dim
+        if args.dout.shape()[0] != self.desc.num_bags
+            || args.dout.shape()[1] != self.desc.embedding_dim
         {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::EmbeddingBagMaxBackwardPlan: dout shape != [num_bags, embedding_dim]",
             ));
         }
-        if args.output_index.shape[0] != self.desc.num_bags
-            || args.output_index.shape[1] != self.desc.embedding_dim
+        if args.output_index.shape()[0] != self.desc.num_bags
+            || args.output_index.shape()[1] != self.desc.embedding_dim
         {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::EmbeddingBagMaxBackwardPlan: output_index shape != [num_bags, embedding_dim]",
             ));
         }
-        if args.dweight.shape[0] != self.desc.num_embeddings
-            || args.dweight.shape[1] != self.desc.embedding_dim
+        if args.dweight.shape()[0] != self.desc.num_embeddings
+            || args.dweight.shape()[1] != self.desc.embedding_dim
         {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::EmbeddingBagMaxBackwardPlan: dweight shape != [num_embeddings, embedding_dim]",
@@ -171,9 +172,9 @@ impl<T: Element> EmbeddingBagMaxBackwardPlan<T> {
         if self.desc.num_bags == 0 || self.desc.embedding_dim == 0 {
             return Ok(());
         }
-        let dout_ptr = args.dout.data.as_raw().0 as *const c_void;
-        let idx_ptr = args.output_index.data.as_raw().0 as *const c_void;
-        let dw_ptr = args.dweight.data.as_raw().0 as *mut c_void;
+        let dout_ptr = args.dout.data().as_raw().0 as *const c_void;
+        let idx_ptr = args.output_index.data().as_raw().0 as *const c_void;
+        let dw_ptr = args.dweight.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         let status = match T::KIND {
             ElementKind::F32 => unsafe {

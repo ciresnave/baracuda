@@ -179,36 +179,12 @@ fn arbmask_random_f32_matches_host_ref() {
         &stream,
         Workspace::None,
         FlashSdpaArgs {
-            q: TensorRef {
-                data: dq.as_slice(),
-                shape: sq,
-                stride: contiguous_stride(sq),
-            },
-            k: TensorRef {
-                data: dk.as_slice(),
-                shape: sk,
-                stride: contiguous_stride(sk),
-            },
-            v: TensorRef {
-                data: dv.as_slice(),
-                shape: sv,
-                stride: contiguous_stride(sv),
-            },
-            y: TensorMut {
-                data: dy.as_slice_mut(),
-                shape: sy,
-                stride: contiguous_stride(sy),
-            },
-            lse: TensorMut {
-                data: dlse.as_slice_mut(),
-                shape: sl,
-                stride: contiguous_stride(sl),
-            },
-            mask: Some(TensorRef {
-                data: dm.as_slice(),
-                shape: sm,
-                stride: contiguous_stride(sm),
-            }),
+            q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+            k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+            v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
+            y: TensorMut::new(dy.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
+            lse: TensorMut::new(dlse.as_slice_mut(), sl, contiguous_stride(sl)).unwrap(),
+            mask: Some(TensorRef::new(dm.as_slice(), sm, contiguous_stride(sm)).unwrap()),
             alibi_slopes: None,
         },
     )
@@ -357,36 +333,12 @@ fn arbmask_tree_attention_pattern() {
         &stream,
         Workspace::None,
         FlashSdpaArgs {
-            q: TensorRef {
-                data: dq.as_slice(),
-                shape: sq,
-                stride: contiguous_stride(sq),
-            },
-            k: TensorRef {
-                data: dk.as_slice(),
-                shape: sk,
-                stride: contiguous_stride(sk),
-            },
-            v: TensorRef {
-                data: dv.as_slice(),
-                shape: sv,
-                stride: contiguous_stride(sv),
-            },
-            y: TensorMut {
-                data: dy.as_slice_mut(),
-                shape: sy,
-                stride: contiguous_stride(sy),
-            },
-            lse: TensorMut {
-                data: dlse.as_slice_mut(),
-                shape: sl,
-                stride: contiguous_stride(sl),
-            },
-            mask: Some(TensorRef {
-                data: dm.as_slice(),
-                shape: sm,
-                stride: contiguous_stride(sm),
-            }),
+            q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+            k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+            v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
+            y: TensorMut::new(dy.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
+            lse: TensorMut::new(dlse.as_slice_mut(), sl, contiguous_stride(sl)).unwrap(),
+            mask: Some(TensorRef::new(dm.as_slice(), sm, contiguous_stride(sm)).unwrap()),
             alibi_slopes: None,
         },
     )
@@ -437,36 +389,12 @@ fn arbmask_tree_attention_pattern() {
         &stream,
         Workspace::None,
         FlashSdpaArgs {
-            q: TensorRef {
-                data: dq.as_slice(),
-                shape: sq,
-                stride: contiguous_stride(sq),
-            },
-            k: TensorRef {
-                data: dk.as_slice(),
-                shape: sk,
-                stride: contiguous_stride(sk),
-            },
-            v: TensorRef {
-                data: dv2.as_slice(),
-                shape: sv,
-                stride: contiguous_stride(sv),
-            },
-            y: TensorMut {
-                data: dy2.as_slice_mut(),
-                shape: sy,
-                stride: contiguous_stride(sy),
-            },
-            lse: TensorMut {
-                data: dlse2.as_slice_mut(),
-                shape: sl,
-                stride: contiguous_stride(sl),
-            },
-            mask: Some(TensorRef {
-                data: dm.as_slice(),
-                shape: sm,
-                stride: contiguous_stride(sm),
-            }),
+            q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+            k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+            v: TensorRef::new(dv2.as_slice(), sv, contiguous_stride(sv)).unwrap(),
+            y: TensorMut::new(dy2.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
+            lse: TensorMut::new(dlse2.as_slice_mut(), sl, contiguous_stride(sl)).unwrap(),
+            mask: Some(TensorRef::new(dm.as_slice(), sm, contiguous_stride(sm)).unwrap()),
             alibi_slopes: None,
         },
     )
@@ -573,36 +501,12 @@ fn arbmask_sliding_window_matches_naive() {
         &stream,
         Workspace::None,
         FlashSdpaArgs {
-            q: TensorRef {
-                data: dq.as_slice(),
-                shape: sq,
-                stride: contiguous_stride(sq),
-            },
-            k: TensorRef {
-                data: dk.as_slice(),
-                shape: sk,
-                stride: contiguous_stride(sk),
-            },
-            v: TensorRef {
-                data: dv.as_slice(),
-                shape: sv,
-                stride: contiguous_stride(sv),
-            },
-            y: TensorMut {
-                data: dy.as_slice_mut(),
-                shape: sy,
-                stride: contiguous_stride(sy),
-            },
-            lse: TensorMut {
-                data: dlse.as_slice_mut(),
-                shape: sl,
-                stride: contiguous_stride(sl),
-            },
-            mask: Some(TensorRef {
-                data: dm.as_slice(),
-                shape: sm,
-                stride: contiguous_stride(sm),
-            }),
+            q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+            k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+            v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
+            y: TensorMut::new(dy.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
+            lse: TensorMut::new(dlse.as_slice_mut(), sl, contiguous_stride(sl)).unwrap(),
+            mask: Some(TensorRef::new(dm.as_slice(), sm, contiguous_stride(sm)).unwrap()),
             alibi_slopes: None,
         },
     )
@@ -681,36 +585,12 @@ fn arbmask_with_causal_compose() {
         &stream,
         Workspace::None,
         FlashSdpaArgs {
-            q: TensorRef {
-                data: dq.as_slice(),
-                shape: sq,
-                stride: contiguous_stride(sq),
-            },
-            k: TensorRef {
-                data: dk.as_slice(),
-                shape: sk,
-                stride: contiguous_stride(sk),
-            },
-            v: TensorRef {
-                data: dv.as_slice(),
-                shape: sv,
-                stride: contiguous_stride(sv),
-            },
-            y: TensorMut {
-                data: dy.as_slice_mut(),
-                shape: sy,
-                stride: contiguous_stride(sy),
-            },
-            lse: TensorMut {
-                data: dlse.as_slice_mut(),
-                shape: sl,
-                stride: contiguous_stride(sl),
-            },
-            mask: Some(TensorRef {
-                data: dm.as_slice(),
-                shape: sm,
-                stride: contiguous_stride(sm),
-            }),
+            q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+            k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+            v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
+            y: TensorMut::new(dy.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
+            lse: TensorMut::new(dlse.as_slice_mut(), sl, contiguous_stride(sl)).unwrap(),
+            mask: Some(TensorRef::new(dm.as_slice(), sm, contiguous_stride(sm)).unwrap()),
             alibi_slopes: None,
         },
     )

@@ -109,21 +109,9 @@ fn cummax_bw_f32_1d_forward_fw() {
     let plan =
         ScanBackwardPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = ScanBackwardArgs::<f32, 1> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        x: Some(TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        }),
+        dy: TensorRef::new(dev_dy.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        dx: TensorMut::new(dev_dx.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
+        x: Some(TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap()),
         y: None,
     };
     plan.run(&stream, Workspace::None, args).expect("run");
@@ -167,21 +155,9 @@ fn cummax_bw_f64_2d_reverse_fw() {
     let plan =
         ScanBackwardPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = ScanBackwardArgs::<f64, 2> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        x: Some(TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        }),
+        dy: TensorRef::new(dev_dy.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        dx: TensorMut::new(dev_dx.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
+        x: Some(TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap()),
         y: None,
     };
     plan.run(&stream, Workspace::None, args).expect("run");
@@ -223,21 +199,9 @@ fn cummax_bw_f16_2d() {
     let plan =
         ScanBackwardPlan::<f16, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = ScanBackwardArgs::<f16, 2> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        x: Some(TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        }),
+        dy: TensorRef::new(dev_dy.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        dx: TensorMut::new(dev_dx.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
+        x: Some(TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap()),
         y: None,
     };
     plan.run(&stream, Workspace::None, args).expect("run");
@@ -281,21 +245,9 @@ fn cummax_bw_bf16_2d() {
     let plan = ScanBackwardPlan::<bf16, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let args = ScanBackwardArgs::<bf16, 2> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        x: Some(TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        }),
+        dy: TensorRef::new(dev_dy.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        dx: TensorMut::new(dev_dx.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
+        x: Some(TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap()),
         y: None,
     };
     plan.run(&stream, Workspace::None, args).expect("run");

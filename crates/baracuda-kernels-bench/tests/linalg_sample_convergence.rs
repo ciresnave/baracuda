@@ -147,16 +147,8 @@ fn linalg_timing_dispersion_swamps_any_sample_size_trend() {
     let mut launch = || {
         let mut w = work.borrow_mut();
         let args = CholeskyArgs::<f32> {
-            a: TensorMut {
-                data: w.as_slice_mut(),
-                shape: sh,
-                stride: st,
-            },
-            info: TensorMut {
-                data: info.as_slice_mut(),
-                shape: [1],
-                stride: [1],
-            },
+            a: TensorMut::new(w.as_slice_mut(), sh, st).unwrap(),
+            info: TensorMut::new(info.as_slice_mut(), [1], [1]).unwrap(),
         };
         plan.run(&stream, Workspace::Borrowed(ws.as_slice_mut()), args)
             .expect("cholesky");

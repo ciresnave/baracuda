@@ -125,7 +125,7 @@ impl<TIn: Element, TOut: IntElement> DequantizePerTensorBackwardPlan<TIn, TOut> 
         crate::view_check::check_fits(&args.d_output)?;
         crate::view_check::check_fits(&args.d_input)?;
         let expected = [self.desc.numel];
-        if args.d_output.shape != expected || args.d_input.shape != expected {
+        if args.d_output.shape() != expected || args.d_input.shape() != expected {
             return Err(Error::InvalidProblem(
                 "DequantizePerTensorBackwardPlan: tensor shape != [numel]",
             ));
@@ -163,8 +163,8 @@ impl<TIn: Element, TOut: IntElement> DequantizePerTensorBackwardPlan<TIn, TOut> 
         if numel == 0 {
             return Ok(());
         }
-        let dy_ptr = args.d_output.data.as_raw().0 as *const c_void;
-        let dq_ptr = args.d_input.data.as_raw().0 as *mut c_void;
+        let dy_ptr = args.d_output.data().as_raw().0 as *const c_void;
+        let dq_ptr = args.d_input.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
         let status = if <TIn::Scalar as ScalarType>::IS_F64 {

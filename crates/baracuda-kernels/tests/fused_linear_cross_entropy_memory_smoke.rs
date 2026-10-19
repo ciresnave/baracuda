@@ -113,26 +113,12 @@ fn flce_real_gpu_memory_under_bound() {
         &stream,
         Workspace::None,
         FusedLinearCrossEntropyArgs {
-            input: TensorRef {
-                data: dev_input.as_slice(),
-                shape: [bt, h],
-                stride: contiguous_stride([bt, h]),
-            },
-            weight: TensorRef {
-                data: dev_weight.as_slice(),
-                shape: [v, h],
-                stride: contiguous_stride([v, h]),
-            },
-            target: TensorRef {
-                data: dev_target.as_slice(),
-                shape: [bt],
-                stride: contiguous_stride([bt]),
-            },
-            out: TensorMut {
-                data: dev_out.as_slice_mut(),
-                shape: [1],
-                stride: [1],
-            },
+            input: TensorRef::new(dev_input.as_slice(), [bt, h], contiguous_stride([bt, h]))
+                .unwrap(),
+            weight: TensorRef::new(dev_weight.as_slice(), [v, h], contiguous_stride([v, h]))
+                .unwrap(),
+            target: TensorRef::new(dev_target.as_slice(), [bt], contiguous_stride([bt])).unwrap(),
+            out: TensorMut::new(dev_out.as_slice_mut(), [1], [1]).unwrap(),
             grad_input: None,
             grad_weight: None,
         },

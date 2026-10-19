@@ -109,12 +109,12 @@ impl<TIn: Element, TOut: IntElement> DequantizePerTokenBackwardPlan<TIn, TOut> {
         crate::view_check::check_fits(&args.d_output)?;
         crate::view_check::check_fits(&args.d_input)?;
         let expect = [self.desc.n, self.desc.d];
-        if args.d_output.shape != expect || args.d_input.shape != expect {
+        if args.d_output.shape() != expect || args.d_input.shape() != expect {
             return Err(Error::InvalidProblem(
                 "DequantizePerTokenBackwardPlan: tensor shape != [n, d]",
             ));
         }
-        if args.scale.shape != [self.desc.n] {
+        if args.scale.shape() != [self.desc.n] {
             return Err(Error::InvalidProblem(
                 "DequantizePerTokenBackwardPlan: scale shape != [n]",
             ));
@@ -152,9 +152,9 @@ impl<TIn: Element, TOut: IntElement> DequantizePerTokenBackwardPlan<TIn, TOut> {
         if total == 0 {
             return Ok(());
         }
-        let dy_ptr = args.d_output.data.as_raw().0 as *const c_void;
-        let sc_ptr = args.scale.data.as_raw().0 as *const c_void;
-        let dx_ptr = args.d_input.data.as_raw().0 as *mut c_void;
+        let dy_ptr = args.d_output.data().as_raw().0 as *const c_void;
+        let sc_ptr = args.scale.data().as_raw().0 as *const c_void;
+        let dx_ptr = args.d_input.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
         let status = match TIn::KIND {

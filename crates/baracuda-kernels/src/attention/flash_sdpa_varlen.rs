@@ -285,35 +285,35 @@ impl<T: Element> FlashSdpaVarlenPlan<T> {
         if let Some(t) = &args.alibi_slopes {
             crate::view_check::check_fits(t)?;
         }
-        let total_q = args.q.shape[0];
-        let total_k = args.k.shape[0];
+        let total_q = args.q.shape()[0];
+        let total_k = args.k.shape()[0];
 
-        if args.q.shape[1] != self.desc.num_heads || args.q.shape[2] != self.desc.d_k {
+        if args.q.shape()[1] != self.desc.num_heads || args.q.shape()[2] != self.desc.d_k {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FlashSdpaVarlenPlan: Q shape must be [total_q, H, D_k]",
             ));
         }
-        if args.k.shape[1] != self.desc.num_heads_k || args.k.shape[2] != self.desc.d_k {
+        if args.k.shape()[1] != self.desc.num_heads_k || args.k.shape()[2] != self.desc.d_k {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FlashSdpaVarlenPlan: K shape must be [total_k, H_k, D_k]",
             ));
         }
-        if args.v.shape != [total_k, self.desc.num_heads_k, self.desc.d_v] {
+        if args.v.shape() != [total_k, self.desc.num_heads_k, self.desc.d_v] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FlashSdpaVarlenPlan: V shape must be [total_k, H_k, D_v]",
             ));
         }
-        if args.y.shape != [total_q, self.desc.num_heads, self.desc.d_v] {
+        if args.y.shape() != [total_q, self.desc.num_heads, self.desc.d_v] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FlashSdpaVarlenPlan: y shape must be [total_q, H, D_v]",
             ));
         }
-        if args.cu_seqlens_q.shape != [self.desc.batch_size + 1] {
+        if args.cu_seqlens_q.shape() != [self.desc.batch_size + 1] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FlashSdpaVarlenPlan: cu_seqlens_q shape must be [batch + 1]",
             ));
         }
-        if args.cu_seqlens_k.shape != [self.desc.batch_size + 1] {
+        if args.cu_seqlens_k.shape() != [self.desc.batch_size + 1] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FlashSdpaVarlenPlan: cu_seqlens_k shape must be [batch + 1]",
             ));
@@ -338,12 +338,12 @@ impl<T: Element> FlashSdpaVarlenPlan<T> {
             ));
         }
         if let Some(slopes) = args.alibi_slopes.as_ref() {
-            if slopes.shape[1] != self.desc.num_heads {
+            if slopes.shape()[1] != self.desc.num_heads {
                 return Err(Error::InvalidProblem(
                     "baracuda-kernels::FlashSdpaVarlenPlan: alibi_slopes shape[1] must equal num_heads",
                 ));
             }
-            if slopes.shape[0] != 1 && slopes.shape[0] != self.desc.batch_size {
+            if slopes.shape()[0] != 1 && slopes.shape()[0] != self.desc.batch_size {
                 return Err(Error::InvalidProblem(
                     "baracuda-kernels::FlashSdpaVarlenPlan: alibi_slopes shape[0] must be 1 or batch_size",
                 ));
@@ -372,16 +372,16 @@ impl<T: Element> FlashSdpaVarlenPlan<T> {
         }
         #[cfg(feature = "fa2")]
         {
-            let total_q = args.q.shape[0];
-            let total_k = args.k.shape[0];
+            let total_q = args.q.shape()[0];
+            let total_k = args.k.shape()[0];
             let stream_ptr = stream.as_raw();
-            let q_ptr = args.q.data.as_raw().0 as *const c_void;
-            let k_ptr = args.k.data.as_raw().0 as *const c_void;
-            let v_ptr = args.v.data.as_raw().0 as *const c_void;
-            let y_ptr = args.y.data.as_raw().0 as *mut c_void;
-            let lse_ptr = args.lse.data.as_raw().0 as *mut c_void;
-            let cu_q_ptr = args.cu_seqlens_q.data.as_raw().0 as *const i32;
-            let cu_k_ptr = args.cu_seqlens_k.data.as_raw().0 as *const i32;
+            let q_ptr = args.q.data().as_raw().0 as *const c_void;
+            let k_ptr = args.k.data().as_raw().0 as *const c_void;
+            let v_ptr = args.v.data().as_raw().0 as *const c_void;
+            let y_ptr = args.y.data().as_raw().0 as *mut c_void;
+            let lse_ptr = args.lse.data().as_raw().0 as *mut c_void;
+            let cu_q_ptr = args.cu_seqlens_q.data().as_raw().0 as *const i32;
+            let cu_k_ptr = args.cu_seqlens_k.data().as_raw().0 as *const i32;
             let is_causal_flag = if self.desc.is_causal { 1 } else { 0 };
             let (alibi_ptr, alibi_batch_stride) = alibi_dispatch(&self.desc, &args.alibi_slopes);
 
@@ -579,65 +579,65 @@ impl<T: Element> FlashSdpaVarlenBackwardPlan<T> {
         if let Some(t) = &args.alibi_slopes {
             crate::view_check::check_fits(t)?;
         }
-        let total_q = args.q.shape[0];
-        let total_k = args.k.shape[0];
+        let total_q = args.q.shape()[0];
+        let total_k = args.k.shape()[0];
         let shape_q = [total_q, self.desc.num_heads, self.desc.d_k];
         let shape_k = [total_k, self.desc.num_heads_k, self.desc.d_k];
         let shape_v = [total_k, self.desc.num_heads_k, self.desc.d_v];
         let shape_y = [total_q, self.desc.num_heads, self.desc.d_v];
-        if args.q.shape != shape_q {
+        if args.q.shape() != shape_q {
             return Err(Error::InvalidProblem(
                 "FlashSdpaVarlenBackwardPlan: Q shape mismatch",
             ));
         }
-        if args.k.shape != shape_k {
+        if args.k.shape() != shape_k {
             return Err(Error::InvalidProblem(
                 "FlashSdpaVarlenBackwardPlan: K shape mismatch",
             ));
         }
-        if args.v.shape != shape_v {
+        if args.v.shape() != shape_v {
             return Err(Error::InvalidProblem(
                 "FlashSdpaVarlenBackwardPlan: V shape mismatch",
             ));
         }
-        if args.y.shape != shape_y {
+        if args.y.shape() != shape_y {
             return Err(Error::InvalidProblem(
                 "FlashSdpaVarlenBackwardPlan: y shape mismatch",
             ));
         }
-        if args.dy.shape != shape_y {
+        if args.dy.shape() != shape_y {
             return Err(Error::InvalidProblem(
                 "FlashSdpaVarlenBackwardPlan: dy shape mismatch",
             ));
         }
-        if args.dq.shape != shape_q {
+        if args.dq.shape() != shape_q {
             return Err(Error::InvalidProblem(
                 "FlashSdpaVarlenBackwardPlan: dQ shape mismatch",
             ));
         }
-        if args.dk.shape != shape_k {
+        if args.dk.shape() != shape_k {
             return Err(Error::InvalidProblem(
                 "FlashSdpaVarlenBackwardPlan: dK shape mismatch",
             ));
         }
-        if args.dv.shape != shape_v {
+        if args.dv.shape() != shape_v {
             return Err(Error::InvalidProblem(
                 "FlashSdpaVarlenBackwardPlan: dV shape mismatch",
             ));
         }
-        if args.cu_seqlens_q.shape != [self.desc.batch_size + 1] {
+        if args.cu_seqlens_q.shape() != [self.desc.batch_size + 1] {
             return Err(Error::InvalidProblem(
                 "FlashSdpaVarlenBackwardPlan: cu_seqlens_q shape must be [batch + 1]",
             ));
         }
-        if args.cu_seqlens_k.shape != [self.desc.batch_size + 1] {
+        if args.cu_seqlens_k.shape() != [self.desc.batch_size + 1] {
             return Err(Error::InvalidProblem(
                 "FlashSdpaVarlenBackwardPlan: cu_seqlens_k shape must be [batch + 1]",
             ));
         }
         // LSE: f32 [H, total_q + 128*B]
         let lse_cols = (total_q as usize).saturating_add(128usize * self.desc.batch_size as usize);
-        if args.lse.shape[0] != self.desc.num_heads || (args.lse.shape[1] as usize) < lse_cols {
+        if args.lse.shape()[0] != self.desc.num_heads || (args.lse.shape()[1] as usize) < lse_cols {
             return Err(Error::InvalidProblem(
                 "FlashSdpaVarlenBackwardPlan: lse shape must be [H, total_q + 128*B] f32",
             ));
@@ -659,12 +659,12 @@ impl<T: Element> FlashSdpaVarlenBackwardPlan<T> {
             ));
         }
         if let Some(slopes) = args.alibi_slopes.as_ref() {
-            if slopes.shape[1] != self.desc.num_heads {
+            if slopes.shape()[1] != self.desc.num_heads {
                 return Err(Error::InvalidProblem(
                     "FlashSdpaVarlenBackwardPlan: alibi_slopes shape[1] must equal num_heads",
                 ));
             }
-            if slopes.shape[0] != 1 && slopes.shape[0] != self.desc.batch_size {
+            if slopes.shape()[0] != 1 && slopes.shape()[0] != self.desc.batch_size {
                 return Err(Error::InvalidProblem(
                     "FlashSdpaVarlenBackwardPlan: alibi_slopes shape[0] must be 1 or batch_size",
                 ));
@@ -693,8 +693,8 @@ impl<T: Element> FlashSdpaVarlenBackwardPlan<T> {
         }
         #[cfg(feature = "fa2_backward")]
         {
-            let total_q = args.q.shape[0];
-            let total_k = args.k.shape[0];
+            let total_q = args.q.shape()[0];
+            let total_k = args.k.shape()[0];
             let need = self.workspace_size(total_q);
             let (ws_ptr, ws_bytes) = match workspace {
                 Workspace::None => {
@@ -718,17 +718,17 @@ impl<T: Element> FlashSdpaVarlenBackwardPlan<T> {
             };
 
             let stream_ptr = stream.as_raw();
-            let q_ptr = args.q.data.as_raw().0 as *const c_void;
-            let k_ptr = args.k.data.as_raw().0 as *const c_void;
-            let v_ptr = args.v.data.as_raw().0 as *const c_void;
-            let y_ptr = args.y.data.as_raw().0 as *const c_void;
-            let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-            let lse_ptr = args.lse.data.as_raw().0 as *const c_void;
-            let cu_q_ptr = args.cu_seqlens_q.data.as_raw().0 as *const i32;
-            let cu_k_ptr = args.cu_seqlens_k.data.as_raw().0 as *const i32;
-            let dq_ptr = args.dq.data.as_raw().0 as *mut c_void;
-            let dk_ptr = args.dk.data.as_raw().0 as *mut c_void;
-            let dv_ptr = args.dv.data.as_raw().0 as *mut c_void;
+            let q_ptr = args.q.data().as_raw().0 as *const c_void;
+            let k_ptr = args.k.data().as_raw().0 as *const c_void;
+            let v_ptr = args.v.data().as_raw().0 as *const c_void;
+            let y_ptr = args.y.data().as_raw().0 as *const c_void;
+            let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+            let lse_ptr = args.lse.data().as_raw().0 as *const c_void;
+            let cu_q_ptr = args.cu_seqlens_q.data().as_raw().0 as *const i32;
+            let cu_k_ptr = args.cu_seqlens_k.data().as_raw().0 as *const i32;
+            let dq_ptr = args.dq.data().as_raw().0 as *mut c_void;
+            let dk_ptr = args.dk.data().as_raw().0 as *mut c_void;
+            let dv_ptr = args.dv.data().as_raw().0 as *mut c_void;
             let is_causal_flag = if self.desc.is_causal { 1 } else { 0 };
             let (alibi_ptr, alibi_batch_stride) = alibi_dispatch(&self.desc, &args.alibi_slopes);
 
@@ -894,8 +894,8 @@ fn alibi_dispatch(
     match slopes {
         None => (core::ptr::null::<c_void>(), 0i32),
         Some(s) => {
-            let ptr = s.data.as_raw().0 as *const c_void;
-            let batch_stride = if s.shape[0] == 1 {
+            let ptr = s.data().as_raw().0 as *const c_void;
+            let batch_stride = if s.shape()[0] == 1 {
                 0_i32
             } else {
                 desc.num_heads

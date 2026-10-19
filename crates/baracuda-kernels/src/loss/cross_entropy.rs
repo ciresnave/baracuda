@@ -160,17 +160,17 @@ impl<T: Element> CrossEntropyLossPlan<T> {
         if n_rows == 0 {
             return Ok(());
         }
-        if args.input.shape != [self.desc.n_rows, class_extent] {
+        if args.input.shape() != [self.desc.n_rows, class_extent] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::CrossEntropyLossPlan: input shape must be [n_rows, \
                  class_extent]",
             ));
         }
-        let row_stride_input: i64 = args.input.stride[0];
+        let row_stride_input: i64 = args.input.stride()[0];
         let (ws_ptr, ws_bytes) = unpack_workspace(workspace, self.workspace_size())?;
         let stream_ptr = stream.as_raw();
-        let input_ptr = args.input.data.as_raw().0 as *const c_void;
-        let out_ptr = args.out.data.as_raw().0 as *mut c_void;
+        let input_ptr = args.input.data().as_raw().0 as *const c_void;
+        let out_ptr = args.out.data().as_raw().0 as *mut c_void;
         let mode = self.desc.reduction as i32;
 
         let status = match self.desc.target_kind {
@@ -179,12 +179,12 @@ impl<T: Element> CrossEntropyLossPlan<T> {
                     "baracuda-kernels::CrossEntropyLossPlan: target_kind=ClassIndex requires \
                      `target` arg",
                 ))?;
-                if target.shape != [self.desc.n_rows] {
+                if target.shape() != [self.desc.n_rows] {
                     return Err(Error::InvalidProblem(
                         "baracuda-kernels::CrossEntropyLossPlan: target shape must be [n_rows]",
                     ));
                 }
-                let target_ptr = target.data.as_raw().0 as *const c_void;
+                let target_ptr = target.data().as_raw().0 as *const c_void;
                 match T::KIND {
                     ElementKind::F32 => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_loss_cross_entropy_f32_run(
@@ -254,14 +254,14 @@ impl<T: Element> CrossEntropyLossPlan<T> {
                     "baracuda-kernels::CrossEntropyLossPlan: target_kind=SoftProb requires \
                      `soft_target` arg",
                 ))?;
-                if soft.shape != [self.desc.n_rows, class_extent] {
+                if soft.shape() != [self.desc.n_rows, class_extent] {
                     return Err(Error::InvalidProblem(
                         "baracuda-kernels::CrossEntropyLossPlan: soft_target shape must be \
                          [n_rows, class_extent]",
                     ));
                 }
-                let row_stride_target: i64 = soft.stride[0];
-                let target_ptr = soft.data.as_raw().0 as *const c_void;
+                let row_stride_target: i64 = soft.stride()[0];
+                let target_ptr = soft.data().as_raw().0 as *const c_void;
                 match T::KIND {
                     ElementKind::F32 => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_loss_cross_entropy_soft_f32_run(
@@ -461,19 +461,19 @@ impl<T: Element> CrossEntropyLossBackwardPlan<T> {
         if n_rows == 0 {
             return Ok(());
         }
-        if args.input.shape != [self.desc.n_rows, class_extent] {
+        if args.input.shape() != [self.desc.n_rows, class_extent] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::CrossEntropyLossBackwardPlan: input shape must be \
                  [n_rows, class_extent]",
             ));
         }
-        if args.dinput.shape != [self.desc.n_rows, class_extent] {
+        if args.dinput.shape() != [self.desc.n_rows, class_extent] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::CrossEntropyLossBackwardPlan: dinput shape must be \
                  [n_rows, class_extent]",
             ));
         }
-        let row_stride_input: i64 = args.input.stride[0];
+        let row_stride_input: i64 = args.input.stride()[0];
         let mode = self.desc.reduction as i32;
         let inv_n_or_one: f32 = match self.desc.reduction {
             LossReduction::None => 0.0,
@@ -481,9 +481,9 @@ impl<T: Element> CrossEntropyLossBackwardPlan<T> {
             LossReduction::Sum => 1.0,
         };
         let stream_ptr = stream.as_raw();
-        let input_ptr = args.input.data.as_raw().0 as *const c_void;
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let dinput_ptr = args.dinput.data.as_raw().0 as *mut c_void;
+        let input_ptr = args.input.data().as_raw().0 as *const c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let dinput_ptr = args.dinput.data().as_raw().0 as *mut c_void;
 
         let status = match self.desc.target_kind {
             CrossEntropyTargetKind::ClassIndex => {
@@ -491,13 +491,13 @@ impl<T: Element> CrossEntropyLossBackwardPlan<T> {
                     "baracuda-kernels::CrossEntropyLossBackwardPlan: target_kind=ClassIndex \
                      requires `target` arg",
                 ))?;
-                if target.shape != [self.desc.n_rows] {
+                if target.shape() != [self.desc.n_rows] {
                     return Err(Error::InvalidProblem(
                         "baracuda-kernels::CrossEntropyLossBackwardPlan: target shape must be \
                          [n_rows]",
                     ));
                 }
-                let target_ptr = target.data.as_raw().0 as *const c_void;
+                let target_ptr = target.data().as_raw().0 as *const c_void;
                 match T::KIND {
                     ElementKind::F32 => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_loss_cross_entropy_backward_f32_run(
@@ -575,14 +575,14 @@ impl<T: Element> CrossEntropyLossBackwardPlan<T> {
                     "baracuda-kernels::CrossEntropyLossBackwardPlan: target_kind=SoftProb \
                      requires `soft_target` arg",
                 ))?;
-                if soft.shape != [self.desc.n_rows, class_extent] {
+                if soft.shape() != [self.desc.n_rows, class_extent] {
                     return Err(Error::InvalidProblem(
                         "baracuda-kernels::CrossEntropyLossBackwardPlan: soft_target shape \
                          must be [n_rows, class_extent]",
                     ));
                 }
-                let row_stride_target: i64 = soft.stride[0];
-                let target_ptr = soft.data.as_raw().0 as *const c_void;
+                let row_stride_target: i64 = soft.stride()[0];
+                let target_ptr = soft.data().as_raw().0 as *const c_void;
                 match T::KIND {
                     ElementKind::F32 => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_loss_cross_entropy_soft_backward_f32_run(

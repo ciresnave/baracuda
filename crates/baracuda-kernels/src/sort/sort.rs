@@ -102,9 +102,9 @@ impl<T: Element> SortPlan<T> {
         validate_sort_args_2(
             self.desc.batch,
             self.desc.row_len,
-            args.input.shape,
-            args.values.shape,
-            args.indices.shape,
+            args.input.shape(),
+            args.values.shape(),
+            args.indices.shape(),
             "SortPlan",
         )
     }
@@ -138,9 +138,9 @@ impl<T: Element> SortPlan<T> {
         if self.desc.batch == 0 || self.desc.row_len == 0 {
             return Ok(());
         }
-        let in_ptr = args.input.data.as_raw().0 as *const c_void;
-        let vals_ptr = args.values.data.as_raw().0 as *mut c_void;
-        let idx_ptr = args.indices.data.as_raw().0 as *mut c_void;
+        let in_ptr = args.input.data().as_raw().0 as *const c_void;
+        let vals_ptr = args.values.data().as_raw().0 as *mut c_void;
+        let idx_ptr = args.indices.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         let desc_flag = if self.desc.descending { 1 } else { 0 };
 

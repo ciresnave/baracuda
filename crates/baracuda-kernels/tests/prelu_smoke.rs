@@ -49,21 +49,9 @@ fn prelu_f32_per_channel() {
         &stream,
         Workspace::None,
         PReluArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            weight: TensorRef {
-                data: dev_w.as_slice(),
-                shape: [3],
-                stride: [1],
-            },
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            weight: TensorRef::new(dev_w.as_slice(), [3], [1]).unwrap(),
+            y: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
         },
     )
     .unwrap();
@@ -105,21 +93,9 @@ fn prelu_f32_scalar() {
         &stream,
         Workspace::None,
         PReluArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            weight: TensorRef {
-                data: dev_w.as_slice(),
-                shape: [1],
-                stride: [1],
-            },
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            weight: TensorRef::new(dev_w.as_slice(), [1], [1]).unwrap(),
+            y: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
         },
     )
     .unwrap();
@@ -161,21 +137,9 @@ fn prelu_f64_per_channel() {
         &stream,
         Workspace::None,
         PReluArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            weight: TensorRef {
-                data: dev_w.as_slice(),
-                shape: [3],
-                stride: [1],
-            },
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            weight: TensorRef::new(dev_w.as_slice(), [3], [1]).unwrap(),
+            y: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
         },
     )
     .unwrap();
@@ -212,21 +176,9 @@ fn prelu_f64_scalar() {
         &stream,
         Workspace::None,
         PReluArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            weight: TensorRef {
-                data: dev_w.as_slice(),
-                shape: [1],
-                stride: [1],
-            },
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            weight: TensorRef::new(dev_w.as_slice(), [1], [1]).unwrap(),
+            y: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
         },
     )
     .unwrap();
@@ -270,21 +222,9 @@ fn prelu_f16_per_channel() {
         &stream,
         Workspace::None,
         PReluArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            weight: TensorRef {
-                data: dev_w.as_slice(),
-                shape: [3],
-                stride: [1],
-            },
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            weight: TensorRef::new(dev_w.as_slice(), [3], [1]).unwrap(),
+            y: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
         },
     )
     .unwrap();
@@ -332,21 +272,9 @@ fn prelu_f16_scalar() {
         &stream,
         Workspace::None,
         PReluArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            weight: TensorRef {
-                data: dev_w.as_slice(),
-                shape: [1],
-                stride: [1],
-            },
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            weight: TensorRef::new(dev_w.as_slice(), [1], [1]).unwrap(),
+            y: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
         },
     )
     .unwrap();
@@ -397,21 +325,9 @@ fn prelu_bf16_per_channel() {
         &stream,
         Workspace::None,
         PReluArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            weight: TensorRef {
-                data: dev_w.as_slice(),
-                shape: [3],
-                stride: [1],
-            },
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            weight: TensorRef::new(dev_w.as_slice(), [3], [1]).unwrap(),
+            y: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
         },
     )
     .unwrap();
@@ -459,21 +375,9 @@ fn prelu_bf16_scalar() {
         &stream,
         Workspace::None,
         PReluArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            weight: TensorRef {
-                data: dev_w.as_slice(),
-                shape: [1],
-                stride: [1],
-            },
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            weight: TensorRef::new(dev_w.as_slice(), [1], [1]).unwrap(),
+            y: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
         },
     )
     .unwrap();

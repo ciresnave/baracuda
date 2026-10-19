@@ -49,21 +49,14 @@ fn index_select_f32_2d_dim0() {
     let plan = IndexSelectPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = IndexSelectArgs::<f32, 2> {
-        src: TensorRef {
-            data: dev_src.as_slice(),
-            shape: src_shape,
-            stride: contiguous_stride(src_shape),
-        },
-        idx: TensorRef {
-            data: dev_idx.as_slice(),
-            shape: [3i32],
-            stride: contiguous_stride([3i32]),
-        },
-        out: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: out_shape,
-            stride: contiguous_stride(out_shape),
-        },
+        src: TensorRef::new(dev_src.as_slice(), src_shape, contiguous_stride(src_shape)).unwrap(),
+        idx: TensorRef::new(dev_idx.as_slice(), [3i32], contiguous_stride([3i32])).unwrap(),
+        out: TensorMut::new(
+            dev_out.as_slice_mut(),
+            out_shape,
+            contiguous_stride(out_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -106,21 +99,14 @@ fn index_select_f64_3d_dim2() {
     let plan = IndexSelectPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = IndexSelectArgs::<f64, 3> {
-        src: TensorRef {
-            data: dev_src.as_slice(),
-            shape: src_shape,
-            stride: contiguous_stride(src_shape),
-        },
-        idx: TensorRef {
-            data: dev_idx.as_slice(),
-            shape: [4i32],
-            stride: contiguous_stride([4i32]),
-        },
-        out: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: out_shape,
-            stride: contiguous_stride(out_shape),
-        },
+        src: TensorRef::new(dev_src.as_slice(), src_shape, contiguous_stride(src_shape)).unwrap(),
+        idx: TensorRef::new(dev_idx.as_slice(), [4i32], contiguous_stride([4i32])).unwrap(),
+        out: TensorMut::new(
+            dev_out.as_slice_mut(),
+            out_shape,
+            contiguous_stride(out_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -163,21 +149,14 @@ fn index_select_i32_2d_dim1() {
     let plan = IndexSelectPlan::<i32, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = IndexSelectArgs::<i32, 2> {
-        src: TensorRef {
-            data: dev_src.as_slice(),
-            shape: src_shape,
-            stride: contiguous_stride(src_shape),
-        },
-        idx: TensorRef {
-            data: dev_idx.as_slice(),
-            shape: [4i32],
-            stride: contiguous_stride([4i32]),
-        },
-        out: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: out_shape,
-            stride: contiguous_stride(out_shape),
-        },
+        src: TensorRef::new(dev_src.as_slice(), src_shape, contiguous_stride(src_shape)).unwrap(),
+        idx: TensorRef::new(dev_idx.as_slice(), [4i32], contiguous_stride([4i32])).unwrap(),
+        out: TensorMut::new(
+            dev_out.as_slice_mut(),
+            out_shape,
+            contiguous_stride(out_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

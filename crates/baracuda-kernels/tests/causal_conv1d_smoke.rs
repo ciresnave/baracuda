@@ -114,26 +114,13 @@ fn causal_conv1d_f32_width4_silu_matches_cpu_ref() {
         &stream,
         Workspace::None,
         CausalConv1dArgs {
-            x: TensorRef {
-                data: x_dev.as_slice(),
-                shape: shape_x,
-                stride: contiguous_stride(shape_x),
-            },
-            weight: TensorRef {
-                data: weight_dev.as_slice(),
-                shape: shape_w,
-                stride: contiguous_stride(shape_w),
-            },
-            bias: Some(TensorRef {
-                data: bias_dev.as_slice(),
-                shape: shape_b,
-                stride: contiguous_stride(shape_b),
-            }),
-            y: TensorMut {
-                data: y_dev.as_slice_mut(),
-                shape: shape_x,
-                stride: contiguous_stride(shape_x),
-            },
+            x: TensorRef::new(x_dev.as_slice(), shape_x, contiguous_stride(shape_x)).unwrap(),
+            weight: TensorRef::new(weight_dev.as_slice(), shape_w, contiguous_stride(shape_w))
+                .unwrap(),
+            bias: Some(
+                TensorRef::new(bias_dev.as_slice(), shape_b, contiguous_stride(shape_b)).unwrap(),
+            ),
+            y: TensorMut::new(y_dev.as_slice_mut(), shape_x, contiguous_stride(shape_x)).unwrap(),
         },
     )
     .expect("run");
@@ -186,22 +173,11 @@ fn causal_conv1d_f32_width2_no_silu_no_bias() {
         &stream,
         Workspace::None,
         CausalConv1dArgs {
-            x: TensorRef {
-                data: x_dev.as_slice(),
-                shape: shape_x,
-                stride: contiguous_stride(shape_x),
-            },
-            weight: TensorRef {
-                data: weight_dev.as_slice(),
-                shape: shape_w,
-                stride: contiguous_stride(shape_w),
-            },
+            x: TensorRef::new(x_dev.as_slice(), shape_x, contiguous_stride(shape_x)).unwrap(),
+            weight: TensorRef::new(weight_dev.as_slice(), shape_w, contiguous_stride(shape_w))
+                .unwrap(),
             bias: None,
-            y: TensorMut {
-                data: y_dev.as_slice_mut(),
-                shape: shape_x,
-                stride: contiguous_stride(shape_x),
-            },
+            y: TensorMut::new(y_dev.as_slice_mut(), shape_x, contiguous_stride(shape_x)).unwrap(),
         },
     )
     .expect("run");

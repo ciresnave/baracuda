@@ -82,8 +82,8 @@ impl<T: Element> AdaptiveMaxPool1dPlan<T> {
     ) -> Result<()> {
         check_fw_args(&self.desc, &args)?;
         let stream_ptr = stream.as_raw() as *mut c_void;
-        let x_ptr = args.x.data.as_raw().0 as *const c_void;
-        let y_ptr = args.y.data.as_raw().0 as *mut c_void;
+        let x_ptr = args.x.data().as_raw().0 as *const c_void;
+        let y_ptr = args.y.data().as_raw().0 as *mut c_void;
         let nc = self.desc.batch * self.desc.channels;
         let status = dispatch_max_fw::<T>(
             x_ptr,
@@ -111,9 +111,9 @@ impl<T: Element> AdaptiveMaxPool1dPlan<T> {
     ) -> Result<()> {
         check_bw_args(&self.desc, &args)?;
         let stream_ptr = stream.as_raw() as *mut c_void;
-        let x_ptr = args.x.data.as_raw().0 as *const c_void;
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
+        let x_ptr = args.x.data().as_raw().0 as *const c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let dx_ptr = args.dx.data().as_raw().0 as *mut c_void;
         let nc = self.desc.batch * self.desc.channels;
         let status = dispatch_max_bw::<T>(
             x_ptr,

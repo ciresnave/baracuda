@@ -119,17 +119,17 @@ impl<T: Element, const N: usize> BinaryParamBackwardPlan<T, N> {
         crate::view_check::check_fits(&args.dy)?;
         crate::view_check::check_fits(&args.da)?;
         crate::view_check::check_fits(&args.db)?;
-        if args.dy.shape != self.desc.shape {
+        if args.dy.shape() != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::BinaryParamBackwardPlan: dy shape mismatch",
             ));
         }
-        if args.da.shape != self.desc.shape {
+        if args.da.shape() != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::BinaryParamBackwardPlan: da shape mismatch",
             ));
         }
-        if args.db.shape != self.desc.shape {
+        if args.db.shape() != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::BinaryParamBackwardPlan: db shape mismatch",
             ));
@@ -140,9 +140,9 @@ impl<T: Element, const N: usize> BinaryParamBackwardPlan<T, N> {
             ));
         }
         let numel = args.dy.numel();
-        let dy_len = args.dy.data.len() as i64;
-        let da_len = args.da.data.len() as i64;
-        let db_len = args.db.data.len() as i64;
+        let dy_len = args.dy.data().len() as i64;
+        let da_len = args.da.data().len() as i64;
+        let db_len = args.db.data().len() as i64;
         if dy_len < numel || da_len < numel || db_len < numel {
             return Err(Error::BufferTooSmall {
                 needed: numel as usize,
@@ -180,9 +180,9 @@ impl<T: Element, const N: usize> BinaryParamBackwardPlan<T, N> {
         if numel == 0 {
             return Ok(());
         }
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let da_ptr = args.da.data.as_raw().0 as *mut c_void;
-        let db_ptr = args.db.data.as_raw().0 as *mut c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let da_ptr = args.da.data().as_raw().0 as *mut c_void;
+        let db_ptr = args.db.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         let p = self.desc.param;
 

@@ -174,28 +174,28 @@ impl<T: Element, const N: usize> LayerNormBackwardPlan<T, N> {
         if let Some(t) = &args.dbeta {
             crate::view_check::check_fits(t)?;
         }
-        if args.dy.shape != self.desc.input_shape {
+        if args.dy.shape() != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::LayerNormBackwardPlan: dy shape mismatch",
             ));
         }
-        if args.x.shape != self.desc.input_shape {
+        if args.x.shape() != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::LayerNormBackwardPlan: x shape mismatch",
             ));
         }
-        if args.dx.shape != self.desc.input_shape {
+        if args.dx.shape() != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::LayerNormBackwardPlan: dx shape mismatch",
             ));
         }
         let save_shape = self.desc.save_shape();
-        if args.mean.shape != save_shape || args.inv_std.shape != save_shape {
+        if args.mean.shape() != save_shape || args.inv_std.shape() != save_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::LayerNormBackwardPlan: mean / inv_std shape mismatch",
             ));
         }
-        if args.mean.stride != args.inv_std.stride {
+        if args.mean.stride() != args.inv_std.stride() {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::LayerNormBackwardPlan: mean and inv_std must share stride",
             ));
@@ -203,16 +203,17 @@ impl<T: Element, const N: usize> LayerNormBackwardPlan<T, N> {
         let total_extent = self.desc.norm_total_extent() as i64;
         match (&args.gamma, &args.dgamma, self.desc.has_gamma) {
             (Some(g), Some(dg), true) => {
-                if g.shape[0] as i64 != total_extent || dg.shape[0] as i64 != total_extent {
+                if g.shape()[0] as i64 != total_extent || dg.shape()[0] as i64 != total_extent {
                     return Err(Error::InvalidProblem(
                         "baracuda-kernels::LayerNormBackwardPlan: gamma / dgamma length != \
                          norm_total_extent",
                     ));
                 }
-                if (g.data.len() as i64) < total_extent || (dg.data.len() as i64) < total_extent {
+                if (g.data().len() as i64) < total_extent || (dg.data().len() as i64) < total_extent
+                {
                     return Err(Error::BufferTooSmall {
                         needed: total_extent as usize,
-                        got: g.data.len().min(dg.data.len()),
+                        got: g.data().len().min(dg.data().len()),
                     });
                 }
             }
@@ -226,16 +227,16 @@ impl<T: Element, const N: usize> LayerNormBackwardPlan<T, N> {
         }
         match (&args.dbeta, self.desc.has_beta) {
             (Some(db), true) => {
-                if db.shape[0] as i64 != total_extent {
+                if db.shape()[0] as i64 != total_extent {
                     return Err(Error::InvalidProblem(
                         "baracuda-kernels::LayerNormBackwardPlan: dbeta length != \
                          norm_total_extent",
                     ));
                 }
-                if (db.data.len() as i64) < total_extent {
+                if (db.data().len() as i64) < total_extent {
                     return Err(Error::BufferTooSmall {
                         needed: total_extent as usize,
-                        got: db.data.len(),
+                        got: db.data().len(),
                     });
                 }
             }
@@ -247,12 +248,12 @@ impl<T: Element, const N: usize> LayerNormBackwardPlan<T, N> {
             }
         }
         let numel = args.dx.numel();
-        let dy_len = args.dy.data.len() as i64;
-        let x_len = args.x.data.len() as i64;
-        let dx_len = args.dx.data.len() as i64;
+        let dy_len = args.dy.data().len() as i64;
+        let x_len = args.x.data().len() as i64;
+        let dx_len = args.dx.data().len() as i64;
         let save_numel = args.mean.numel();
-        let mean_len = args.mean.data.len() as i64;
-        let std_len = args.inv_std.data.len() as i64;
+        let mean_len = args.mean.data().len() as i64;
+        let std_len = args.inv_std.data().len() as i64;
         if dy_len < numel || x_len < numel || dx_len < numel {
             return Err(Error::BufferTooSmall {
                 needed: numel as usize,
@@ -297,29 +298,29 @@ impl<T: Element, const N: usize> LayerNormBackwardPlan<T, N> {
             return Ok(());
         }
         let stream_ptr = stream.as_raw();
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let x_ptr = args.x.data.as_raw().0 as *const c_void;
-        let mean_ptr = args.mean.data.as_raw().0 as *const c_void;
-        let std_ptr = args.inv_std.data.as_raw().0 as *const c_void;
-        let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let x_ptr = args.x.data().as_raw().0 as *const c_void;
+        let mean_ptr = args.mean.data().as_raw().0 as *const c_void;
+        let std_ptr = args.inv_std.data().as_raw().0 as *const c_void;
+        let dx_ptr = args.dx.data().as_raw().0 as *mut c_void;
         let gamma_ptr = match &args.gamma {
-            Some(g) => g.data.as_raw().0 as *const c_void,
+            Some(g) => g.data().as_raw().0 as *const c_void,
             None => core::ptr::null(),
         };
         let dgamma_ptr = match &mut args.dgamma {
-            Some(dg) => dg.data.as_raw().0 as *mut c_void,
+            Some(dg) => dg.data().as_raw().0 as *mut c_void,
             None => core::ptr::null_mut(),
         };
         let dbeta_ptr = match &mut args.dbeta {
-            Some(db) => db.data.as_raw().0 as *mut c_void,
+            Some(db) => db.data().as_raw().0 as *mut c_void,
             None => core::ptr::null_mut(),
         };
 
         let shape = self.desc.input_shape;
-        let stride_dy = args.dy.stride;
-        let stride_x = args.x.stride;
-        let stride_save = args.mean.stride;
-        let stride_dx = args.dx.stride;
+        let stride_dy = args.dy.stride();
+        let stride_x = args.x.stride();
+        let stride_save = args.mean.stride();
+        let stride_dx = args.dx.stride();
         let rank = N as i32;
         let mask = self.desc.norm_axes_mask as i32;
         let total_extent = self.desc.norm_total_extent();

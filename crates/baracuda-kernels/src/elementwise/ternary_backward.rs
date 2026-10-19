@@ -181,22 +181,22 @@ impl<T: Element, const N: usize> TernaryBackwardPlan<T, N> {
         crate::view_check::check_fits(&args.da)?;
         crate::view_check::check_fits(&args.db)?;
         crate::view_check::check_fits(&args.dc)?;
-        if args.dy.shape != self.desc.shape {
+        if args.dy.shape() != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::TernaryBackwardPlan: dy shape mismatch",
             ));
         }
-        if args.a.shape != self.desc.shape
-            || args.b.shape != self.desc.shape
-            || args.c.shape != self.desc.shape
+        if args.a.shape() != self.desc.shape
+            || args.b.shape() != self.desc.shape
+            || args.c.shape() != self.desc.shape
         {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::TernaryBackwardPlan: saved a/b/c shape mismatch",
             ));
         }
-        if args.da.shape != self.desc.shape
-            || args.db.shape != self.desc.shape
-            || args.dc.shape != self.desc.shape
+        if args.da.shape() != self.desc.shape
+            || args.db.shape() != self.desc.shape
+            || args.dc.shape() != self.desc.shape
         {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::TernaryBackwardPlan: da/db/dc shape mismatch",
@@ -218,13 +218,13 @@ impl<T: Element, const N: usize> TernaryBackwardPlan<T, N> {
         let numel = args.dy.numel();
         let needed = numel as usize;
         let lens = [
-            args.dy.data.len(),
-            args.a.data.len(),
-            args.b.data.len(),
-            args.c.data.len(),
-            args.da.data.len(),
-            args.db.data.len(),
-            args.dc.data.len(),
+            args.dy.data().len(),
+            args.a.data().len(),
+            args.b.data().len(),
+            args.c.data().len(),
+            args.da.data().len(),
+            args.db.data().len(),
+            args.dc.data().len(),
         ];
         if let Some(&min_len) = lens.iter().min() {
             if min_len < needed {
@@ -265,13 +265,13 @@ impl<T: Element, const N: usize> TernaryBackwardPlan<T, N> {
         if numel == 0 {
             return Ok(());
         }
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let a_ptr = args.a.data.as_raw().0 as *const c_void;
-        let b_ptr = args.b.data.as_raw().0 as *const c_void;
-        let c_ptr = args.c.data.as_raw().0 as *const c_void;
-        let da_ptr = args.da.data.as_raw().0 as *mut c_void;
-        let db_ptr = args.db.data.as_raw().0 as *mut c_void;
-        let dc_ptr = args.dc.data.as_raw().0 as *mut c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let a_ptr = args.a.data().as_raw().0 as *const c_void;
+        let b_ptr = args.b.data().as_raw().0 as *const c_void;
+        let c_ptr = args.c.data().as_raw().0 as *const c_void;
+        let da_ptr = args.da.data().as_raw().0 as *mut c_void;
+        let db_ptr = args.db.data().as_raw().0 as *mut c_void;
+        let dc_ptr = args.dc.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         let scale = self.desc.scale;
 

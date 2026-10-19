@@ -80,26 +80,12 @@ fn loss_triplet_margin_f32_mean() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         TripletMarginLossArgs {
-            anchor: TensorRef {
-                data: dev_a.as_slice(),
-                shape: [n as i32, d as i32],
-                stride: [d as i64, 1],
-            },
-            positive: TensorRef {
-                data: dev_p.as_slice(),
-                shape: [n as i32, d as i32],
-                stride: [d as i64, 1],
-            },
-            negative: TensorRef {
-                data: dev_n.as_slice(),
-                shape: [n as i32, d as i32],
-                stride: [d as i64, 1],
-            },
-            out: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: [1, 1],
-                stride: [1, 1],
-            },
+            anchor: TensorRef::new(dev_a.as_slice(), [n as i32, d as i32], [d as i64, 1]).unwrap(),
+            positive: TensorRef::new(dev_p.as_slice(), [n as i32, d as i32], [d as i64, 1])
+                .unwrap(),
+            negative: TensorRef::new(dev_n.as_slice(), [n as i32, d as i32], [d as i64, 1])
+                .unwrap(),
+            out: TensorMut::new(dev_y.as_slice_mut(), [1, 1], [1, 1]).unwrap(),
         },
     )
     .unwrap();
@@ -146,26 +132,12 @@ fn loss_triplet_margin_f64_mean() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         TripletMarginLossArgs {
-            anchor: TensorRef {
-                data: dev_a.as_slice(),
-                shape: [n as i32, d as i32],
-                stride: [d as i64, 1],
-            },
-            positive: TensorRef {
-                data: dev_p.as_slice(),
-                shape: [n as i32, d as i32],
-                stride: [d as i64, 1],
-            },
-            negative: TensorRef {
-                data: dev_n.as_slice(),
-                shape: [n as i32, d as i32],
-                stride: [d as i64, 1],
-            },
-            out: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: [1, 1],
-                stride: [1, 1],
-            },
+            anchor: TensorRef::new(dev_a.as_slice(), [n as i32, d as i32], [d as i64, 1]).unwrap(),
+            positive: TensorRef::new(dev_p.as_slice(), [n as i32, d as i32], [d as i64, 1])
+                .unwrap(),
+            negative: TensorRef::new(dev_n.as_slice(), [n as i32, d as i32], [d as i64, 1])
+                .unwrap(),
+            out: TensorMut::new(dev_y.as_slice_mut(), [1, 1], [1, 1]).unwrap(),
         },
     )
     .unwrap();
@@ -214,26 +186,12 @@ fn loss_triplet_margin_f16_mean() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         TripletMarginLossArgs {
-            anchor: TensorRef {
-                data: dev_a.as_slice(),
-                shape: [n as i32, d as i32],
-                stride: [d as i64, 1],
-            },
-            positive: TensorRef {
-                data: dev_p.as_slice(),
-                shape: [n as i32, d as i32],
-                stride: [d as i64, 1],
-            },
-            negative: TensorRef {
-                data: dev_n.as_slice(),
-                shape: [n as i32, d as i32],
-                stride: [d as i64, 1],
-            },
-            out: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: [1, 1],
-                stride: [1, 1],
-            },
+            anchor: TensorRef::new(dev_a.as_slice(), [n as i32, d as i32], [d as i64, 1]).unwrap(),
+            positive: TensorRef::new(dev_p.as_slice(), [n as i32, d as i32], [d as i64, 1])
+                .unwrap(),
+            negative: TensorRef::new(dev_n.as_slice(), [n as i32, d as i32], [d as i64, 1])
+                .unwrap(),
+            out: TensorMut::new(dev_y.as_slice_mut(), [1, 1], [1, 1]).unwrap(),
         },
     )
     .unwrap();
@@ -289,26 +247,12 @@ fn loss_triplet_margin_bf16_mean() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         TripletMarginLossArgs {
-            anchor: TensorRef {
-                data: dev_a.as_slice(),
-                shape: [n as i32, d as i32],
-                stride: [d as i64, 1],
-            },
-            positive: TensorRef {
-                data: dev_p.as_slice(),
-                shape: [n as i32, d as i32],
-                stride: [d as i64, 1],
-            },
-            negative: TensorRef {
-                data: dev_n.as_slice(),
-                shape: [n as i32, d as i32],
-                stride: [d as i64, 1],
-            },
-            out: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: [1, 1],
-                stride: [1, 1],
-            },
+            anchor: TensorRef::new(dev_a.as_slice(), [n as i32, d as i32], [d as i64, 1]).unwrap(),
+            positive: TensorRef::new(dev_p.as_slice(), [n as i32, d as i32], [d as i64, 1])
+                .unwrap(),
+            negative: TensorRef::new(dev_n.as_slice(), [n as i32, d as i32], [d as i64, 1])
+                .unwrap(),
+            out: TensorMut::new(dev_y.as_slice_mut(), [1, 1], [1, 1]).unwrap(),
         },
     )
     .unwrap();

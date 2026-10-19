@@ -156,22 +156,22 @@ impl<T: Element, const N: usize> WhereBackwardPlan<T, N> {
         crate::view_check::check_fits(&args.dy)?;
         crate::view_check::check_fits(&args.da)?;
         crate::view_check::check_fits(&args.db)?;
-        if args.dy.shape != self.desc.shape {
+        if args.dy.shape() != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::WhereBackwardPlan: dy shape mismatch with descriptor",
             ));
         }
-        if args.da.shape != self.desc.shape {
+        if args.da.shape() != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::WhereBackwardPlan: da shape mismatch with descriptor",
             ));
         }
-        if args.db.shape != self.desc.shape {
+        if args.db.shape() != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::WhereBackwardPlan: db shape mismatch with descriptor",
             ));
         }
-        if args.cond.shape != self.desc.shape {
+        if args.cond.shape() != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::WhereBackwardPlan: cond shape mismatch with descriptor \
                  (trailblazer requires full-shape cond; stride-0 broadcasting on cond \
@@ -198,10 +198,10 @@ impl<T: Element, const N: usize> WhereBackwardPlan<T, N> {
         }
 
         let numel = args.dy.numel();
-        let cond_len = args.cond.data.len() as i64;
-        let dy_len = args.dy.data.len() as i64;
-        let da_len = args.da.data.len() as i64;
-        let db_len = args.db.data.len() as i64;
+        let cond_len = args.cond.data().len() as i64;
+        let dy_len = args.dy.data().len() as i64;
+        let da_len = args.da.data().len() as i64;
+        let db_len = args.db.data().len() as i64;
         if dy_len < numel || da_len < numel || db_len < numel || cond_len < numel {
             return Err(Error::BufferTooSmall {
                 needed: numel as usize,
@@ -241,10 +241,10 @@ impl<T: Element, const N: usize> WhereBackwardPlan<T, N> {
         if numel == 0 {
             return Ok(());
         }
-        let cond_ptr = args.cond.data.as_raw().0 as *const c_void;
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let da_ptr = args.da.data.as_raw().0 as *mut c_void;
-        let db_ptr = args.db.data.as_raw().0 as *mut c_void;
+        let cond_ptr = args.cond.data().as_raw().0 as *const c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let da_ptr = args.da.data().as_raw().0 as *mut c_void;
+        let db_ptr = args.db.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
         let status = match T::KIND {

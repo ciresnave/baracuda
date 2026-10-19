@@ -99,27 +99,28 @@ fn loss_cross_entropy_soft_backward_f32_mean() {
         &stream,
         Workspace::None,
         CrossEntropyLossBackwardArgs {
-            input: TensorRef {
-                data: dev_inp.as_slice(),
-                shape: [n_rows, class_extent],
-                stride: contiguous_stride([n_rows, class_extent]),
-            },
+            input: TensorRef::new(
+                dev_inp.as_slice(),
+                [n_rows, class_extent],
+                contiguous_stride([n_rows, class_extent]),
+            )
+            .unwrap(),
             target: None,
-            soft_target: Some(TensorRef {
-                data: dev_t.as_slice(),
-                shape: [n_rows, class_extent],
-                stride: contiguous_stride([n_rows, class_extent]),
-            }),
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape: [1],
-                stride: [1],
-            },
-            dinput: TensorMut {
-                data: dev_di.as_slice_mut(),
-                shape: [n_rows, class_extent],
-                stride: contiguous_stride([n_rows, class_extent]),
-            },
+            soft_target: Some(
+                TensorRef::new(
+                    dev_t.as_slice(),
+                    [n_rows, class_extent],
+                    contiguous_stride([n_rows, class_extent]),
+                )
+                .unwrap(),
+            ),
+            dy: TensorRef::new(dev_dy.as_slice(), [1], [1]).unwrap(),
+            dinput: TensorMut::new(
+                dev_di.as_slice_mut(),
+                [n_rows, class_extent],
+                contiguous_stride([n_rows, class_extent]),
+            )
+            .unwrap(),
         },
     )
     .unwrap();
@@ -176,27 +177,28 @@ fn loss_cross_entropy_soft_backward_f64_mean() {
         &stream,
         Workspace::None,
         CrossEntropyLossBackwardArgs {
-            input: TensorRef {
-                data: dev_inp.as_slice(),
-                shape: [n_rows, class_extent],
-                stride: contiguous_stride([n_rows, class_extent]),
-            },
+            input: TensorRef::new(
+                dev_inp.as_slice(),
+                [n_rows, class_extent],
+                contiguous_stride([n_rows, class_extent]),
+            )
+            .unwrap(),
             target: None,
-            soft_target: Some(TensorRef {
-                data: dev_t.as_slice(),
-                shape: [n_rows, class_extent],
-                stride: contiguous_stride([n_rows, class_extent]),
-            }),
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape: [1],
-                stride: [1],
-            },
-            dinput: TensorMut {
-                data: dev_di.as_slice_mut(),
-                shape: [n_rows, class_extent],
-                stride: contiguous_stride([n_rows, class_extent]),
-            },
+            soft_target: Some(
+                TensorRef::new(
+                    dev_t.as_slice(),
+                    [n_rows, class_extent],
+                    contiguous_stride([n_rows, class_extent]),
+                )
+                .unwrap(),
+            ),
+            dy: TensorRef::new(dev_dy.as_slice(), [1], [1]).unwrap(),
+            dinput: TensorMut::new(
+                dev_di.as_slice_mut(),
+                [n_rows, class_extent],
+                contiguous_stride([n_rows, class_extent]),
+            )
+            .unwrap(),
         },
     )
     .unwrap();
@@ -246,27 +248,28 @@ fn loss_cross_entropy_soft_backward_f16_mean() {
         &stream,
         Workspace::None,
         CrossEntropyLossBackwardArgs {
-            input: TensorRef {
-                data: dev_inp.as_slice(),
-                shape: [n_rows, class_extent],
-                stride: contiguous_stride([n_rows, class_extent]),
-            },
+            input: TensorRef::new(
+                dev_inp.as_slice(),
+                [n_rows, class_extent],
+                contiguous_stride([n_rows, class_extent]),
+            )
+            .unwrap(),
             target: None,
-            soft_target: Some(TensorRef {
-                data: dev_t.as_slice(),
-                shape: [n_rows, class_extent],
-                stride: contiguous_stride([n_rows, class_extent]),
-            }),
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape: [1],
-                stride: [1],
-            },
-            dinput: TensorMut {
-                data: dev_di.as_slice_mut(),
-                shape: [n_rows, class_extent],
-                stride: contiguous_stride([n_rows, class_extent]),
-            },
+            soft_target: Some(
+                TensorRef::new(
+                    dev_t.as_slice(),
+                    [n_rows, class_extent],
+                    contiguous_stride([n_rows, class_extent]),
+                )
+                .unwrap(),
+            ),
+            dy: TensorRef::new(dev_dy.as_slice(), [1], [1]).unwrap(),
+            dinput: TensorMut::new(
+                dev_di.as_slice_mut(),
+                [n_rows, class_extent],
+                contiguous_stride([n_rows, class_extent]),
+            )
+            .unwrap(),
         },
     )
     .unwrap();
@@ -323,27 +326,28 @@ fn loss_cross_entropy_soft_backward_bf16_mean() {
         &stream,
         Workspace::None,
         CrossEntropyLossBackwardArgs {
-            input: TensorRef {
-                data: dev_inp.as_slice(),
-                shape: [n_rows, class_extent],
-                stride: contiguous_stride([n_rows, class_extent]),
-            },
+            input: TensorRef::new(
+                dev_inp.as_slice(),
+                [n_rows, class_extent],
+                contiguous_stride([n_rows, class_extent]),
+            )
+            .unwrap(),
             target: None,
-            soft_target: Some(TensorRef {
-                data: dev_t.as_slice(),
-                shape: [n_rows, class_extent],
-                stride: contiguous_stride([n_rows, class_extent]),
-            }),
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape: [1],
-                stride: [1],
-            },
-            dinput: TensorMut {
-                data: dev_di.as_slice_mut(),
-                shape: [n_rows, class_extent],
-                stride: contiguous_stride([n_rows, class_extent]),
-            },
+            soft_target: Some(
+                TensorRef::new(
+                    dev_t.as_slice(),
+                    [n_rows, class_extent],
+                    contiguous_stride([n_rows, class_extent]),
+                )
+                .unwrap(),
+            ),
+            dy: TensorRef::new(dev_dy.as_slice(), [1], [1]).unwrap(),
+            dinput: TensorMut::new(
+                dev_di.as_slice_mut(),
+                [n_rows, class_extent],
+                contiguous_stride([n_rows, class_extent]),
+            )
+            .unwrap(),
         },
     )
     .unwrap();

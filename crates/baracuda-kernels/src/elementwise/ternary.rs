@@ -151,7 +151,7 @@ impl<T: Element, const N: usize> TernaryPlan<T, N> {
         crate::view_check::check_fits(&args.b)?;
         crate::view_check::check_fits(&args.c)?;
         crate::view_check::check_fits(&args.y)?;
-        if args.y.shape != self.desc.shape {
+        if args.y.shape() != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::TernaryPlan: Y shape mismatch with descriptor",
             ));
@@ -160,9 +160,9 @@ impl<T: Element, const N: usize> TernaryPlan<T, N> {
         for d in 0..N {
             let y_dim = self.desc.shape[d];
             for (name, (op_dim, op_stride)) in [
-                ("A", (args.a.shape[d], args.a.stride[d])),
-                ("B", (args.b.shape[d], args.b.stride[d])),
-                ("C", (args.c.shape[d], args.c.stride[d])),
+                ("A", (args.a.shape()[d], args.a.stride()[d])),
+                ("B", (args.b.shape()[d], args.b.stride()[d])),
+                ("C", (args.c.shape()[d], args.c.stride()[d])),
             ] {
                 if op_dim != y_dim && !(op_dim == 1 && op_stride == 0) {
                     let _ = name; // Error variant takes a static string;
@@ -186,10 +186,10 @@ impl<T: Element, const N: usize> TernaryPlan<T, N> {
         let a_numel = args.a.numel();
         let b_numel = args.b.numel();
         let c_numel = args.c.numel();
-        let a_len = args.a.data.len() as i64;
-        let b_len = args.b.data.len() as i64;
-        let c_len = args.c.data.len() as i64;
-        let y_len = args.y.data.len() as i64;
+        let a_len = args.a.data().len() as i64;
+        let b_len = args.b.data().len() as i64;
+        let c_len = args.c.data().len() as i64;
+        let y_len = args.y.data().len() as i64;
         if y_len < y_numel {
             return Err(Error::BufferTooSmall {
                 needed: y_numel as usize,
@@ -247,15 +247,15 @@ impl<T: Element, const N: usize> TernaryPlan<T, N> {
         if numel == 0 {
             return Ok(());
         }
-        let a_ptr = args.a.data.as_raw().0 as *const c_void;
-        let b_ptr = args.b.data.as_raw().0 as *const c_void;
-        let c_ptr = args.c.data.as_raw().0 as *const c_void;
-        let y_ptr = args.y.data.as_raw().0 as *mut c_void;
+        let a_ptr = args.a.data().as_raw().0 as *const c_void;
+        let b_ptr = args.b.data().as_raw().0 as *const c_void;
+        let c_ptr = args.c.data().as_raw().0 as *const c_void;
+        let y_ptr = args.y.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
-        let all_contig_same_shape = args.a.shape == args.y.shape
-            && args.b.shape == args.y.shape
-            && args.c.shape == args.y.shape
+        let all_contig_same_shape = args.a.shape() == args.y.shape()
+            && args.b.shape() == args.y.shape()
+            && args.c.shape() == args.y.shape()
             && args.a.is_contiguous()
             && args.b.is_contiguous()
             && args.c.is_contiguous()
@@ -491,11 +491,11 @@ impl<T: Element, const N: usize> TernaryPlan<T, N> {
         numel: i64,
         args: &TernaryArgs<'_, T, N>,
     ) -> Result<()> {
-        let shape = args.y.shape;
-        let stride_a = args.a.stride;
-        let stride_b = args.b.stride;
-        let stride_c = args.c.stride;
-        let stride_y = args.y.stride;
+        let shape = args.y.shape();
+        let stride_a = args.a.stride();
+        let stride_b = args.b.stride();
+        let stride_c = args.c.stride();
+        let stride_y = args.y.stride();
         let rank = N as i32;
 
         let status = match (self.desc.kind, T::KIND) {

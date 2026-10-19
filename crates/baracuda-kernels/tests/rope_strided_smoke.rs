@@ -116,17 +116,9 @@ fn rope_strided_contig_f32() {
         &stream,
         Workspace::None,
         RopeArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape,
-                stride,
-            },
+            x: TensorRef::new(dev_x.as_slice(), shape, stride).unwrap(),
             positions: None,
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape,
-                stride,
-            },
+            y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
         },
     )
     .expect("run");
@@ -198,18 +190,10 @@ fn rope_strided_transposed_view_f32() {
         &stream,
         Workspace::None,
         RopeArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape,
-                stride: stride_x,
-            },
+            x: TensorRef::new(dev_x.as_slice(), shape, stride_x).unwrap(),
             positions: None,
-            y: TensorMut {
-                // y is fresh contig in canonical [B, H, S, D] order
-                data: dev_y.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            // y is fresh contig in canonical [B, H, S, D] order
+            y: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
         },
     )
     .expect("run");
@@ -263,17 +247,9 @@ fn rope_strided_rejects_non_unit_headdim_stride() {
         &stream,
         Workspace::None,
         RopeArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape,
-                stride: bad_stride,
-            },
+            x: TensorRef::new(dev_x.as_slice(), shape, bad_stride).unwrap(),
             positions: None,
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            y: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
         },
     );
     assert!(
@@ -328,17 +304,9 @@ fn rope_strided_transposed_f16() {
         &stream,
         Workspace::None,
         RopeArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape,
-                stride: stride_x,
-            },
+            x: TensorRef::new(dev_x.as_slice(), shape, stride_x).unwrap(),
             positions: None,
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            y: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
         },
     )
     .expect("run");
@@ -424,17 +392,9 @@ fn rope_strided_backward_transposed_f32() {
         &stream,
         Workspace::None,
         RopeBackwardArgs {
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape,
-                stride: stride_dy,
-            },
+            dy: TensorRef::new(dev_dy.as_slice(), shape, stride_dy).unwrap(),
             positions: None,
-            dx: TensorMut {
-                data: dev_dx.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            dx: TensorMut::new(dev_dx.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
         },
     )
     .expect("run");

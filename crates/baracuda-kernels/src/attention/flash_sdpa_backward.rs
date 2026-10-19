@@ -430,7 +430,7 @@ impl<T: Element> FlashSdpaBackwardPlan<T> {
             crate::view_check::check_fits(t)?;
         }
         // Bespoke uses H_k = H; FA2 derives H_k from args.k.shape[1].
-        let num_heads_k = args.k.shape[1];
+        let num_heads_k = args.k.shape()[1];
         if num_heads_k <= 0
             || num_heads_k > self.desc.num_heads
             || self.desc.num_heads % num_heads_k != 0
@@ -479,52 +479,52 @@ impl<T: Element> FlashSdpaBackwardPlan<T> {
             self.desc.num_heads,
             self.desc.query_len,
         ];
-        if args.q.shape != shape_q {
+        if args.q.shape() != shape_q {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FlashSdpaBackwardPlan: Q shape mismatch",
             ));
         }
-        if args.k.shape != shape_k {
+        if args.k.shape() != shape_k {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FlashSdpaBackwardPlan: K shape mismatch",
             ));
         }
-        if args.v.shape != shape_v {
+        if args.v.shape() != shape_v {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FlashSdpaBackwardPlan: V shape mismatch",
             ));
         }
-        if args.y.shape != shape_y {
+        if args.y.shape() != shape_y {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FlashSdpaBackwardPlan: y shape mismatch",
             ));
         }
-        if args.lse.shape != shape_lse {
+        if args.lse.shape() != shape_lse {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FlashSdpaBackwardPlan: lse shape must be [B, H, Q]",
             ));
         }
-        if args.dy.shape != shape_y {
+        if args.dy.shape() != shape_y {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FlashSdpaBackwardPlan: dy shape mismatch",
             ));
         }
-        if args.d_ws.shape != shape_lse {
+        if args.d_ws.shape() != shape_lse {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FlashSdpaBackwardPlan: d_ws shape must be [B, H, Q]",
             ));
         }
-        if args.dq.shape != shape_q {
+        if args.dq.shape() != shape_q {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FlashSdpaBackwardPlan: dQ shape mismatch with Q",
             ));
         }
-        if args.dk.shape != shape_k {
+        if args.dk.shape() != shape_k {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FlashSdpaBackwardPlan: dK shape mismatch with K",
             ));
         }
-        if args.dv.shape != shape_v {
+        if args.dv.shape() != shape_v {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FlashSdpaBackwardPlan: dV shape mismatch with V",
             ));
@@ -554,7 +554,7 @@ impl<T: Element> FlashSdpaBackwardPlan<T> {
                 ));
             }
             let lse_f32 = args.lse_f32.as_ref().unwrap();
-            if lse_f32.shape != shape_lse {
+            if lse_f32.shape() != shape_lse {
                 return Err(Error::InvalidProblem(
                     "baracuda-kernels::FlashSdpaBackwardPlan: lse_f32 shape must be [B, H, Q]",
                 ));
@@ -565,12 +565,12 @@ impl<T: Element> FlashSdpaBackwardPlan<T> {
                 ));
             }
             if let Some(slopes) = args.alibi_slopes.as_ref() {
-                if slopes.shape[1] != self.desc.num_heads {
+                if slopes.shape()[1] != self.desc.num_heads {
                     return Err(Error::InvalidProblem(
                         "baracuda-kernels::FlashSdpaBackwardPlan: alibi_slopes shape[1] must equal num_heads",
                     ));
                 }
-                if slopes.shape[0] != 1 && slopes.shape[0] != self.desc.batch_size {
+                if slopes.shape()[0] != 1 && slopes.shape()[0] != self.desc.batch_size {
                     return Err(Error::InvalidProblem(
                         "baracuda-kernels::FlashSdpaBackwardPlan: alibi_slopes shape[0] must be 1 or batch_size",
                     ));
@@ -647,16 +647,16 @@ impl<T: Element> FlashSdpaBackwardPlan<T> {
 
         // Bespoke path (preserved from pre-Phase-59b).
         let stream_ptr = stream.as_raw();
-        let q_ptr = args.q.data.as_raw().0 as *const c_void;
-        let k_ptr = args.k.data.as_raw().0 as *const c_void;
-        let v_ptr = args.v.data.as_raw().0 as *const c_void;
-        let y_ptr = args.y.data.as_raw().0 as *const c_void;
-        let lse_ptr = args.lse.data.as_raw().0 as *const c_void;
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let d_ws_ptr = args.d_ws.data.as_raw().0 as *mut c_void;
-        let dq_ptr = args.dq.data.as_raw().0 as *mut c_void;
-        let dk_ptr = args.dk.data.as_raw().0 as *mut c_void;
-        let dv_ptr = args.dv.data.as_raw().0 as *mut c_void;
+        let q_ptr = args.q.data().as_raw().0 as *const c_void;
+        let k_ptr = args.k.data().as_raw().0 as *const c_void;
+        let v_ptr = args.v.data().as_raw().0 as *const c_void;
+        let y_ptr = args.y.data().as_raw().0 as *const c_void;
+        let lse_ptr = args.lse.data().as_raw().0 as *const c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let d_ws_ptr = args.d_ws.data().as_raw().0 as *mut c_void;
+        let dq_ptr = args.dq.data().as_raw().0 as *mut c_void;
+        let dk_ptr = args.dk.data().as_raw().0 as *mut c_void;
+        let dv_ptr = args.dv.data().as_raw().0 as *mut c_void;
         let is_causal_flag = if self.desc.is_causal { 1 } else { 0 };
 
         let status = match T::KIND {
@@ -778,24 +778,24 @@ impl<T: Element> FlashSdpaBackwardPlan<T> {
         args: &FlashSdpaBackwardArgs<'_, T>,
     ) -> Result<()> {
         let stream_ptr = stream.as_raw();
-        let q_ptr = args.q.data.as_raw().0 as *const c_void;
-        let k_ptr = args.k.data.as_raw().0 as *const c_void;
-        let v_ptr = args.v.data.as_raw().0 as *const c_void;
-        let y_ptr = args.y.data.as_raw().0 as *const c_void;
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let dq_ptr = args.dq.data.as_raw().0 as *mut c_void;
-        let dk_ptr = args.dk.data.as_raw().0 as *mut c_void;
-        let dv_ptr = args.dv.data.as_raw().0 as *mut c_void;
-        let lse_ptr = args.lse_f32.as_ref().unwrap().data.as_raw().0 as *const c_void;
+        let q_ptr = args.q.data().as_raw().0 as *const c_void;
+        let k_ptr = args.k.data().as_raw().0 as *const c_void;
+        let v_ptr = args.v.data().as_raw().0 as *const c_void;
+        let y_ptr = args.y.data().as_raw().0 as *const c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let dq_ptr = args.dq.data().as_raw().0 as *mut c_void;
+        let dk_ptr = args.dk.data().as_raw().0 as *mut c_void;
+        let dv_ptr = args.dv.data().as_raw().0 as *mut c_void;
+        let lse_ptr = args.lse_f32.as_ref().unwrap().data().as_raw().0 as *const c_void;
         let is_causal_flag = if self.desc.is_causal { 1 } else { 0 };
 
-        let num_heads_k = args.k.shape[1];
+        let num_heads_k = args.k.shape()[1];
 
         let (alibi_ptr, alibi_batch_stride) = match args.alibi_slopes.as_ref() {
             None => (core::ptr::null::<c_void>(), 0i32),
             Some(slopes) => {
-                let ptr = slopes.data.as_raw().0 as *const c_void;
-                let batch_stride = if slopes.shape[0] == 1 {
+                let ptr = slopes.data().as_raw().0 as *const c_void;
+                let batch_stride = if slopes.shape()[0] == 1 {
                     0_i32
                 } else {
                     self.desc.num_heads

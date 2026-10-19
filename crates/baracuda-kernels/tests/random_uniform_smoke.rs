@@ -42,11 +42,7 @@ fn uniform_f32_unit_interval() {
     let plan = RandomPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default())
         .expect("select RandomPlan<f32>");
     let args = RandomArgs::<f32, 1> {
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args)
         .expect("uniform f32 run");
@@ -100,11 +96,7 @@ fn uniform_f64_unit_interval() {
     let plan = RandomPlan::<f64, 1>::select(&stream, &desc, PlanPreference::default())
         .expect("select RandomPlan<f64>");
     let args = RandomArgs::<f64, 1> {
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args)
         .expect("uniform f64 run");
@@ -154,11 +146,7 @@ fn uniform_f32_affine_range() {
     let plan =
         RandomPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = RandomArgs::<f32, 1> {
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args)
         .expect("uniform affine run");

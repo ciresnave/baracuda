@@ -138,26 +138,22 @@ fn run_case(axis: usize, correction: i32) {
     let plan = ReduceBackwardPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let args = ReduceBackwardArgs::<f32, 3> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape: dy_shape,
-            stride: contiguous_stride(dy_shape),
-        },
-        x: Some(TensorRef {
-            data: dev_x.as_slice(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        }),
-        y: Some(TensorRef {
-            data: dev_y.as_slice(),
-            shape: dy_shape,
-            stride: contiguous_stride(dy_shape),
-        }),
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), dy_shape, contiguous_stride(dy_shape)).unwrap(),
+        x: Some(
+            TensorRef::new(
+                dev_x.as_slice(),
+                input_shape,
+                contiguous_stride(input_shape),
+            )
+            .unwrap(),
+        ),
+        y: Some(TensorRef::new(dev_y.as_slice(), dy_shape, contiguous_stride(dy_shape)).unwrap()),
+        dx: TensorMut::new(
+            dev_dx.as_slice_mut(),
+            input_shape,
+            contiguous_stride(input_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -249,26 +245,22 @@ fn run_case_f16(axis: usize, correction: i32) {
     let plan = ReduceBackwardPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let args = ReduceBackwardArgs::<f16, 3> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape: dy_shape,
-            stride: contiguous_stride(dy_shape),
-        },
-        x: Some(TensorRef {
-            data: dev_x.as_slice(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        }),
-        y: Some(TensorRef {
-            data: dev_y.as_slice(),
-            shape: dy_shape,
-            stride: contiguous_stride(dy_shape),
-        }),
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), dy_shape, contiguous_stride(dy_shape)).unwrap(),
+        x: Some(
+            TensorRef::new(
+                dev_x.as_slice(),
+                input_shape,
+                contiguous_stride(input_shape),
+            )
+            .unwrap(),
+        ),
+        y: Some(TensorRef::new(dev_y.as_slice(), dy_shape, contiguous_stride(dy_shape)).unwrap()),
+        dx: TensorMut::new(
+            dev_dx.as_slice_mut(),
+            input_shape,
+            contiguous_stride(input_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -327,26 +319,22 @@ fn run_case_bf16(axis: usize, correction: i32) {
     let plan = ReduceBackwardPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let args = ReduceBackwardArgs::<bf16, 3> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape: dy_shape,
-            stride: contiguous_stride(dy_shape),
-        },
-        x: Some(TensorRef {
-            data: dev_x.as_slice(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        }),
-        y: Some(TensorRef {
-            data: dev_y.as_slice(),
-            shape: dy_shape,
-            stride: contiguous_stride(dy_shape),
-        }),
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), dy_shape, contiguous_stride(dy_shape)).unwrap(),
+        x: Some(
+            TensorRef::new(
+                dev_x.as_slice(),
+                input_shape,
+                contiguous_stride(input_shape),
+            )
+            .unwrap(),
+        ),
+        y: Some(TensorRef::new(dev_y.as_slice(), dy_shape, contiguous_stride(dy_shape)).unwrap()),
+        dx: TensorMut::new(
+            dev_dx.as_slice_mut(),
+            input_shape,
+            contiguous_stride(input_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -437,26 +425,22 @@ fn run_case_f64(axis: usize, correction: i32) {
     let plan = ReduceBackwardPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let args = ReduceBackwardArgs::<f64, 3> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape: dy_shape,
-            stride: contiguous_stride(dy_shape),
-        },
-        x: Some(TensorRef {
-            data: dev_x.as_slice(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        }),
-        y: Some(TensorRef {
-            data: dev_y.as_slice(),
-            shape: dy_shape,
-            stride: contiguous_stride(dy_shape),
-        }),
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), dy_shape, contiguous_stride(dy_shape)).unwrap(),
+        x: Some(
+            TensorRef::new(
+                dev_x.as_slice(),
+                input_shape,
+                contiguous_stride(input_shape),
+            )
+            .unwrap(),
+        ),
+        y: Some(TensorRef::new(dev_y.as_slice(), dy_shape, contiguous_stride(dy_shape)).unwrap()),
+        dx: TensorMut::new(
+            dev_dx.as_slice_mut(),
+            input_shape,
+            contiguous_stride(input_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

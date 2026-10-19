@@ -111,7 +111,7 @@ impl<T: Element> TracePlan<T> {
     pub fn can_implement(&self, args: &TraceArgs<'_, T>) -> Result<()> {
         crate::view_check::check_fits(&args.x)?;
         crate::view_check::check_fits(&args.y)?;
-        if args.x.shape != [self.desc.n, self.desc.n] {
+        if args.x.shape() != [self.desc.n, self.desc.n] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::TracePlan: X shape must be [n, n] (square)",
             ));
@@ -119,7 +119,7 @@ impl<T: Element> TracePlan<T> {
         // y is rank-0 — `shape == []`. The const-generic forces it at
         // compile time, but assert the runtime shape is the empty array
         // anyway (mirrors the other plans' explicit shape checks).
-        let y_shape: [i32; 0] = args.y.shape;
+        let y_shape: [i32; 0] = args.y.shape();
         let _expected: [i32; 0] = [];
         if y_shape != _expected {
             return Err(Error::InvalidProblem(
@@ -128,17 +128,17 @@ impl<T: Element> TracePlan<T> {
         }
         let n = self.desc.n as i64;
         let x_needed = n.saturating_mul(n);
-        let x_len = args.x.data.len() as i64;
+        let x_len = args.x.data().len() as i64;
         if x_len < x_needed {
             return Err(Error::BufferTooSmall {
                 needed: x_needed as usize,
                 got: x_len as usize,
             });
         }
-        if (args.y.data.len() as i64) < 1 {
+        if (args.y.data().len() as i64) < 1 {
             return Err(Error::BufferTooSmall {
                 needed: 1,
-                got: args.y.data.len(),
+                got: args.y.data().len(),
             });
         }
         Ok(())
@@ -174,12 +174,12 @@ impl<T: Element> TracePlan<T> {
             // Trace of an empty (0×0) matrix is 0. The kernel still
             // launches and stores 0 into y[0] via the empty-loop path.
         }
-        let x_ptr = args.x.data.as_raw().0 as *const c_void;
-        let y_ptr = args.y.data.as_raw().0 as *mut c_void;
+        let x_ptr = args.x.data().as_raw().0 as *const c_void;
+        let y_ptr = args.y.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         let n = self.desc.n;
-        let stride_row = args.x.stride[0];
-        let stride_col = args.x.stride[1];
+        let stride_row = args.x.stride()[0];
+        let stride_col = args.x.stride()[1];
 
         macro_rules! dispatch {
             ($sym:ident) => {{

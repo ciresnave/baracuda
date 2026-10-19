@@ -125,12 +125,12 @@ impl<T: Element> AffineGridPlan<T> {
     pub fn can_implement(&self, args: &AffineGridArgs<'_, T>) -> Result<()> {
         crate::view_check::check_fits(&args.theta)?;
         crate::view_check::check_fits(&args.grid)?;
-        if args.theta.shape != [self.desc.n, 2, 3] {
+        if args.theta.shape() != [self.desc.n, 2, 3] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::AffineGridPlan: theta must be [N, 2, 3]",
             ));
         }
-        if args.grid.shape != [self.desc.n, self.desc.oh, self.desc.ow, 2] {
+        if args.grid.shape() != [self.desc.n, self.desc.oh, self.desc.ow, 2] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::AffineGridPlan: grid must be [N, OH, OW, 2]",
             ));
@@ -167,8 +167,8 @@ impl<T: Element> AffineGridPlan<T> {
         if args.grid.numel() == 0 {
             return Ok(());
         }
-        let theta_ptr = args.theta.data.as_raw().0 as *const c_void;
-        let grid_ptr = args.grid.data.as_raw().0 as *mut c_void;
+        let theta_ptr = args.theta.data().as_raw().0 as *const c_void;
+        let grid_ptr = args.grid.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         let status = match T::KIND {
             ElementKind::F32 => unsafe {

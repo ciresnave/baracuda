@@ -83,26 +83,12 @@ fn cascade_equal_lse_averages() {
         &stream,
         Workspace::None,
         CascadeAttentionArgs {
-            v: TensorMut {
-                data: v_dev.as_slice_mut(),
-                shape: v_shape,
-                stride: contiguous_stride(v_shape),
-            },
-            s: TensorMut {
-                data: s_dev.as_slice_mut(),
-                shape: s_shape,
-                stride: contiguous_stride(s_shape),
-            },
-            v_other: TensorRef {
-                data: v_other_dev.as_slice(),
-                shape: v_shape,
-                stride: contiguous_stride(v_shape),
-            },
-            s_other: TensorRef {
-                data: s_other_dev.as_slice(),
-                shape: s_shape,
-                stride: contiguous_stride(s_shape),
-            },
+            v: TensorMut::new(v_dev.as_slice_mut(), v_shape, contiguous_stride(v_shape)).unwrap(),
+            s: TensorMut::new(s_dev.as_slice_mut(), s_shape, contiguous_stride(s_shape)).unwrap(),
+            v_other: TensorRef::new(v_other_dev.as_slice(), v_shape, contiguous_stride(v_shape))
+                .unwrap(),
+            s_other: TensorRef::new(s_other_dev.as_slice(), s_shape, contiguous_stride(s_shape))
+                .unwrap(),
         },
     )
     .expect("cascade merge run");
@@ -198,26 +184,20 @@ fn cascade_merge_states_equal_lse_averages() {
         &stream,
         Workspace::None,
         CascadeMergeStatesArgs {
-            v: TensorRef {
-                data: v_dev.as_slice(),
-                shape: v_shape,
-                stride: contiguous_stride(v_shape),
-            },
-            s: TensorRef {
-                data: s_dev.as_slice(),
-                shape: s_shape,
-                stride: contiguous_stride(s_shape),
-            },
-            v_merged: TensorMut {
-                data: v_merged_dev.as_slice_mut(),
-                shape: vm_shape,
-                stride: contiguous_stride(vm_shape),
-            },
-            s_merged: TensorMut {
-                data: s_merged_dev.as_slice_mut(),
-                shape: sm_shape,
-                stride: contiguous_stride(sm_shape),
-            },
+            v: TensorRef::new(v_dev.as_slice(), v_shape, contiguous_stride(v_shape)).unwrap(),
+            s: TensorRef::new(s_dev.as_slice(), s_shape, contiguous_stride(s_shape)).unwrap(),
+            v_merged: TensorMut::new(
+                v_merged_dev.as_slice_mut(),
+                vm_shape,
+                contiguous_stride(vm_shape),
+            )
+            .unwrap(),
+            s_merged: TensorMut::new(
+                s_merged_dev.as_slice_mut(),
+                sm_shape,
+                contiguous_stride(sm_shape),
+            )
+            .unwrap(),
         },
     )
     .expect("merge_states run");

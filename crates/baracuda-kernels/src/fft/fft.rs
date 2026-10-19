@@ -228,27 +228,27 @@ impl<T: Element> FftPlan<T> {
 
     fn check_args(&self, x: &TensorRef<'_, T, 2>, y: &TensorMut<'_, T, 2>) -> Result<i64> {
         let expected = [self.desc.batch, self.desc.n];
-        if x.shape != expected {
+        if x.shape() != expected {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FftPlan: x shape != [batch, n]",
             ));
         }
-        if y.shape != expected {
+        if y.shape() != expected {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FftPlan: y shape != [batch, n]",
             ));
         }
         let numel = (self.desc.batch as i64) * (self.desc.n as i64);
-        if (x.data.len() as i64) < numel {
+        if (x.data().len() as i64) < numel {
             return Err(Error::BufferTooSmall {
                 needed: numel as usize,
-                got: x.data.len(),
+                got: x.data().len(),
             });
         }
-        if (y.data.len() as i64) < numel {
+        if (y.data().len() as i64) < numel {
             return Err(Error::BufferTooSmall {
                 needed: numel as usize,
-                got: y.data.len(),
+                got: y.data().len(),
             });
         }
         Ok(numel)
@@ -283,8 +283,8 @@ impl FftPlan<Complex64> {
         } else {
             CUFFT_FORWARD
         };
-        let idata = args.x.data.as_raw().0 as *mut cufftComplex;
-        let odata = args.y.data.as_raw().0 as *mut cufftComplex;
+        let idata = args.x.data().as_raw().0 as *mut cufftComplex;
+        let odata = args.y.data().as_raw().0 as *mut cufftComplex;
         let status = unsafe { cufftExecC2C(handle, idata, odata, direction) };
         if status != 0 {
             return Err(Error::CutlassInternal(cufft_to_status(status)));
@@ -333,8 +333,8 @@ impl FftPlan<Complex128> {
         } else {
             CUFFT_FORWARD
         };
-        let idata = args.x.data.as_raw().0 as *mut cufftDoubleComplex;
-        let odata = args.y.data.as_raw().0 as *mut cufftDoubleComplex;
+        let idata = args.x.data().as_raw().0 as *mut cufftDoubleComplex;
+        let odata = args.y.data().as_raw().0 as *mut cufftDoubleComplex;
         let status = unsafe { cufftExecZ2Z(handle, idata, odata, direction) };
         if status != 0 {
             return Err(Error::CutlassInternal(cufft_to_status(status)));

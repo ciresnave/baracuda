@@ -111,22 +111,22 @@ impl<TIn: Element, TOut: IntElement> DequantizePerTokenPlan<TIn, TOut> {
         crate::view_check::check_fits(&args.scale)?;
         crate::view_check::check_fits(&args.zero_point)?;
         crate::view_check::check_fits(&args.output)?;
-        if args.input.shape != [self.desc.n, self.desc.d] {
+        if args.input.shape() != [self.desc.n, self.desc.d] {
             return Err(Error::InvalidProblem(
                 "DequantizePerTokenPlan: input shape != [n, d]",
             ));
         }
-        if args.output.shape != [self.desc.n, self.desc.d] {
+        if args.output.shape() != [self.desc.n, self.desc.d] {
             return Err(Error::InvalidProblem(
                 "DequantizePerTokenPlan: output shape != [n, d]",
             ));
         }
-        if args.scale.shape != [self.desc.n] {
+        if args.scale.shape() != [self.desc.n] {
             return Err(Error::InvalidProblem(
                 "DequantizePerTokenPlan: scale shape != [n]",
             ));
         }
-        if args.zero_point.shape != [self.desc.n] {
+        if args.zero_point.shape() != [self.desc.n] {
             return Err(Error::InvalidProblem(
                 "DequantizePerTokenPlan: zero_point shape != [n]",
             ));
@@ -164,10 +164,10 @@ impl<TIn: Element, TOut: IntElement> DequantizePerTokenPlan<TIn, TOut> {
         if total == 0 {
             return Ok(());
         }
-        let in_ptr = args.input.data.as_raw().0 as *const c_void;
-        let sc_ptr = args.scale.data.as_raw().0 as *const c_void;
-        let zp_ptr = args.zero_point.data.as_raw().0 as *const c_void;
-        let out_ptr = args.output.data.as_raw().0 as *mut c_void;
+        let in_ptr = args.input.data().as_raw().0 as *const c_void;
+        let sc_ptr = args.scale.data().as_raw().0 as *const c_void;
+        let zp_ptr = args.zero_point.data().as_raw().0 as *const c_void;
+        let out_ptr = args.output.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
         let status = match (TIn::KIND, TOut::KIND) {

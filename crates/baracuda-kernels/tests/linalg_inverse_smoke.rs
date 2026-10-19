@@ -83,26 +83,20 @@ fn inverse_f32_basic() {
     let mm_shape = [m, m];
     let pivot_shape = [m];
     let args = InverseArgs::<f32> {
-        a: TensorMut {
-            data: dev_a.as_slice_mut(),
-            shape: mm_shape,
-            stride: contiguous_stride(mm_shape),
-        },
-        inv: TensorMut {
-            data: dev_inv.as_slice_mut(),
-            shape: mm_shape,
-            stride: contiguous_stride(mm_shape),
-        },
-        pivot: TensorMut {
-            data: dev_pivot.as_slice_mut(),
-            shape: pivot_shape,
-            stride: contiguous_stride(pivot_shape),
-        },
-        info: TensorMut {
-            data: dev_info.as_slice_mut(),
-            shape: [1i32],
-            stride: [1],
-        },
+        a: TensorMut::new(dev_a.as_slice_mut(), mm_shape, contiguous_stride(mm_shape)).unwrap(),
+        inv: TensorMut::new(
+            dev_inv.as_slice_mut(),
+            mm_shape,
+            contiguous_stride(mm_shape),
+        )
+        .unwrap(),
+        pivot: TensorMut::new(
+            dev_pivot.as_slice_mut(),
+            pivot_shape,
+            contiguous_stride(pivot_shape),
+        )
+        .unwrap(),
+        info: TensorMut::new(dev_info.as_slice_mut(), [1i32], [1]).unwrap(),
     };
     plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
         .expect("run Inverse f32");
@@ -161,26 +155,20 @@ fn inverse_f64_basic() {
     let mm_shape = [m, m];
     let pivot_shape = [m];
     let args = InverseArgs::<f64> {
-        a: TensorMut {
-            data: dev_a.as_slice_mut(),
-            shape: mm_shape,
-            stride: contiguous_stride(mm_shape),
-        },
-        inv: TensorMut {
-            data: dev_inv.as_slice_mut(),
-            shape: mm_shape,
-            stride: contiguous_stride(mm_shape),
-        },
-        pivot: TensorMut {
-            data: dev_pivot.as_slice_mut(),
-            shape: pivot_shape,
-            stride: contiguous_stride(pivot_shape),
-        },
-        info: TensorMut {
-            data: dev_info.as_slice_mut(),
-            shape: [1i32],
-            stride: [1],
-        },
+        a: TensorMut::new(dev_a.as_slice_mut(), mm_shape, contiguous_stride(mm_shape)).unwrap(),
+        inv: TensorMut::new(
+            dev_inv.as_slice_mut(),
+            mm_shape,
+            contiguous_stride(mm_shape),
+        )
+        .unwrap(),
+        pivot: TensorMut::new(
+            dev_pivot.as_slice_mut(),
+            pivot_shape,
+            contiguous_stride(pivot_shape),
+        )
+        .unwrap(),
+        info: TensorMut::new(dev_info.as_slice_mut(), [1i32], [1]).unwrap(),
     };
     plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
         .expect("run Inverse f64");

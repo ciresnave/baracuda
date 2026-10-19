@@ -106,31 +106,36 @@ fn embedding_bag_max_f32_basic() {
     let plan = EmbeddingBagMaxPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = EmbeddingBagMaxArgs::<f32> {
-        weight: TensorRef {
-            data: dev_w.as_slice(),
-            shape: [v as i32, d as i32],
-            stride: contiguous_stride([v as i32, d as i32]),
-        },
-        indices: TensorRef {
-            data: dev_idx.as_slice(),
-            shape: [total_indices as i32],
-            stride: contiguous_stride([total_indices as i32]),
-        },
-        offsets: TensorRef {
-            data: dev_off.as_slice(),
-            shape: [num_bags as i32],
-            stride: contiguous_stride([num_bags as i32]),
-        },
-        output: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: [num_bags as i32, d as i32],
-            stride: contiguous_stride([num_bags as i32, d as i32]),
-        },
-        output_index: TensorMut {
-            data: dev_oidx.as_slice_mut(),
-            shape: [num_bags as i32, d as i32],
-            stride: contiguous_stride([num_bags as i32, d as i32]),
-        },
+        weight: TensorRef::new(
+            dev_w.as_slice(),
+            [v as i32, d as i32],
+            contiguous_stride([v as i32, d as i32]),
+        )
+        .unwrap(),
+        indices: TensorRef::new(
+            dev_idx.as_slice(),
+            [total_indices as i32],
+            contiguous_stride([total_indices as i32]),
+        )
+        .unwrap(),
+        offsets: TensorRef::new(
+            dev_off.as_slice(),
+            [num_bags as i32],
+            contiguous_stride([num_bags as i32]),
+        )
+        .unwrap(),
+        output: TensorMut::new(
+            dev_out.as_slice_mut(),
+            [num_bags as i32, d as i32],
+            contiguous_stride([num_bags as i32, d as i32]),
+        )
+        .unwrap(),
+        output_index: TensorMut::new(
+            dev_oidx.as_slice_mut(),
+            [num_bags as i32, d as i32],
+            contiguous_stride([num_bags as i32, d as i32]),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -196,31 +201,36 @@ fn embedding_bag_max_f32_padding_and_empty() {
     let plan = EmbeddingBagMaxPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = EmbeddingBagMaxArgs::<f32> {
-        weight: TensorRef {
-            data: dev_w.as_slice(),
-            shape: [v as i32, d as i32],
-            stride: contiguous_stride([v as i32, d as i32]),
-        },
-        indices: TensorRef {
-            data: dev_idx.as_slice(),
-            shape: [total_indices as i32],
-            stride: contiguous_stride([total_indices as i32]),
-        },
-        offsets: TensorRef {
-            data: dev_off.as_slice(),
-            shape: [num_bags as i32],
-            stride: contiguous_stride([num_bags as i32]),
-        },
-        output: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: [num_bags as i32, d as i32],
-            stride: contiguous_stride([num_bags as i32, d as i32]),
-        },
-        output_index: TensorMut {
-            data: dev_oidx.as_slice_mut(),
-            shape: [num_bags as i32, d as i32],
-            stride: contiguous_stride([num_bags as i32, d as i32]),
-        },
+        weight: TensorRef::new(
+            dev_w.as_slice(),
+            [v as i32, d as i32],
+            contiguous_stride([v as i32, d as i32]),
+        )
+        .unwrap(),
+        indices: TensorRef::new(
+            dev_idx.as_slice(),
+            [total_indices as i32],
+            contiguous_stride([total_indices as i32]),
+        )
+        .unwrap(),
+        offsets: TensorRef::new(
+            dev_off.as_slice(),
+            [num_bags as i32],
+            contiguous_stride([num_bags as i32]),
+        )
+        .unwrap(),
+        output: TensorMut::new(
+            dev_out.as_slice_mut(),
+            [num_bags as i32, d as i32],
+            contiguous_stride([num_bags as i32, d as i32]),
+        )
+        .unwrap(),
+        output_index: TensorMut::new(
+            dev_oidx.as_slice_mut(),
+            [num_bags as i32, d as i32],
+            contiguous_stride([num_bags as i32, d as i32]),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -302,31 +312,36 @@ fn embedding_bag_max_f64() {
     let plan = EmbeddingBagMaxPlan::<f64>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = EmbeddingBagMaxArgs::<f64> {
-        weight: TensorRef {
-            data: dev_w.as_slice(),
-            shape: [v as i32, d as i32],
-            stride: contiguous_stride([v as i32, d as i32]),
-        },
-        indices: TensorRef {
-            data: dev_idx.as_slice(),
-            shape: [total_indices as i32],
-            stride: contiguous_stride([total_indices as i32]),
-        },
-        offsets: TensorRef {
-            data: dev_off.as_slice(),
-            shape: [num_bags as i32],
-            stride: contiguous_stride([num_bags as i32]),
-        },
-        output: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: [num_bags as i32, d as i32],
-            stride: contiguous_stride([num_bags as i32, d as i32]),
-        },
-        output_index: TensorMut {
-            data: dev_oidx.as_slice_mut(),
-            shape: [num_bags as i32, d as i32],
-            stride: contiguous_stride([num_bags as i32, d as i32]),
-        },
+        weight: TensorRef::new(
+            dev_w.as_slice(),
+            [v as i32, d as i32],
+            contiguous_stride([v as i32, d as i32]),
+        )
+        .unwrap(),
+        indices: TensorRef::new(
+            dev_idx.as_slice(),
+            [total_indices as i32],
+            contiguous_stride([total_indices as i32]),
+        )
+        .unwrap(),
+        offsets: TensorRef::new(
+            dev_off.as_slice(),
+            [num_bags as i32],
+            contiguous_stride([num_bags as i32]),
+        )
+        .unwrap(),
+        output: TensorMut::new(
+            dev_out.as_slice_mut(),
+            [num_bags as i32, d as i32],
+            contiguous_stride([num_bags as i32, d as i32]),
+        )
+        .unwrap(),
+        output_index: TensorMut::new(
+            dev_oidx.as_slice_mut(),
+            [num_bags as i32, d as i32],
+            contiguous_stride([num_bags as i32, d as i32]),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

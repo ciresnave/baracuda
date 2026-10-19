@@ -110,9 +110,9 @@ impl<T: Element> SegmentMinPlan<T> {
         };
         validate_args(
             &proxy,
-            args.input.shape,
-            args.segment_ids.shape,
-            args.output.shape,
+            args.input.shape(),
+            args.segment_ids.shape(),
+            args.output.shape(),
             "SegmentMinPlan",
         )
     }

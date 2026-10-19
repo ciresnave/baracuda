@@ -58,16 +58,18 @@ fn permute_3d_rotate_f16() {
     let plan = PermutePlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select f16");
     let args = PermuteArgs::<f16, 3> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: output_shape,
-            stride: contiguous_stride(output_shape),
-        },
+        x: TensorRef::new(
+            dev_x.as_slice(),
+            input_shape,
+            contiguous_stride(input_shape),
+        )
+        .unwrap(),
+        y: TensorMut::new(
+            dev_y.as_slice_mut(),
+            output_shape,
+            contiguous_stride(output_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run f16");
     stream.synchronize().expect("sync");
@@ -116,16 +118,18 @@ fn permute_3d_rotate_bf16() {
     let plan = PermutePlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select bf16");
     let args = PermuteArgs::<bf16, 3> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: output_shape,
-            stride: contiguous_stride(output_shape),
-        },
+        x: TensorRef::new(
+            dev_x.as_slice(),
+            input_shape,
+            contiguous_stride(input_shape),
+        )
+        .unwrap(),
+        y: TensorMut::new(
+            dev_y.as_slice_mut(),
+            output_shape,
+            contiguous_stride(output_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run bf16");
     stream.synchronize().expect("sync");
@@ -172,16 +176,18 @@ fn permute_3d_rotate_f64() {
     let plan = PermutePlan::<f64, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select f64");
     let args = PermuteArgs::<f64, 3> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape: input_shape,
-            stride: contiguous_stride(input_shape),
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: output_shape,
-            stride: contiguous_stride(output_shape),
-        },
+        x: TensorRef::new(
+            dev_x.as_slice(),
+            input_shape,
+            contiguous_stride(input_shape),
+        )
+        .unwrap(),
+        y: TensorMut::new(
+            dev_y.as_slice_mut(),
+            output_shape,
+            contiguous_stride(output_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run f64");
     stream.synchronize().expect("sync");

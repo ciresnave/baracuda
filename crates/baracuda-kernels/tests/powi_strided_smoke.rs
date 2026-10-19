@@ -81,16 +81,8 @@ fn powi_strided_fw_f32_contig_fastpath() {
     let plan = UnaryParamPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = UnaryParamArgs::<f32, 2> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
+        x: TensorRef::new(dev_x.as_slice(), shape, stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -132,16 +124,8 @@ fn powi_strided_fw_f32_transposed_input() {
     let plan = UnaryParamPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = UnaryParamArgs::<f32, 2> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape: logical_shape,
-            stride: stride_x_t,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: logical_shape,
-            stride: stride_y_contig,
-        },
+        x: TensorRef::new(dev_x.as_slice(), logical_shape, stride_x_t).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), logical_shape, stride_y_contig).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -195,16 +179,8 @@ fn powi_strided_fw_f32_strided_output() {
     let plan = UnaryParamPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = UnaryParamArgs::<f32, 2> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride: stride_x_contig,
-        },
-        y: TensorMut {
-            data: dev_y_big.as_slice_mut(),
-            shape,
-            stride: stride_y_strided,
-        },
+        x: TensorRef::new(dev_x.as_slice(), shape, stride_x_contig).unwrap(),
+        y: TensorMut::new(dev_y_big.as_slice_mut(), shape, stride_y_strided).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -255,16 +231,8 @@ fn powi_strided_fw_f16_transposed() {
     let plan = UnaryParamPlan::<f16, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = UnaryParamArgs::<f16, 2> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape: logical_shape,
-            stride: stride_x_t,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: logical_shape,
-            stride: stride_y_contig,
-        },
+        x: TensorRef::new(dev_x.as_slice(), logical_shape, stride_x_t).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), logical_shape, stride_y_contig).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -312,16 +280,8 @@ fn powi_strided_fw_bf16_transposed() {
     let plan = UnaryParamPlan::<bf16, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = UnaryParamArgs::<bf16, 2> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape: logical_shape,
-            stride: stride_x_t,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: logical_shape,
-            stride: stride_y_contig,
-        },
+        x: TensorRef::new(dev_x.as_slice(), logical_shape, stride_x_t).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), logical_shape, stride_y_contig).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -371,16 +331,8 @@ fn powi_strided_fw_f64_transposed() {
     let plan = UnaryParamPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = UnaryParamArgs::<f64, 2> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape: logical_shape,
-            stride: stride_x_t,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: logical_shape,
-            stride: stride_y_contig,
-        },
+        x: TensorRef::new(dev_x.as_slice(), logical_shape, stride_x_t).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), logical_shape, stride_y_contig).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -431,21 +383,9 @@ fn powi_strided_bw_f32_contig_fastpath() {
     let plan = UnaryParamBackwardPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = UnaryParamBackwardArgs::<f32, 2> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape,
-            stride,
-        },
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride,
-        },
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape,
-            stride,
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), shape, stride).unwrap(),
+        x: TensorRef::new(dev_x.as_slice(), shape, stride).unwrap(),
+        dx: TensorMut::new(dev_dx.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -496,21 +436,9 @@ fn powi_strided_bw_f32_transposed() {
     let plan = UnaryParamBackwardPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = UnaryParamBackwardArgs::<f32, 2> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape: logical_shape,
-            stride: stride_t,
-        },
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape: logical_shape,
-            stride: stride_t,
-        },
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape: logical_shape,
-            stride: stride_dx_contig,
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), logical_shape, stride_t).unwrap(),
+        x: TensorRef::new(dev_x.as_slice(), logical_shape, stride_t).unwrap(),
+        dx: TensorMut::new(dev_dx.as_slice_mut(), logical_shape, stride_dx_contig).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

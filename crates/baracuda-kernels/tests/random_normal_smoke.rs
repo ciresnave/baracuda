@@ -38,11 +38,7 @@ fn normal_f32_standard() {
     let plan =
         RandomPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = RandomArgs::<f32, 1> {
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args)
         .expect("normal run");
@@ -90,11 +86,7 @@ fn normal_f32_shifted() {
     let plan =
         RandomPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = RandomArgs::<f32, 1> {
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args)
         .expect("normal shifted run");
@@ -138,11 +130,7 @@ fn normal_f64_standard() {
     let plan =
         RandomPlan::<f64, 1>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = RandomArgs::<f64, 1> {
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args)
         .expect("normal f64 run");

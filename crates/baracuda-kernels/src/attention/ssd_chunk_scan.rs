@@ -218,22 +218,22 @@ impl<T: Element> SsdChunkScanPlan<T> {
             self.desc.num_heads,
             self.desc.state_dim,
         ];
-        if args.x.shape != shape_x || args.y.shape != shape_x {
+        if args.x.shape() != shape_x || args.y.shape() != shape_x {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SsdChunkScanPlan: x / y shape must be [B, L, H, D]",
             ));
         }
-        if args.dt.shape != shape_dt {
+        if args.dt.shape() != shape_dt {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SsdChunkScanPlan: dt shape must be [B, L, H]",
             ));
         }
-        if args.a.shape != shape_a {
+        if args.a.shape() != shape_a {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SsdChunkScanPlan: A shape must be [H]",
             ));
         }
-        if args.b.shape != shape_bn || args.c.shape != shape_bn {
+        if args.b.shape() != shape_bn || args.c.shape() != shape_bn {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SsdChunkScanPlan: B / C shape must be [B, L, H, N]",
             ));
@@ -282,12 +282,12 @@ impl<T: Element> SsdChunkScanPlan<T> {
             return Ok(());
         }
         let stream_ptr = stream.as_raw() as *mut c_void;
-        let x_ptr = args.x.data.as_raw().0 as *const c_void;
-        let dt_ptr = args.dt.data.as_raw().0 as *const c_void;
-        let a_ptr = args.a.data.as_raw().0 as *const c_void;
-        let b_ptr = args.b.data.as_raw().0 as *const c_void;
-        let c_ptr = args.c.data.as_raw().0 as *const c_void;
-        let y_ptr = args.y.data.as_raw().0 as *mut c_void;
+        let x_ptr = args.x.data().as_raw().0 as *const c_void;
+        let dt_ptr = args.dt.data().as_raw().0 as *const c_void;
+        let a_ptr = args.a.data().as_raw().0 as *const c_void;
+        let b_ptr = args.b.data().as_raw().0 as *const c_void;
+        let c_ptr = args.c.data().as_raw().0 as *const c_void;
+        let y_ptr = args.y.data().as_raw().0 as *mut c_void;
 
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
@@ -524,17 +524,17 @@ impl<T: Element> SsdChunkScanBackwardPlan<T> {
             });
         }
 
-        let x_ptr = args.x.data.as_raw().0 as *const c_void;
-        let dt_ptr = args.dt.data.as_raw().0 as *const c_void;
-        let a_ptr = args.a.data.as_raw().0 as *const c_void;
-        let b_ptr = args.b.data.as_raw().0 as *const c_void;
-        let c_ptr = args.c.data.as_raw().0 as *const c_void;
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
-        let db_ptr = args.d_b.data.as_raw().0 as *mut c_void;
-        let dc_ptr = args.d_c.data.as_raw().0 as *mut c_void;
-        let ddt_ptr = args.d_dt.data.as_raw().0 as *mut c_void;
-        let da_ptr = args.d_a.data.as_raw().0 as *mut c_void;
+        let x_ptr = args.x.data().as_raw().0 as *const c_void;
+        let dt_ptr = args.dt.data().as_raw().0 as *const c_void;
+        let a_ptr = args.a.data().as_raw().0 as *const c_void;
+        let b_ptr = args.b.data().as_raw().0 as *const c_void;
+        let c_ptr = args.c.data().as_raw().0 as *const c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let dx_ptr = args.dx.data().as_raw().0 as *mut c_void;
+        let db_ptr = args.d_b.data().as_raw().0 as *mut c_void;
+        let dc_ptr = args.d_c.data().as_raw().0 as *mut c_void;
+        let ddt_ptr = args.d_dt.data().as_raw().0 as *mut c_void;
+        let da_ptr = args.d_a.data().as_raw().0 as *mut c_void;
 
         let status = match T::KIND {
             ElementKind::F32 => unsafe {

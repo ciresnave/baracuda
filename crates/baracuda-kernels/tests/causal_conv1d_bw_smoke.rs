@@ -58,26 +58,13 @@ fn run_fw_and_sum(
         stream,
         Workspace::None,
         CausalConv1dArgs {
-            x: TensorRef {
-                data: x_dev.as_slice(),
-                shape: shape_x,
-                stride: contiguous_stride(shape_x),
-            },
-            weight: TensorRef {
-                data: weight_dev.as_slice(),
-                shape: shape_w,
-                stride: contiguous_stride(shape_w),
-            },
-            bias: Some(TensorRef {
-                data: bias_dev.as_slice(),
-                shape: shape_b,
-                stride: contiguous_stride(shape_b),
-            }),
-            y: TensorMut {
-                data: y_dev.as_slice_mut(),
-                shape: shape_x,
-                stride: contiguous_stride(shape_x),
-            },
+            x: TensorRef::new(x_dev.as_slice(), shape_x, contiguous_stride(shape_x)).unwrap(),
+            weight: TensorRef::new(weight_dev.as_slice(), shape_w, contiguous_stride(shape_w))
+                .unwrap(),
+            bias: Some(
+                TensorRef::new(bias_dev.as_slice(), shape_b, contiguous_stride(shape_b)).unwrap(),
+            ),
+            y: TensorMut::new(y_dev.as_slice_mut(), shape_x, contiguous_stride(shape_x)).unwrap(),
         },
     )
     .expect("run");
@@ -127,41 +114,22 @@ fn causal_conv1d_bw_dx_dw_db_match_fd() {
             &stream,
             Workspace::None,
             CausalConv1dBackwardArgs {
-                x: TensorRef {
-                    data: x_dev.as_slice(),
-                    shape: shape_x,
-                    stride: contiguous_stride(shape_x),
-                },
-                weight: TensorRef {
-                    data: weight_dev.as_slice(),
-                    shape: shape_w,
-                    stride: contiguous_stride(shape_w),
-                },
-                bias: Some(TensorRef {
-                    data: bias_dev.as_slice(),
-                    shape: shape_b,
-                    stride: contiguous_stride(shape_b),
-                }),
-                dy: TensorRef {
-                    data: dy_dev.as_slice(),
-                    shape: shape_x,
-                    stride: contiguous_stride(shape_x),
-                },
-                dx: TensorMut {
-                    data: dx_dev.as_slice_mut(),
-                    shape: shape_x,
-                    stride: contiguous_stride(shape_x),
-                },
-                dw: TensorMut {
-                    data: dw_dev.as_slice_mut(),
-                    shape: shape_w,
-                    stride: contiguous_stride(shape_w),
-                },
-                db: Some(TensorMut {
-                    data: db_dev.as_slice_mut(),
-                    shape: shape_b,
-                    stride: contiguous_stride(shape_b),
-                }),
+                x: TensorRef::new(x_dev.as_slice(), shape_x, contiguous_stride(shape_x)).unwrap(),
+                weight: TensorRef::new(weight_dev.as_slice(), shape_w, contiguous_stride(shape_w))
+                    .unwrap(),
+                bias: Some(
+                    TensorRef::new(bias_dev.as_slice(), shape_b, contiguous_stride(shape_b))
+                        .unwrap(),
+                ),
+                dy: TensorRef::new(dy_dev.as_slice(), shape_x, contiguous_stride(shape_x)).unwrap(),
+                dx: TensorMut::new(dx_dev.as_slice_mut(), shape_x, contiguous_stride(shape_x))
+                    .unwrap(),
+                dw: TensorMut::new(dw_dev.as_slice_mut(), shape_w, contiguous_stride(shape_w))
+                    .unwrap(),
+                db: Some(
+                    TensorMut::new(db_dev.as_slice_mut(), shape_b, contiguous_stride(shape_b))
+                        .unwrap(),
+                ),
             },
         )
         .expect("bw run");

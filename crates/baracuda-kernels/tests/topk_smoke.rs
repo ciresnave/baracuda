@@ -47,21 +47,24 @@ fn topk_f32_largest_basic() {
         &stream,
         Workspace::None,
         TopkArgs::<f32> {
-            input: TensorRef {
-                data: dev_in.as_slice(),
-                shape: [batch, row_len],
-                stride: contiguous_stride([batch, row_len]),
-            },
-            values: TensorMut {
-                data: dev_vals.as_slice_mut(),
-                shape: [batch, k],
-                stride: contiguous_stride([batch, k]),
-            },
-            indices: TensorMut {
-                data: dev_idx.as_slice_mut(),
-                shape: [batch, k],
-                stride: contiguous_stride([batch, k]),
-            },
+            input: TensorRef::new(
+                dev_in.as_slice(),
+                [batch, row_len],
+                contiguous_stride([batch, row_len]),
+            )
+            .unwrap(),
+            values: TensorMut::new(
+                dev_vals.as_slice_mut(),
+                [batch, k],
+                contiguous_stride([batch, k]),
+            )
+            .unwrap(),
+            indices: TensorMut::new(
+                dev_idx.as_slice_mut(),
+                [batch, k],
+                contiguous_stride([batch, k]),
+            )
+            .unwrap(),
         },
     )
     .expect("run");

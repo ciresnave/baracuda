@@ -125,22 +125,22 @@ impl<T: Element> UniquePlan<T> {
         crate::view_check::check_fits(&args.counter)?;
         let in_shape = [self.desc.batch, self.desc.row_len];
         let out_shape = [self.desc.batch, self.desc.max_unique];
-        if args.input.shape != in_shape {
+        if args.input.shape() != in_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::UniquePlan: input shape mismatch",
             ));
         }
-        if args.sorted_scratch.shape != in_shape || args.sorted_idx_scratch.shape != in_shape {
+        if args.sorted_scratch.shape() != in_shape || args.sorted_idx_scratch.shape() != in_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::UniquePlan: sorted_scratch / sorted_idx_scratch shape mismatch",
             ));
         }
-        if args.values.shape != out_shape || args.counts.shape != out_shape {
+        if args.values.shape() != out_shape || args.counts.shape() != out_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::UniquePlan: values / counts shape mismatch",
             ));
         }
-        if args.counter.shape != [self.desc.batch] {
+        if args.counter.shape() != [self.desc.batch] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::UniquePlan: counter shape != [batch]",
             ));

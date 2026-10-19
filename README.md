@@ -323,8 +323,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 5. Args carry the per-call tensor handles + strides.
     let args = SoftmaxArgs {
-        x: TensorRef { data: dev_x.as_slice(), shape: [rows, cols], stride: [cols as i64, 1] },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape: [rows, cols], stride: [cols as i64, 1] },
+        x: TensorRef::new(dev_x.as_slice(), [rows, cols], [cols as i64, 1]).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), [rows, cols], [cols as i64, 1]).unwrap(),
     };
 
     // 6. Launch. Workspace::None for plans that need no scratch.

@@ -244,44 +244,44 @@ impl<T: AwqActivation> Int4AwqGemmPlan<T> {
         let oc = self.desc.oc;
         let g = self.desc.group_size;
 
-        if args.activation.shape != [m, ic] {
+        if args.activation.shape() != [m, ic] {
             return Err(Error::InvalidProblem(
                 "Int4AwqGemmPlan: activation shape != [M, IC]",
             ));
         }
-        if args.activation.stride[1] != 1 {
+        if args.activation.stride()[1] != 1 {
             return Err(Error::InvalidProblem(
                 "Int4AwqGemmPlan: activation must be contig along IC",
             ));
         }
 
         // Packed weight: [OC, IC/8].
-        if args.weight_packed.shape != [oc, ic / 8] {
+        if args.weight_packed.shape() != [oc, ic / 8] {
             return Err(Error::InvalidProblem(
                 "Int4AwqGemmPlan: weight_packed shape != [OC, IC/8] (i32 storage)",
             ));
         }
 
         // Scales: [IC/g, OC].
-        if args.scales.shape != [ic / g, oc] {
+        if args.scales.shape() != [ic / g, oc] {
             return Err(Error::InvalidProblem(
                 "Int4AwqGemmPlan: scales shape != [IC/group_size, OC]",
             ));
         }
 
         // Zeros: [IC/g, OC/8].
-        if args.zeros.shape != [ic / g, oc / 8] {
+        if args.zeros.shape() != [ic / g, oc / 8] {
             return Err(Error::InvalidProblem(
                 "Int4AwqGemmPlan: zeros shape != [IC/group_size, OC/8] (i32 storage)",
             ));
         }
 
-        if args.output.shape != [m, oc] {
+        if args.output.shape() != [m, oc] {
             return Err(Error::InvalidProblem(
                 "Int4AwqGemmPlan: output shape != [M, OC]",
             ));
         }
-        if args.output.stride[1] != 1 {
+        if args.output.stride()[1] != 1 {
             return Err(Error::InvalidProblem(
                 "Int4AwqGemmPlan: output must be contig along OC",
             ));
@@ -337,11 +337,11 @@ impl<T: AwqActivation> Int4AwqGemmPlan<T> {
             });
         }
 
-        let a_ptr = args.activation.data.as_raw().0 as *const c_void;
-        let w_ptr = args.weight_packed.data.as_raw().0 as *const c_void;
-        let s_ptr = args.scales.data.as_raw().0 as *const c_void;
-        let z_ptr = args.zeros.data.as_raw().0 as *const c_void;
-        let o_ptr = args.output.data.as_raw().0 as *mut c_void;
+        let a_ptr = args.activation.data().as_raw().0 as *const c_void;
+        let w_ptr = args.weight_packed.data().as_raw().0 as *const c_void;
+        let s_ptr = args.scales.data().as_raw().0 as *const c_void;
+        let z_ptr = args.zeros.data().as_raw().0 as *const c_void;
+        let o_ptr = args.output.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
         let status = unsafe {

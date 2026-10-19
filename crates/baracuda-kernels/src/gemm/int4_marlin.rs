@@ -254,12 +254,12 @@ impl<T: MarlinActivation> Int4MarlinGemmPlan<T> {
         let g = self.desc.group_size;
 
         // Activation [M, K] contig along K.
-        if args.activation.shape != [m, k] {
+        if args.activation.shape() != [m, k] {
             return Err(Error::InvalidProblem(
                 "Int4MarlinGemmPlan: activation shape != [M, K]",
             ));
         }
-        if args.activation.stride[1] != 1 {
+        if args.activation.stride()[1] != 1 {
             return Err(Error::InvalidProblem(
                 "Int4MarlinGemmPlan: activation must be contig along K",
             ));
@@ -267,7 +267,7 @@ impl<T: MarlinActivation> Int4MarlinGemmPlan<T> {
 
         // Packed weight: K * N / 8 i32 elements.
         let expected_packed_i32 = (k as i64) * (n as i64) / 8;
-        if (args.weight_packed.shape[0] as i64) != expected_packed_i32 {
+        if (args.weight_packed.shape()[0] as i64) != expected_packed_i32 {
             return Err(Error::InvalidProblem(
                 "Int4MarlinGemmPlan: weight_packed length != K * N / 8 (i32 count)",
             ));
@@ -275,7 +275,7 @@ impl<T: MarlinActivation> Int4MarlinGemmPlan<T> {
 
         // Scales [K/g, N] for g > 0 or [1, N] for g == -1.
         let scale_rows = if g == -1 { 1 } else { k / g };
-        if args.scales.shape != [scale_rows, n] {
+        if args.scales.shape() != [scale_rows, n] {
             return Err(Error::InvalidProblem(
                 "Int4MarlinGemmPlan: scales shape != [K/group_size, N] (or [1, N] for per-channel)",
             ));
@@ -283,20 +283,20 @@ impl<T: MarlinActivation> Int4MarlinGemmPlan<T> {
 
         // Workspace: int32 with >= (N/128) * max_par entries.
         let need = (n / 128) as i64 * self.desc.max_par as i64;
-        if (args.workspace.shape[0] as i64) < need {
+        if (args.workspace.shape()[0] as i64) < need {
             return Err(Error::WorkspaceTooSmall {
                 needed: (need as usize) * core::mem::size_of::<i32>(),
-                got: (args.workspace.shape[0] as usize) * core::mem::size_of::<i32>(),
+                got: (args.workspace.shape()[0] as usize) * core::mem::size_of::<i32>(),
             });
         }
 
         // Output [M, N] contig along N.
-        if args.output.shape != [m, n] {
+        if args.output.shape() != [m, n] {
             return Err(Error::InvalidProblem(
                 "Int4MarlinGemmPlan: output shape != [M, N]",
             ));
         }
-        if args.output.stride[1] != 1 {
+        if args.output.stride()[1] != 1 {
             return Err(Error::InvalidProblem(
                 "Int4MarlinGemmPlan: output must be contig along N",
             ));
@@ -335,11 +335,11 @@ impl<T: MarlinActivation> Int4MarlinGemmPlan<T> {
             return Ok(());
         }
 
-        let a_ptr = args.activation.data.as_raw().0 as *const c_void;
-        let b_ptr = args.weight_packed.data.as_raw().0 as *const c_void;
-        let s_ptr = args.scales.data.as_raw().0 as *const c_void;
-        let ws_ptr = args.workspace.data.as_raw().0 as *mut c_void;
-        let c_ptr = args.output.data.as_raw().0 as *mut c_void;
+        let a_ptr = args.activation.data().as_raw().0 as *const c_void;
+        let b_ptr = args.weight_packed.data().as_raw().0 as *const c_void;
+        let s_ptr = args.scales.data().as_raw().0 as *const c_void;
+        let ws_ptr = args.workspace.data().as_raw().0 as *mut c_void;
+        let c_ptr = args.output.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
         let status = unsafe {

@@ -174,24 +174,24 @@ impl<T: GgufMmvqActivation> GgufMmvqMultiMPlan<T> {
         crate::view_check::check_fits(&args.weight)?;
         crate::view_check::check_fits(&args.activations)?;
         crate::view_check::check_fits(&args.output)?;
-        if args.activations.shape != [self.desc.m, self.desc.ncols] {
+        if args.activations.shape() != [self.desc.m, self.desc.ncols] {
             return Err(Error::InvalidProblem(
                 "GgufMmvqMultiMPlan: activations shape != [M, ncols]",
             ));
         }
-        if args.output.shape != [self.desc.m, self.desc.nrows] {
+        if args.output.shape() != [self.desc.m, self.desc.nrows] {
             return Err(Error::InvalidProblem(
                 "GgufMmvqMultiMPlan: output shape != [M, nrows]",
             ));
         }
         // Stride checks: kernel assumes activations + output are contig
         // along the inner dim (= K and = nrows respectively).
-        if args.activations.stride[1] != 1 {
+        if args.activations.stride()[1] != 1 {
             return Err(Error::InvalidProblem(
                 "GgufMmvqMultiMPlan: activations must be contig along K",
             ));
         }
-        if args.output.stride[1] != 1 {
+        if args.output.stride()[1] != 1 {
             return Err(Error::InvalidProblem(
                 "GgufMmvqMultiMPlan: output must be contig along nrows",
             ));
@@ -201,7 +201,7 @@ impl<T: GgufMmvqActivation> GgufMmvqMultiMPlan<T> {
         let expected_bytes = (self.desc.nrows as i64)
             * (blocks_per_row as i64)
             * (self.desc.block_format.type_size() as i64);
-        let weight_len_bytes = args.weight.shape[0] as i64;
+        let weight_len_bytes = args.weight.shape()[0] as i64;
         let need_bytes = self.desc.w_start_byte_offset + expected_bytes;
         if weight_len_bytes < need_bytes {
             return Err(Error::InvalidProblem(
@@ -262,9 +262,9 @@ impl<T: GgufMmvqActivation> GgufMmvqMultiMPlan<T> {
             }
         };
 
-        let w_ptr = args.weight.data.as_raw().0 as *const c_void;
-        let y_ptr = args.activations.data.as_raw().0 as *const c_void;
-        let dst_ptr = args.output.data.as_raw().0 as *mut c_void;
+        let w_ptr = args.weight.data().as_raw().0 as *const c_void;
+        let y_ptr = args.activations.data().as_raw().0 as *const c_void;
+        let dst_ptr = args.output.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         let ncols = self.desc.ncols;
         let nrows = self.desc.nrows;

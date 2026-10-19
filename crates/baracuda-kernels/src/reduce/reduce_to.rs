@@ -185,12 +185,12 @@ impl<T: Element, const N: usize> ReduceToPlan<T, N> {
     pub fn can_implement(&self, args: &ReduceToArgs<'_, T, N>) -> Result<()> {
         crate::view_check::check_fits(&args.x)?;
         crate::view_check::check_fits(&args.y)?;
-        if args.x.shape != self.desc.input_shape {
+        if args.x.shape() != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::ReduceToPlan: X shape mismatch with descriptor input_shape",
             ));
         }
-        if args.y.shape != self.desc.output_shape {
+        if args.y.shape() != self.desc.output_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::ReduceToPlan: Y shape mismatch with descriptor output_shape",
             ));
@@ -205,7 +205,7 @@ impl<T: Element, const N: usize> ReduceToPlan<T, N> {
             ));
         }
         let y_numel = args.y.numel();
-        let y_len = args.y.data.len() as i64;
+        let y_len = args.y.data().len() as i64;
         if y_len < y_numel {
             return Err(Error::BufferTooSmall {
                 needed: y_numel as usize,
@@ -223,7 +223,7 @@ impl<T: Element, const N: usize> ReduceToPlan<T, N> {
             for d in 0..N {
                 let extent = self.desc.input_shape[d] as i64;
                 if extent > 1 {
-                    let stride = args.x.stride[d];
+                    let stride = args.x.stride()[d];
                     if stride < 0 {
                         return Err(Error::InvalidProblem(
                             "baracuda-kernels::ReduceToPlan: negative input strides walk \
@@ -233,7 +233,7 @@ impl<T: Element, const N: usize> ReduceToPlan<T, N> {
                     span += (extent - 1) * stride;
                 }
             }
-            let x_len = args.x.data.len() as i64;
+            let x_len = args.x.data().len() as i64;
             if x_len < span {
                 return Err(Error::BufferTooSmall {
                     needed: span as usize,
@@ -274,12 +274,12 @@ impl<T: Element, const N: usize> ReduceToPlan<T, N> {
         if args.y.numel() == 0 {
             return Ok(());
         }
-        let x_ptr = args.x.data.as_raw().0 as *const c_void;
-        let y_ptr = args.y.data.as_raw().0 as *mut c_void;
+        let x_ptr = args.x.data().as_raw().0 as *const c_void;
+        let y_ptr = args.y.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
         let input_shape = self.desc.input_shape;
-        let input_stride = args.x.stride;
+        let input_stride = args.x.stride();
         let output_shape = self.desc.output_shape;
         let rank = N as i32;
 

@@ -219,7 +219,7 @@ impl<T: Element> CtcLossPlan<T> {
         if self.desc.batch_size == 0 || self.desc.max_time == 0 {
             return Ok(());
         }
-        if args.log_probs.shape
+        if args.log_probs.shape()
             != [
                 self.desc.max_time,
                 self.desc.batch_size,
@@ -231,37 +231,37 @@ impl<T: Element> CtcLossPlan<T> {
                  [max_time, batch_size, num_classes]",
             ));
         }
-        if args.targets.shape != [self.desc.batch_size, self.desc.max_target_len] {
+        if args.targets.shape() != [self.desc.batch_size, self.desc.max_target_len] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::CtcLossPlan: targets shape must be \
                  [batch_size, max_target_len]",
             ));
         }
-        if args.input_lengths.shape != [self.desc.batch_size] {
+        if args.input_lengths.shape() != [self.desc.batch_size] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::CtcLossPlan: input_lengths shape must be [batch_size]",
             ));
         }
-        if args.target_lengths.shape != [self.desc.batch_size] {
+        if args.target_lengths.shape() != [self.desc.batch_size] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::CtcLossPlan: target_lengths shape must be [batch_size]",
             ));
         }
         let needed_alpha = self.alpha_workspace_size();
-        if (args.alpha.data.len()) < needed_alpha {
+        if (args.alpha.data().len()) < needed_alpha {
             return Err(Error::WorkspaceTooSmall {
                 needed: needed_alpha,
-                got: args.alpha.data.len(),
+                got: args.alpha.data().len(),
             });
         }
         let (ws_ptr, ws_bytes) = unpack_workspace(workspace, self.workspace_size())?;
         let stream_ptr = stream.as_raw();
-        let log_probs_ptr = args.log_probs.data.as_raw().0 as *const c_void;
-        let targets_ptr = args.targets.data.as_raw().0 as *const c_void;
-        let input_lengths_ptr = args.input_lengths.data.as_raw().0 as *const c_void;
-        let target_lengths_ptr = args.target_lengths.data.as_raw().0 as *const c_void;
-        let alpha_ptr = args.alpha.data.as_raw().0 as *mut c_void;
-        let out_ptr = args.loss.data.as_raw().0 as *mut c_void;
+        let log_probs_ptr = args.log_probs.data().as_raw().0 as *const c_void;
+        let targets_ptr = args.targets.data().as_raw().0 as *const c_void;
+        let input_lengths_ptr = args.input_lengths.data().as_raw().0 as *const c_void;
+        let target_lengths_ptr = args.target_lengths.data().as_raw().0 as *const c_void;
+        let alpha_ptr = args.alpha.data().as_raw().0 as *mut c_void;
+        let out_ptr = args.loss.data().as_raw().0 as *mut c_void;
         let mode = self.desc.reduction as i32;
         let zinf = if self.desc.zero_infinity { 1 } else { 0 };
 
@@ -525,7 +525,7 @@ impl<T: Element> CtcLossBackwardPlan<T> {
         if self.desc.batch_size == 0 || self.desc.max_time == 0 {
             return Ok(());
         }
-        if args.dlog_probs.shape
+        if args.dlog_probs.shape()
             != [
                 self.desc.max_time,
                 self.desc.batch_size,
@@ -539,14 +539,14 @@ impl<T: Element> CtcLossBackwardPlan<T> {
         }
         let (ws_ptr, ws_bytes) = unpack_workspace(workspace, self.workspace_size())?;
         let stream_ptr = stream.as_raw();
-        let log_probs_ptr = args.log_probs.data.as_raw().0 as *const c_void;
-        let targets_ptr = args.targets.data.as_raw().0 as *const c_void;
-        let input_lengths_ptr = args.input_lengths.data.as_raw().0 as *const c_void;
-        let target_lengths_ptr = args.target_lengths.data.as_raw().0 as *const c_void;
-        let alpha_ptr = args.alpha.data.as_raw().0 as *const c_void;
-        let per_sample_loss_ptr = args.per_sample_loss.data.as_raw().0 as *const c_void;
-        let dloss_ptr = args.dloss.data.as_raw().0 as *const c_void;
-        let dlog_probs_ptr = args.dlog_probs.data.as_raw().0 as *mut c_void;
+        let log_probs_ptr = args.log_probs.data().as_raw().0 as *const c_void;
+        let targets_ptr = args.targets.data().as_raw().0 as *const c_void;
+        let input_lengths_ptr = args.input_lengths.data().as_raw().0 as *const c_void;
+        let target_lengths_ptr = args.target_lengths.data().as_raw().0 as *const c_void;
+        let alpha_ptr = args.alpha.data().as_raw().0 as *const c_void;
+        let per_sample_loss_ptr = args.per_sample_loss.data().as_raw().0 as *const c_void;
+        let dloss_ptr = args.dloss.data().as_raw().0 as *const c_void;
+        let dlog_probs_ptr = args.dlog_probs.data().as_raw().0 as *mut c_void;
         let mode = self.desc.reduction as i32;
         let zinf = if self.desc.zero_infinity { 1 } else { 0 };
 

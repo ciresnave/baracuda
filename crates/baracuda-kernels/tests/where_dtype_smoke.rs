@@ -64,26 +64,10 @@ fn where_f16_3d() {
         .expect("select WherePlan<f16, 3>");
 
     let args = WhereArgs::<f16, 3> {
-        cond: TensorRef {
-            data: dev_cond.as_slice(),
-            shape,
-            stride,
-        },
-        a: TensorRef {
-            data: dev_a.as_slice(),
-            shape,
-            stride,
-        },
-        b: TensorRef {
-            data: dev_b.as_slice(),
-            shape,
-            stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
+        cond: TensorRef::new(dev_cond.as_slice(), shape, stride).unwrap(),
+        a: TensorRef::new(dev_a.as_slice(), shape, stride).unwrap(),
+        b: TensorRef::new(dev_b.as_slice(), shape, stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args)
         .expect("where f16 run");
@@ -135,26 +119,10 @@ fn where_bf16_3d() {
         .expect("select WherePlan<bf16, 3>");
 
     let args = WhereArgs::<bf16, 3> {
-        cond: TensorRef {
-            data: dev_cond.as_slice(),
-            shape,
-            stride,
-        },
-        a: TensorRef {
-            data: dev_a.as_slice(),
-            shape,
-            stride,
-        },
-        b: TensorRef {
-            data: dev_b.as_slice(),
-            shape,
-            stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
+        cond: TensorRef::new(dev_cond.as_slice(), shape, stride).unwrap(),
+        a: TensorRef::new(dev_a.as_slice(), shape, stride).unwrap(),
+        b: TensorRef::new(dev_b.as_slice(), shape, stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args)
         .expect("where bf16 run");
@@ -202,26 +170,10 @@ fn where_f64_3d() {
         .expect("select WherePlan<f64, 3>");
 
     let args = WhereArgs::<f64, 3> {
-        cond: TensorRef {
-            data: dev_cond.as_slice(),
-            shape,
-            stride,
-        },
-        a: TensorRef {
-            data: dev_a.as_slice(),
-            shape,
-            stride,
-        },
-        b: TensorRef {
-            data: dev_b.as_slice(),
-            shape,
-            stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
+        cond: TensorRef::new(dev_cond.as_slice(), shape, stride).unwrap(),
+        a: TensorRef::new(dev_a.as_slice(), shape, stride).unwrap(),
+        b: TensorRef::new(dev_b.as_slice(), shape, stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args)
         .expect("where f64 run");

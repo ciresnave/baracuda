@@ -76,26 +76,30 @@ fn quantize_per_group_f32_s8_basic() {
     let plan = QuantizePerGroupPlan::<f32, S8>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = QuantizePerGroupArgs::<f32, S8> {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape: [outer, axis_size],
-            stride: contiguous_stride([outer, axis_size]),
-        },
-        scale: TensorRef {
-            data: dev_scale.as_slice(),
-            shape: [outer, num_groups],
-            stride: contiguous_stride([outer, num_groups]),
-        },
-        zero_point: TensorRef {
-            data: dev_zp.as_slice(),
-            shape: [outer, num_groups],
-            stride: contiguous_stride([outer, num_groups]),
-        },
-        output: TensorMut {
-            data: dev_q.as_slice_mut(),
-            shape: [outer, axis_size],
-            stride: contiguous_stride([outer, axis_size]),
-        },
+        input: TensorRef::new(
+            dev_x.as_slice(),
+            [outer, axis_size],
+            contiguous_stride([outer, axis_size]),
+        )
+        .unwrap(),
+        scale: TensorRef::new(
+            dev_scale.as_slice(),
+            [outer, num_groups],
+            contiguous_stride([outer, num_groups]),
+        )
+        .unwrap(),
+        zero_point: TensorRef::new(
+            dev_zp.as_slice(),
+            [outer, num_groups],
+            contiguous_stride([outer, num_groups]),
+        )
+        .unwrap(),
+        output: TensorMut::new(
+            dev_q.as_slice_mut(),
+            [outer, axis_size],
+            contiguous_stride([outer, axis_size]),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

@@ -162,12 +162,12 @@ impl<T: Element, const N: usize> GatedActivationPlan<T, N> {
         crate::view_check::check_fits(&args.x)?;
         crate::view_check::check_fits(&args.y)?;
         let output_shape = self.desc.output_shape();
-        if args.x.shape != self.desc.input_shape {
+        if args.x.shape() != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::GatedActivationPlan: x shape mismatch with descriptor input_shape",
             ));
         }
-        if args.y.shape != output_shape {
+        if args.y.shape() != output_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::GatedActivationPlan: y shape mismatch with desc.output_shape()",
             ));
@@ -181,8 +181,8 @@ impl<T: Element, const N: usize> GatedActivationPlan<T, N> {
         }
         let x_numel = args.x.numel();
         let y_numel = args.y.numel();
-        let x_len = args.x.data.len() as i64;
-        let y_len = args.y.data.len() as i64;
+        let x_len = args.x.data().len() as i64;
+        let y_len = args.y.data().len() as i64;
         if x_len < x_numel {
             return Err(Error::BufferTooSmall {
                 needed: x_numel as usize,
@@ -239,14 +239,14 @@ impl<T: Element, const N: usize> GatedActivationPlan<T, N> {
         // same plumbing.
         let sd = self.desc.split_dim as usize;
         let half = self.desc.input_shape[sd] as i64 / 2;
-        let x_half_offset = half * args.x.stride[sd];
+        let x_half_offset = half * args.x.stride()[sd];
 
         let stream_ptr = stream.as_raw();
-        let x_ptr = args.x.data.as_raw().0 as *const c_void;
-        let y_ptr = args.y.data.as_raw().0 as *mut c_void;
+        let x_ptr = args.x.data().as_raw().0 as *const c_void;
+        let y_ptr = args.y.data().as_raw().0 as *mut c_void;
 
-        let stride_x = args.x.stride;
-        let stride_y = args.y.stride;
+        let stride_x = args.x.stride();
+        let stride_y = args.y.stride();
         // Pass shape as `i32` array via slice — kernel reads first `rank` entries.
         let rank = N as i32;
         let split_dim = self.desc.split_dim as i32;

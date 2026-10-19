@@ -71,21 +71,9 @@ fn run_case_bool(kind: BinaryKind, shape: [i32; 2]) {
     let plan = BinaryPlan::<Bool, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select BinaryPlan<Bool, 2>");
     let args = BinaryArgs::<Bool, 2> {
-        a: TensorRef {
-            data: dev_a.as_slice(),
-            shape,
-            stride,
-        },
-        b: TensorRef {
-            data: dev_b.as_slice(),
-            shape,
-            stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
+        a: TensorRef::new(dev_a.as_slice(), shape, stride).unwrap(),
+        b: TensorRef::new(dev_b.as_slice(), shape, stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args)
         .expect("binary logical bool run");

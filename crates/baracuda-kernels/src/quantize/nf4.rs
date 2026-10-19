@@ -216,23 +216,23 @@ impl<T: Nf4Activation> Nf4DequantizePlan<T> {
         let k = self.desc.k;
         let bs = self.desc.block_size;
         let expected_packed_bytes = ((n / 2) as i64) * (k as i64);
-        if (args.weight.shape[0] as i64) != expected_packed_bytes {
+        if (args.weight.shape()[0] as i64) != expected_packed_bytes {
             return Err(Error::InvalidProblem(
                 "Nf4DequantizePlan: weight bytes != (N/2) * K",
             ));
         }
         let expected_absmax = (n as i64) * ((k / bs) as i64);
-        if (args.absmax.shape[0] as i64) != expected_absmax {
+        if (args.absmax.shape()[0] as i64) != expected_absmax {
             return Err(Error::InvalidProblem(
                 "Nf4DequantizePlan: absmax length != N * (K / block_size)",
             ));
         }
-        if args.output.shape != [n, k] {
+        if args.output.shape() != [n, k] {
             return Err(Error::InvalidProblem(
                 "Nf4DequantizePlan: output shape != [N, K]",
             ));
         }
-        if args.output.stride[1] != 1 {
+        if args.output.stride()[1] != 1 {
             return Err(Error::InvalidProblem(
                 "Nf4DequantizePlan: output must be contiguous along K",
             ));
@@ -270,9 +270,9 @@ impl<T: Nf4Activation> Nf4DequantizePlan<T> {
             return Ok(());
         }
 
-        let w_ptr = args.weight.data.as_raw().0 as *const c_void;
-        let amax_ptr = args.absmax.data.as_raw().0 as *const c_void;
-        let out_ptr = args.output.data.as_raw().0 as *mut c_void;
+        let w_ptr = args.weight.data().as_raw().0 as *const c_void;
+        let amax_ptr = args.absmax.data().as_raw().0 as *const c_void;
+        let out_ptr = args.output.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
         let status = unsafe {
@@ -337,31 +337,31 @@ impl<T: Nf4Activation> Nf4MmvqPlan<T> {
         let k = self.desc.k;
         let bs = self.desc.block_size;
         let expected_packed_bytes = ((n / 2) as i64) * (k as i64);
-        if (args.weight.shape[0] as i64) != expected_packed_bytes {
+        if (args.weight.shape()[0] as i64) != expected_packed_bytes {
             return Err(Error::InvalidProblem(
                 "Nf4MmvqPlan: weight bytes != (N/2) * K",
             ));
         }
         let expected_absmax = (n as i64) * ((k / bs) as i64);
-        if (args.absmax.shape[0] as i64) != expected_absmax {
+        if (args.absmax.shape()[0] as i64) != expected_absmax {
             return Err(Error::InvalidProblem(
                 "Nf4MmvqPlan: absmax length != N * (K / block_size)",
             ));
         }
-        if args.activation.shape != [k] {
+        if args.activation.shape() != [k] {
             return Err(Error::InvalidProblem(
                 "Nf4MmvqPlan: activation shape != [K]",
             ));
         }
-        if args.output.shape != [n] {
+        if args.output.shape() != [n] {
             return Err(Error::InvalidProblem("Nf4MmvqPlan: output shape != [N]"));
         }
-        if args.activation.stride[0] != 1 {
+        if args.activation.stride()[0] != 1 {
             return Err(Error::InvalidProblem(
                 "Nf4MmvqPlan: activation must be contig",
             ));
         }
-        if args.output.stride[0] != 1 {
+        if args.output.stride()[0] != 1 {
             return Err(Error::InvalidProblem("Nf4MmvqPlan: output must be contig"));
         }
         Ok(())
@@ -398,10 +398,10 @@ impl<T: Nf4Activation> Nf4MmvqPlan<T> {
             return Ok(());
         }
 
-        let w_ptr = args.weight.data.as_raw().0 as *const c_void;
-        let amax_ptr = args.absmax.data.as_raw().0 as *const c_void;
-        let y_ptr = args.activation.data.as_raw().0 as *const c_void;
-        let out_ptr = args.output.data.as_raw().0 as *mut c_void;
+        let w_ptr = args.weight.data().as_raw().0 as *const c_void;
+        let amax_ptr = args.absmax.data().as_raw().0 as *const c_void;
+        let y_ptr = args.activation.data().as_raw().0 as *const c_void;
+        let out_ptr = args.output.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
         let status = unsafe {
@@ -477,33 +477,33 @@ impl<T: Nf4Activation> Nf4MmvqMultiMPlan<T> {
         let bs = self.desc.base.block_size;
         let m = self.desc.m;
         let expected_packed_bytes = ((n / 2) as i64) * (k as i64);
-        if (args.weight.shape[0] as i64) != expected_packed_bytes {
+        if (args.weight.shape()[0] as i64) != expected_packed_bytes {
             return Err(Error::InvalidProblem(
                 "Nf4MmvqMultiMPlan: weight bytes != (N/2) * K",
             ));
         }
         let expected_absmax = (n as i64) * ((k / bs) as i64);
-        if (args.absmax.shape[0] as i64) != expected_absmax {
+        if (args.absmax.shape()[0] as i64) != expected_absmax {
             return Err(Error::InvalidProblem(
                 "Nf4MmvqMultiMPlan: absmax length != N * (K / block_size)",
             ));
         }
-        if args.activations.shape != [m, k] {
+        if args.activations.shape() != [m, k] {
             return Err(Error::InvalidProblem(
                 "Nf4MmvqMultiMPlan: activations shape != [M, K]",
             ));
         }
-        if args.output.shape != [m, n] {
+        if args.output.shape() != [m, n] {
             return Err(Error::InvalidProblem(
                 "Nf4MmvqMultiMPlan: output shape != [M, N]",
             ));
         }
-        if args.activations.stride[1] != 1 {
+        if args.activations.stride()[1] != 1 {
             return Err(Error::InvalidProblem(
                 "Nf4MmvqMultiMPlan: activations must be contig along K",
             ));
         }
-        if args.output.stride[1] != 1 {
+        if args.output.stride()[1] != 1 {
             return Err(Error::InvalidProblem(
                 "Nf4MmvqMultiMPlan: output must be contig along N",
             ));
@@ -541,10 +541,10 @@ impl<T: Nf4Activation> Nf4MmvqMultiMPlan<T> {
             return Ok(());
         }
 
-        let w_ptr = args.weight.data.as_raw().0 as *const c_void;
-        let amax_ptr = args.absmax.data.as_raw().0 as *const c_void;
-        let y_ptr = args.activations.data.as_raw().0 as *const c_void;
-        let out_ptr = args.output.data.as_raw().0 as *mut c_void;
+        let w_ptr = args.weight.data().as_raw().0 as *const c_void;
+        let amax_ptr = args.absmax.data().as_raw().0 as *const c_void;
+        let y_ptr = args.activations.data().as_raw().0 as *const c_void;
+        let out_ptr = args.output.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
         let status = unsafe {

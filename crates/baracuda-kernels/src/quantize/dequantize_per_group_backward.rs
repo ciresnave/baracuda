@@ -128,13 +128,13 @@ impl<TIn: Element, TOut: IntElement> DequantizePerGroupBackwardPlan<TIn, TOut> {
         crate::view_check::check_fits(&args.scale)?;
         crate::view_check::check_fits(&args.d_input)?;
         let expect_io = [self.desc.outer_size, self.desc.axis_size];
-        if args.d_output.shape != expect_io || args.d_input.shape != expect_io {
+        if args.d_output.shape() != expect_io || args.d_input.shape() != expect_io {
             return Err(Error::InvalidProblem(
                 "DequantizePerGroupBackwardPlan: I/O tensor shape != [outer, axis_size]",
             ));
         }
         let expect_sg = [self.desc.outer_size, self.desc.num_groups()];
-        if args.scale.shape != expect_sg {
+        if args.scale.shape() != expect_sg {
             return Err(Error::InvalidProblem(
                 "DequantizePerGroupBackwardPlan: scale shape != [outer, num_groups]",
             ));
@@ -172,9 +172,9 @@ impl<TIn: Element, TOut: IntElement> DequantizePerGroupBackwardPlan<TIn, TOut> {
         if total == 0 {
             return Ok(());
         }
-        let dy_ptr = args.d_output.data.as_raw().0 as *const c_void;
-        let sc_ptr = args.scale.data.as_raw().0 as *const c_void;
-        let dx_ptr = args.d_input.data.as_raw().0 as *mut c_void;
+        let dy_ptr = args.d_output.data().as_raw().0 as *const c_void;
+        let sc_ptr = args.scale.data().as_raw().0 as *const c_void;
+        let dx_ptr = args.d_input.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         let (outer, axis, g) = (
             self.desc.outer_size,

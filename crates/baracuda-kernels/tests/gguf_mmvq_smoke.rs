@@ -98,21 +98,20 @@ fn gguf_mmvq_q8_0_2x64() {
     };
     let plan = GgufMmvqPlan::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = GgufMmvqArgs {
-        weight: TensorRef {
-            data: dev_weight.as_slice(),
-            shape: [weight_bytes_len],
-            stride: contiguous_stride([weight_bytes_len]),
-        },
-        activation: TensorRef {
-            data: dev_activation.as_slice(),
-            shape: [ncols],
-            stride: contiguous_stride([ncols]),
-        },
-        output: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: [nrows],
-            stride: contiguous_stride([nrows]),
-        },
+        weight: TensorRef::new(
+            dev_weight.as_slice(),
+            [weight_bytes_len],
+            contiguous_stride([weight_bytes_len]),
+        )
+        .unwrap(),
+        activation: TensorRef::new(
+            dev_activation.as_slice(),
+            [ncols],
+            contiguous_stride([ncols]),
+        )
+        .unwrap(),
+        output: TensorMut::new(dev_out.as_slice_mut(), [nrows], contiguous_stride([nrows]))
+            .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -202,21 +201,20 @@ fn gguf_mmvq_q8_K_2x256() {
     let plan = GgufMmvqPlan::select(&stream, &desc, PlanPreference::default())
         .expect("Q8_K MMVQ select (Phase 11.4) should succeed");
     let args = GgufMmvqArgs {
-        weight: TensorRef {
-            data: dev_weight.as_slice(),
-            shape: [weight_bytes_len],
-            stride: contiguous_stride([weight_bytes_len]),
-        },
-        activation: TensorRef {
-            data: dev_activation.as_slice(),
-            shape: [ncols],
-            stride: contiguous_stride([ncols]),
-        },
-        output: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: [nrows],
-            stride: contiguous_stride([nrows]),
-        },
+        weight: TensorRef::new(
+            dev_weight.as_slice(),
+            [weight_bytes_len],
+            contiguous_stride([weight_bytes_len]),
+        )
+        .unwrap(),
+        activation: TensorRef::new(
+            dev_activation.as_slice(),
+            [ncols],
+            contiguous_stride([ncols]),
+        )
+        .unwrap(),
+        output: TensorMut::new(dev_out.as_slice_mut(), [nrows], contiguous_stride([nrows]))
+            .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

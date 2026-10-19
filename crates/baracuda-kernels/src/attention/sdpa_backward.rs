@@ -226,47 +226,47 @@ impl<T: Element> SdpaBackwardPlan<T> {
             self.desc.query_len,
             self.desc.d_v,
         ];
-        if args.q.shape != shape_q {
+        if args.q.shape() != shape_q {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SdpaBackwardPlan: Q shape mismatch",
             ));
         }
-        if args.k.shape != shape_k {
+        if args.k.shape() != shape_k {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SdpaBackwardPlan: K shape mismatch",
             ));
         }
-        if args.v.shape != shape_v {
+        if args.v.shape() != shape_v {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SdpaBackwardPlan: V shape mismatch",
             ));
         }
-        if args.attn.shape != shape_attn {
+        if args.attn.shape() != shape_attn {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SdpaBackwardPlan: attn shape mismatch",
             ));
         }
-        if args.dy.shape != shape_dy {
+        if args.dy.shape() != shape_dy {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SdpaBackwardPlan: dy shape mismatch",
             ));
         }
-        if args.dscores_ws.shape != shape_attn {
+        if args.dscores_ws.shape() != shape_attn {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SdpaBackwardPlan: dscores_ws shape must match attn [B, H, Q, K]",
             ));
         }
-        if args.dq.shape != shape_q {
+        if args.dq.shape() != shape_q {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SdpaBackwardPlan: dQ shape mismatch with Q",
             ));
         }
-        if args.dk.shape != shape_k {
+        if args.dk.shape() != shape_k {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SdpaBackwardPlan: dK shape mismatch with K",
             ));
         }
-        if args.dv.shape != shape_v {
+        if args.dv.shape() != shape_v {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SdpaBackwardPlan: dV shape mismatch with V",
             ));
@@ -285,13 +285,13 @@ impl<T: Element> SdpaBackwardPlan<T> {
                 "baracuda-kernels::SdpaBackwardPlan: dscores_ws must be contiguous",
             ));
         }
-        if args.q.stride[3] != 1
-            || args.k.stride[3] != 1
-            || args.v.stride[3] != 1
-            || args.dy.stride[3] != 1
-            || args.dq.stride[3] != 1
-            || args.dk.stride[3] != 1
-            || args.dv.stride[3] != 1
+        if args.q.stride()[3] != 1
+            || args.k.stride()[3] != 1
+            || args.v.stride()[3] != 1
+            || args.dy.stride()[3] != 1
+            || args.dq.stride()[3] != 1
+            || args.dk.stride()[3] != 1
+            || args.dv.stride()[3] != 1
         {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SdpaBackwardPlan: head_dim axis stride must be 1 \
@@ -341,15 +341,15 @@ impl<T: Element> SdpaBackwardPlan<T> {
             return Ok(());
         }
         let stream_ptr = stream.as_raw();
-        let q_ptr = args.q.data.as_raw().0 as *const c_void;
-        let k_ptr = args.k.data.as_raw().0 as *const c_void;
-        let v_ptr = args.v.data.as_raw().0 as *const c_void;
-        let attn_ptr = args.attn.data.as_raw().0 as *const c_void;
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let ws_ptr = args.dscores_ws.data.as_raw().0 as *mut c_void;
-        let dq_ptr = args.dq.data.as_raw().0 as *mut c_void;
-        let dk_ptr = args.dk.data.as_raw().0 as *mut c_void;
-        let dv_ptr = args.dv.data.as_raw().0 as *mut c_void;
+        let q_ptr = args.q.data().as_raw().0 as *const c_void;
+        let k_ptr = args.k.data().as_raw().0 as *const c_void;
+        let v_ptr = args.v.data().as_raw().0 as *const c_void;
+        let attn_ptr = args.attn.data().as_raw().0 as *const c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let ws_ptr = args.dscores_ws.data().as_raw().0 as *mut c_void;
+        let dq_ptr = args.dq.data().as_raw().0 as *mut c_void;
+        let dk_ptr = args.dk.data().as_raw().0 as *mut c_void;
+        let dv_ptr = args.dv.data().as_raw().0 as *mut c_void;
 
         let contig = args.q.is_contiguous()
             && args.k.is_contiguous()
@@ -461,13 +461,32 @@ impl<T: Element> SdpaBackwardPlan<T> {
                     }
                 }
             } else {
-                let stride_q: [i64; 3] = [args.q.stride[0], args.q.stride[1], args.q.stride[2]];
-                let stride_k: [i64; 3] = [args.k.stride[0], args.k.stride[1], args.k.stride[2]];
-                let stride_v: [i64; 3] = [args.v.stride[0], args.v.stride[1], args.v.stride[2]];
-                let stride_dy: [i64; 3] = [args.dy.stride[0], args.dy.stride[1], args.dy.stride[2]];
-                let stride_dq: [i64; 3] = [args.dq.stride[0], args.dq.stride[1], args.dq.stride[2]];
-                let stride_dk: [i64; 3] = [args.dk.stride[0], args.dk.stride[1], args.dk.stride[2]];
-                let stride_dv: [i64; 3] = [args.dv.stride[0], args.dv.stride[1], args.dv.stride[2]];
+                let stride_q: [i64; 3] =
+                    [args.q.stride()[0], args.q.stride()[1], args.q.stride()[2]];
+                let stride_k: [i64; 3] =
+                    [args.k.stride()[0], args.k.stride()[1], args.k.stride()[2]];
+                let stride_v: [i64; 3] =
+                    [args.v.stride()[0], args.v.stride()[1], args.v.stride()[2]];
+                let stride_dy: [i64; 3] = [
+                    args.dy.stride()[0],
+                    args.dy.stride()[1],
+                    args.dy.stride()[2],
+                ];
+                let stride_dq: [i64; 3] = [
+                    args.dq.stride()[0],
+                    args.dq.stride()[1],
+                    args.dq.stride()[2],
+                ];
+                let stride_dk: [i64; 3] = [
+                    args.dk.stride()[0],
+                    args.dk.stride()[1],
+                    args.dk.stride()[2],
+                ];
+                let stride_dv: [i64; 3] = [
+                    args.dv.stride()[0],
+                    args.dv.stride()[1],
+                    args.dv.stride()[2],
+                ];
                 match T::KIND {
                     ElementKind::F32 => {
                         baracuda_kernels_sys::baracuda_kernels_sdpa_backward_f32_strided_run(

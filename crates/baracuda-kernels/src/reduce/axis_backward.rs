@@ -216,13 +216,13 @@ impl<T: Element, const N: usize> ReduceBackwardPlan<T, N> {
             crate::view_check::check_fits(t)?;
         }
         crate::view_check::check_fits(&args.dx)?;
-        if args.dx.shape != self.desc.input_shape {
+        if args.dx.shape() != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::ReduceBackwardPlan: dx shape must equal input_shape",
             ));
         }
         let expected_dy_shape = self.desc.dy_shape();
-        if args.dy.shape != expected_dy_shape {
+        if args.dy.shape() != expected_dy_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::ReduceBackwardPlan: dy shape must equal input_shape \
                  with reduce_axis collapsed to 1 (keepdim form)",
@@ -236,16 +236,16 @@ impl<T: Element, const N: usize> ReduceBackwardPlan<T, N> {
         }
         let dx_numel = args.dx.numel();
         let dy_numel = args.dy.numel();
-        if (args.dx.data.len() as i64) < dx_numel {
+        if (args.dx.data().len() as i64) < dx_numel {
             return Err(Error::BufferTooSmall {
                 needed: dx_numel as usize,
-                got: args.dx.data.len(),
+                got: args.dx.data().len(),
             });
         }
-        if (args.dy.data.len() as i64) < dy_numel {
+        if (args.dy.data().len() as i64) < dy_numel {
             return Err(Error::BufferTooSmall {
                 needed: dy_numel as usize,
-                got: args.dy.data.len(),
+                got: args.dy.data().len(),
             });
         }
         // Max/Min require BOTH saved-x (forward input, full shape) and
@@ -257,12 +257,12 @@ impl<T: Element, const N: usize> ReduceBackwardPlan<T, N> {
             let y = args.y.as_ref().ok_or(Error::InvalidProblem(
                 "baracuda-kernels::ReduceBackwardPlan: this op requires saved output `y`",
             ))?;
-            if x.shape != self.desc.input_shape {
+            if x.shape() != self.desc.input_shape {
                 return Err(Error::InvalidProblem(
                     "baracuda-kernels::ReduceBackwardPlan: saved `x` shape must equal input_shape",
                 ));
             }
-            if y.shape != expected_dy_shape {
+            if y.shape() != expected_dy_shape {
                 return Err(Error::InvalidProblem(
                     "baracuda-kernels::ReduceBackwardPlan: saved `y` shape must equal \
                      keepdim form (input_shape with reduce_axis = 1)",
@@ -274,16 +274,16 @@ impl<T: Element, const N: usize> ReduceBackwardPlan<T, N> {
                      (strided fanout lands later)",
                 ));
             }
-            if (x.data.len() as i64) < dx_numel {
+            if (x.data().len() as i64) < dx_numel {
                 return Err(Error::BufferTooSmall {
                     needed: dx_numel as usize,
-                    got: x.data.len(),
+                    got: x.data().len(),
                 });
             }
-            if (y.data.len() as i64) < dy_numel {
+            if (y.data().len() as i64) < dy_numel {
                 return Err(Error::BufferTooSmall {
                     needed: dy_numel as usize,
-                    got: y.data.len(),
+                    got: y.data().len(),
                 });
             }
         }
@@ -326,13 +326,13 @@ impl<T: Element, const N: usize> ReduceBackwardPlan<T, N> {
         // axis collapses every reduce-axis coord to the singleton dy
         // slot.
         let axis = self.desc.reduce_axis as usize;
-        let mut stride_dy = args.dy.stride;
+        let mut stride_dy = args.dy.stride();
         stride_dy[axis] = 0;
         let shape = self.desc.input_shape;
-        let stride_dx = args.dx.stride;
+        let stride_dx = args.dx.stride();
         let rank = N as i32;
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let dx_ptr = args.dx.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
         let status = match (self.desc.kind, T::KIND) {
@@ -398,10 +398,10 @@ impl<T: Element, const N: usize> ReduceBackwardPlan<T, N> {
                 // y is a max or a min.
                 let x = args.x.as_ref().expect("Max/Min BW require saved x");
                 let y = args.y.as_ref().expect("Max/Min BW require saved y");
-                let x_ptr = x.data.as_raw().0 as *const c_void;
-                let y_ptr = y.data.as_raw().0 as *const c_void;
-                let stride_x = x.stride;
-                let mut stride_y = y.stride;
+                let x_ptr = x.data().as_raw().0 as *const c_void;
+                let y_ptr = y.data().as_raw().0 as *const c_void;
+                let stride_x = x.stride();
+                let mut stride_y = y.stride();
                 stride_y[axis] = 0;
                 match T::KIND {
                     ElementKind::F32 => unsafe {
@@ -568,10 +568,10 @@ impl<T: Element, const N: usize> ReduceBackwardPlan<T, N> {
                 // `dx[c] = dy[c_reduced] * y[c_reduced] / x[c]`. Dual-save.
                 let x = args.x.as_ref().expect("Prod BW require saved x");
                 let y = args.y.as_ref().expect("Prod BW require saved y");
-                let x_ptr = x.data.as_raw().0 as *const c_void;
-                let y_ptr = y.data.as_raw().0 as *const c_void;
-                let stride_x = x.stride;
-                let mut stride_y = y.stride;
+                let x_ptr = x.data().as_raw().0 as *const c_void;
+                let y_ptr = y.data().as_raw().0 as *const c_void;
+                let stride_x = x.stride();
+                let mut stride_y = y.stride();
                 stride_y[axis] = 0;
                 match T::KIND {
                     ElementKind::F32 => unsafe {
@@ -667,10 +667,10 @@ impl<T: Element, const N: usize> ReduceBackwardPlan<T, N> {
                 let y = args.y.as_ref().expect(
                     "Var/Std BW require saved y (Var ignores it; passed for ABI uniformity)",
                 );
-                let x_ptr = x.data.as_raw().0 as *const c_void;
-                let y_ptr = y.data.as_raw().0 as *const c_void;
-                let stride_x = x.stride;
-                let mut stride_y = y.stride;
+                let x_ptr = x.data().as_raw().0 as *const c_void;
+                let y_ptr = y.data().as_raw().0 as *const c_void;
+                let stride_x = x.stride();
+                let mut stride_y = y.stride();
                 stride_y[axis] = 0;
                 let reduce_axis_i32 = self.desc.reduce_axis as i32;
                 let reduce_extent = self.desc.input_shape[axis];
@@ -865,10 +865,10 @@ impl<T: Element, const N: usize> ReduceBackwardPlan<T, N> {
                 // `dx[c] = dy[c_reduced] * x[c] / y[c_reduced]`. Dual-save.
                 let x = args.x.as_ref().expect("Norm2 BW require saved x");
                 let y = args.y.as_ref().expect("Norm2 BW require saved y");
-                let x_ptr = x.data.as_raw().0 as *const c_void;
-                let y_ptr = y.data.as_raw().0 as *const c_void;
-                let stride_x = x.stride;
-                let mut stride_y = y.stride;
+                let x_ptr = x.data().as_raw().0 as *const c_void;
+                let y_ptr = y.data().as_raw().0 as *const c_void;
+                let stride_x = x.stride();
+                let mut stride_y = y.stride();
                 stride_y[axis] = 0;
                 match T::KIND {
                     ElementKind::F32 => unsafe {
@@ -958,10 +958,10 @@ impl<T: Element, const N: usize> ReduceBackwardPlan<T, N> {
                 // no overflow possible at any dtype.
                 let x = args.x.as_ref().expect("LogSumExp BW require saved x");
                 let y = args.y.as_ref().expect("LogSumExp BW require saved y");
-                let x_ptr = x.data.as_raw().0 as *const c_void;
-                let y_ptr = y.data.as_raw().0 as *const c_void;
-                let stride_x = x.stride;
-                let mut stride_y = y.stride;
+                let x_ptr = x.data().as_raw().0 as *const c_void;
+                let y_ptr = y.data().as_raw().0 as *const c_void;
+                let stride_x = x.stride();
+                let mut stride_y = y.stride();
                 stride_y[axis] = 0;
                 match T::KIND {
                     ElementKind::F32 => unsafe {

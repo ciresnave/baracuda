@@ -82,32 +82,16 @@ mod cudnn_impl {
 
                 warmup(&stream, || {
                     let args = ReduceArgs::<f32, 2> {
-                        x: TensorRef {
-                            data: dev_x.as_slice(),
-                            shape: xs,
-                            stride: stx,
-                        },
-                        y: TensorMut {
-                            data: dev_y.as_slice_mut(),
-                            shape: ys,
-                            stride: sty,
-                        },
+                        x: TensorRef::new(dev_x.as_slice(), xs, stx).unwrap(),
+                        y: TensorMut::new(dev_y.as_slice_mut(), ys, sty).unwrap(),
                     };
                     plan.run(&stream, Workspace::None, args)
                         .expect("baracuda reduce");
                 });
                 let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 50, || {
                     let args = ReduceArgs::<f32, 2> {
-                        x: TensorRef {
-                            data: dev_x.as_slice(),
-                            shape: xs,
-                            stride: stx,
-                        },
-                        y: TensorMut {
-                            data: dev_y.as_slice_mut(),
-                            shape: ys,
-                            stride: sty,
-                        },
+                        x: TensorRef::new(dev_x.as_slice(), xs, stx).unwrap(),
+                        y: TensorMut::new(dev_y.as_slice_mut(), ys, sty).unwrap(),
                     };
                     plan.run(&stream, Workspace::None, args)
                         .expect("baracuda reduce");
@@ -128,16 +112,8 @@ mod cudnn_impl {
                     bb.iter_custom(|iters| {
                         time_with_events(&ctx, &stream, iters, || {
                             let args = ReduceArgs::<f32, 2> {
-                                x: TensorRef {
-                                    data: dev_x.as_slice(),
-                                    shape: xs,
-                                    stride: stx,
-                                },
-                                y: TensorMut {
-                                    data: dev_y.as_slice_mut(),
-                                    shape: ys,
-                                    stride: sty,
-                                },
+                                x: TensorRef::new(dev_x.as_slice(), xs, stx).unwrap(),
+                                y: TensorMut::new(dev_y.as_slice_mut(), ys, sty).unwrap(),
                             };
                             plan.run(&stream, Workspace::None, args)
                                 .expect("baracuda reduce");

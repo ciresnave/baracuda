@@ -96,26 +96,10 @@ where
             let args = FlashDecodingArgs::<T> {
                 a_mean: None,
                 a: None,
-                q: TensorRef {
-                    data: dq.as_slice(),
-                    shape: sq,
-                    stride: contiguous_stride(sq),
-                },
-                k: TensorRef {
-                    data: dk.as_slice(),
-                    shape: sk,
-                    stride: contiguous_stride(sk),
-                },
-                v: TensorRef {
-                    data: dv.as_slice(),
-                    shape: sv,
-                    stride: contiguous_stride(sv),
-                },
-                y: TensorMut {
-                    data: dy.as_slice_mut(),
-                    shape: sy,
-                    stride: contiguous_stride(sy),
-                },
+                q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+                k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+                v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
+                y: TensorMut::new(dy.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
             };
             fd_plan
                 .run(&stream, Workspace::Borrowed(fd_ws.as_slice_mut()), args)
@@ -125,26 +109,10 @@ where
             let args = FlashDecodingArgs::<T> {
                 a_mean: None,
                 a: None,
-                q: TensorRef {
-                    data: dq.as_slice(),
-                    shape: sq,
-                    stride: contiguous_stride(sq),
-                },
-                k: TensorRef {
-                    data: dk.as_slice(),
-                    shape: sk,
-                    stride: contiguous_stride(sk),
-                },
-                v: TensorRef {
-                    data: dv.as_slice(),
-                    shape: sv,
-                    stride: contiguous_stride(sv),
-                },
-                y: TensorMut {
-                    data: dy.as_slice_mut(),
-                    shape: sy,
-                    stride: contiguous_stride(sy),
-                },
+                q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+                k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+                v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
+                y: TensorMut::new(dy.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
             };
             fd_plan
                 .run(&stream, Workspace::Borrowed(fd_ws.as_slice_mut()), args)
@@ -161,31 +129,18 @@ where
         let fd_ns_a = measure_median_ns(&ctx, &stream, 11, 20, || {
             let args = FlashDecodingArgs::<T> {
                 a_mean: None,
-                a: Some(TensorMut {
-                    data: da.as_slice_mut(),
-                    shape: [BATCH, NUM_HEADS, k_len],
-                    stride: contiguous_stride([BATCH, NUM_HEADS, k_len]),
-                }),
-                q: TensorRef {
-                    data: dq.as_slice(),
-                    shape: sq,
-                    stride: contiguous_stride(sq),
-                },
-                k: TensorRef {
-                    data: dk.as_slice(),
-                    shape: sk,
-                    stride: contiguous_stride(sk),
-                },
-                v: TensorRef {
-                    data: dv.as_slice(),
-                    shape: sv,
-                    stride: contiguous_stride(sv),
-                },
-                y: TensorMut {
-                    data: dy.as_slice_mut(),
-                    shape: sy,
-                    stride: contiguous_stride(sy),
-                },
+                a: Some(
+                    TensorMut::new(
+                        da.as_slice_mut(),
+                        [BATCH, NUM_HEADS, k_len],
+                        contiguous_stride([BATCH, NUM_HEADS, k_len]),
+                    )
+                    .unwrap(),
+                ),
+                q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+                k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+                v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
+                y: TensorMut::new(dy.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
             };
             fd_plan
                 .run(&stream, Workspace::Borrowed(fd_ws.as_slice_mut()), args)
@@ -242,31 +197,11 @@ where
             let sy4 = sq4;
             let sl = [BATCH, NUM_HEADS, 1];
             let probe = FlashSdpaArgs::<T> {
-                q: TensorRef {
-                    data: dq4.as_slice(),
-                    shape: sq4,
-                    stride: contiguous_stride(sq4),
-                },
-                k: TensorRef {
-                    data: dk.as_slice(),
-                    shape: sk4,
-                    stride: contiguous_stride(sk4),
-                },
-                v: TensorRef {
-                    data: dv.as_slice(),
-                    shape: sv4,
-                    stride: contiguous_stride(sv4),
-                },
-                y: TensorMut {
-                    data: dy4.as_slice_mut(),
-                    shape: sy4,
-                    stride: contiguous_stride(sy4),
-                },
-                lse: TensorMut {
-                    data: dlse.as_slice_mut(),
-                    shape: sl,
-                    stride: contiguous_stride(sl),
-                },
+                q: TensorRef::new(dq4.as_slice(), sq4, contiguous_stride(sq4)).unwrap(),
+                k: TensorRef::new(dk.as_slice(), sk4, contiguous_stride(sk4)).unwrap(),
+                v: TensorRef::new(dv.as_slice(), sv4, contiguous_stride(sv4)).unwrap(),
+                y: TensorMut::new(dy4.as_slice_mut(), sy4, contiguous_stride(sy4)).unwrap(),
+                lse: TensorMut::new(dlse.as_slice_mut(), sl, contiguous_stride(sl)).unwrap(),
                 mask: None,
                 alibi_slopes: None,
             };
@@ -275,31 +210,12 @@ where
             } else {
                 warmup(&stream, || {
                     let args = FlashSdpaArgs::<T> {
-                        q: TensorRef {
-                            data: dq4.as_slice(),
-                            shape: sq4,
-                            stride: contiguous_stride(sq4),
-                        },
-                        k: TensorRef {
-                            data: dk.as_slice(),
-                            shape: sk4,
-                            stride: contiguous_stride(sk4),
-                        },
-                        v: TensorRef {
-                            data: dv.as_slice(),
-                            shape: sv4,
-                            stride: contiguous_stride(sv4),
-                        },
-                        y: TensorMut {
-                            data: dy4.as_slice_mut(),
-                            shape: sy4,
-                            stride: contiguous_stride(sy4),
-                        },
-                        lse: TensorMut {
-                            data: dlse.as_slice_mut(),
-                            shape: sl,
-                            stride: contiguous_stride(sl),
-                        },
+                        q: TensorRef::new(dq4.as_slice(), sq4, contiguous_stride(sq4)).unwrap(),
+                        k: TensorRef::new(dk.as_slice(), sk4, contiguous_stride(sk4)).unwrap(),
+                        v: TensorRef::new(dv.as_slice(), sv4, contiguous_stride(sv4)).unwrap(),
+                        y: TensorMut::new(dy4.as_slice_mut(), sy4, contiguous_stride(sy4)).unwrap(),
+                        lse: TensorMut::new(dlse.as_slice_mut(), sl, contiguous_stride(sl))
+                            .unwrap(),
                         mask: None,
                         alibi_slopes: None,
                     };
@@ -311,31 +227,12 @@ where
                 });
                 measure_median_ns(&ctx, &stream, 11, 20, || {
                     let args = FlashSdpaArgs::<T> {
-                        q: TensorRef {
-                            data: dq4.as_slice(),
-                            shape: sq4,
-                            stride: contiguous_stride(sq4),
-                        },
-                        k: TensorRef {
-                            data: dk.as_slice(),
-                            shape: sk4,
-                            stride: contiguous_stride(sk4),
-                        },
-                        v: TensorRef {
-                            data: dv.as_slice(),
-                            shape: sv4,
-                            stride: contiguous_stride(sv4),
-                        },
-                        y: TensorMut {
-                            data: dy4.as_slice_mut(),
-                            shape: sy4,
-                            stride: contiguous_stride(sy4),
-                        },
-                        lse: TensorMut {
-                            data: dlse.as_slice_mut(),
-                            shape: sl,
-                            stride: contiguous_stride(sl),
-                        },
+                        q: TensorRef::new(dq4.as_slice(), sq4, contiguous_stride(sq4)).unwrap(),
+                        k: TensorRef::new(dk.as_slice(), sk4, contiguous_stride(sk4)).unwrap(),
+                        v: TensorRef::new(dv.as_slice(), sv4, contiguous_stride(sv4)).unwrap(),
+                        y: TensorMut::new(dy4.as_slice_mut(), sy4, contiguous_stride(sy4)).unwrap(),
+                        lse: TensorMut::new(dlse.as_slice_mut(), sl, contiguous_stride(sl))
+                            .unwrap(),
                         mask: None,
                         alibi_slopes: None,
                     };
@@ -375,26 +272,10 @@ where
                     let args = FlashDecodingArgs::<T> {
                         a_mean: None,
                         a: None,
-                        q: TensorRef {
-                            data: dq.as_slice(),
-                            shape: sq,
-                            stride: contiguous_stride(sq),
-                        },
-                        k: TensorRef {
-                            data: dk.as_slice(),
-                            shape: sk,
-                            stride: contiguous_stride(sk),
-                        },
-                        v: TensorRef {
-                            data: dv.as_slice(),
-                            shape: sv,
-                            stride: contiguous_stride(sv),
-                        },
-                        y: TensorMut {
-                            data: dy.as_slice_mut(),
-                            shape: sy,
-                            stride: contiguous_stride(sy),
-                        },
+                        q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+                        k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+                        v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
+                        y: TensorMut::new(dy.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
                     };
                     fd_plan
                         .run(&stream, Workspace::Borrowed(fd_ws.as_slice_mut()), args)
@@ -480,26 +361,10 @@ where
                 let args = FlashDecodingArgs::<T> {
                     a_mean: None,
                     a: None,
-                    q: TensorRef {
-                        data: dq.as_slice(),
-                        shape: sq,
-                        stride: contiguous_stride(sq),
-                    },
-                    k: TensorRef {
-                        data: dk.as_slice(),
-                        shape: sk,
-                        stride: contiguous_stride(sk),
-                    },
-                    v: TensorRef {
-                        data: dv.as_slice(),
-                        shape: sv,
-                        stride: contiguous_stride(sv),
-                    },
-                    y: TensorMut {
-                        data: dy.as_slice_mut(),
-                        shape: sy,
-                        stride: contiguous_stride(sy),
-                    },
+                    q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+                    k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+                    v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
+                    y: TensorMut::new(dy.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
                 };
                 fd_plan
                     .run(&stream, Workspace::Borrowed(fd_ws.as_slice_mut()), args)
@@ -509,26 +374,10 @@ where
                 let args = FlashDecodingArgs::<T> {
                     a_mean: None,
                     a: None,
-                    q: TensorRef {
-                        data: dq.as_slice(),
-                        shape: sq,
-                        stride: contiguous_stride(sq),
-                    },
-                    k: TensorRef {
-                        data: dk.as_slice(),
-                        shape: sk,
-                        stride: contiguous_stride(sk),
-                    },
-                    v: TensorRef {
-                        data: dv.as_slice(),
-                        shape: sv,
-                        stride: contiguous_stride(sv),
-                    },
-                    y: TensorMut {
-                        data: dy.as_slice_mut(),
-                        shape: sy,
-                        stride: contiguous_stride(sy),
-                    },
+                    q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+                    k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+                    v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
+                    y: TensorMut::new(dy.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
                 };
                 fd_plan
                     .run(&stream, Workspace::Borrowed(fd_ws.as_slice_mut()), args)
@@ -555,26 +404,11 @@ where
                         let args = FlashDecodingArgs::<T> {
                             a_mean: None,
                             a: None,
-                            q: TensorRef {
-                                data: dq.as_slice(),
-                                shape: sq,
-                                stride: contiguous_stride(sq),
-                            },
-                            k: TensorRef {
-                                data: dk.as_slice(),
-                                shape: sk,
-                                stride: contiguous_stride(sk),
-                            },
-                            v: TensorRef {
-                                data: dv.as_slice(),
-                                shape: sv,
-                                stride: contiguous_stride(sv),
-                            },
-                            y: TensorMut {
-                                data: dy.as_slice_mut(),
-                                shape: sy,
-                                stride: contiguous_stride(sy),
-                            },
+                            q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+                            k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+                            v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
+                            y: TensorMut::new(dy.as_slice_mut(), sy, contiguous_stride(sy))
+                                .unwrap(),
                         };
                         fd_plan
                             .run(&stream, Workspace::Borrowed(fd_ws.as_slice_mut()), args)

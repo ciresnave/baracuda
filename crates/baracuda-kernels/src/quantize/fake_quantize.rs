@@ -115,7 +115,7 @@ impl<TIn: Element> FakeQuantizePlan<TIn> {
         crate::view_check::check_fits(&args.input)?;
         crate::view_check::check_fits(&args.output)?;
         let expected = [self.desc.numel];
-        if args.input.shape != expected || args.output.shape != expected {
+        if args.input.shape() != expected || args.output.shape() != expected {
             return Err(Error::InvalidProblem(
                 "FakeQuantizePlan: tensor shape != [numel]",
             ));
@@ -153,8 +153,8 @@ impl<TIn: Element> FakeQuantizePlan<TIn> {
         if numel == 0 {
             return Ok(());
         }
-        let x_ptr = args.input.data.as_raw().0 as *const c_void;
-        let y_ptr = args.output.data.as_raw().0 as *mut c_void;
+        let x_ptr = args.input.data().as_raw().0 as *const c_void;
+        let y_ptr = args.output.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         let zp = args.zero_point;
         let qmin = self.desc.q_min;

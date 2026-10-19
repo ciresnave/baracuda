@@ -104,36 +104,12 @@ fn bench_baracuda<T>(
 
             warmup(&stream, || {
                 let args = LayerNormArgs::<T, 2> {
-                    x: TensorRef {
-                        data: dev_x.as_slice(),
-                        shape: xs,
-                        stride: stx,
-                    },
-                    gamma: Some(TensorRef {
-                        data: dev_g.as_slice(),
-                        shape: gs,
-                        stride: stg,
-                    }),
-                    beta: Some(TensorRef {
-                        data: dev_b.as_slice(),
-                        shape: gs,
-                        stride: stg,
-                    }),
-                    y: TensorMut {
-                        data: dev_y.as_slice_mut(),
-                        shape: xs,
-                        stride: stx,
-                    },
-                    mean: TensorMut {
-                        data: dev_mean.as_slice_mut(),
-                        shape: save_shape,
-                        stride: st_save,
-                    },
-                    inv_std: TensorMut {
-                        data: dev_inv.as_slice_mut(),
-                        shape: save_shape,
-                        stride: st_save,
-                    },
+                    x: TensorRef::new(dev_x.as_slice(), xs, stx).unwrap(),
+                    gamma: Some(TensorRef::new(dev_g.as_slice(), gs, stg).unwrap()),
+                    beta: Some(TensorRef::new(dev_b.as_slice(), gs, stg).unwrap()),
+                    y: TensorMut::new(dev_y.as_slice_mut(), xs, stx).unwrap(),
+                    mean: TensorMut::new(dev_mean.as_slice_mut(), save_shape, st_save).unwrap(),
+                    inv_std: TensorMut::new(dev_inv.as_slice_mut(), save_shape, st_save).unwrap(),
                 };
                 plan.run(&stream, Workspace::None, args)
                     .expect("baracuda layernorm");
@@ -144,36 +120,12 @@ fn bench_baracuda<T>(
             assert_cell_live(&format!("layernorm/{dtype_label}/{shape}"), &dev_y, numel);
             let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 50, || {
                 let args = LayerNormArgs::<T, 2> {
-                    x: TensorRef {
-                        data: dev_x.as_slice(),
-                        shape: xs,
-                        stride: stx,
-                    },
-                    gamma: Some(TensorRef {
-                        data: dev_g.as_slice(),
-                        shape: gs,
-                        stride: stg,
-                    }),
-                    beta: Some(TensorRef {
-                        data: dev_b.as_slice(),
-                        shape: gs,
-                        stride: stg,
-                    }),
-                    y: TensorMut {
-                        data: dev_y.as_slice_mut(),
-                        shape: xs,
-                        stride: stx,
-                    },
-                    mean: TensorMut {
-                        data: dev_mean.as_slice_mut(),
-                        shape: save_shape,
-                        stride: st_save,
-                    },
-                    inv_std: TensorMut {
-                        data: dev_inv.as_slice_mut(),
-                        shape: save_shape,
-                        stride: st_save,
-                    },
+                    x: TensorRef::new(dev_x.as_slice(), xs, stx).unwrap(),
+                    gamma: Some(TensorRef::new(dev_g.as_slice(), gs, stg).unwrap()),
+                    beta: Some(TensorRef::new(dev_b.as_slice(), gs, stg).unwrap()),
+                    y: TensorMut::new(dev_y.as_slice_mut(), xs, stx).unwrap(),
+                    mean: TensorMut::new(dev_mean.as_slice_mut(), save_shape, st_save).unwrap(),
+                    inv_std: TensorMut::new(dev_inv.as_slice_mut(), save_shape, st_save).unwrap(),
                 };
                 plan.run(&stream, Workspace::None, args)
                     .expect("baracuda layernorm");
@@ -194,36 +146,14 @@ fn bench_baracuda<T>(
                 bb.iter_custom(|iters| {
                     time_with_events(&ctx, &stream, iters, || {
                         let args = LayerNormArgs::<T, 2> {
-                            x: TensorRef {
-                                data: dev_x.as_slice(),
-                                shape: xs,
-                                stride: stx,
-                            },
-                            gamma: Some(TensorRef {
-                                data: dev_g.as_slice(),
-                                shape: gs,
-                                stride: stg,
-                            }),
-                            beta: Some(TensorRef {
-                                data: dev_b.as_slice(),
-                                shape: gs,
-                                stride: stg,
-                            }),
-                            y: TensorMut {
-                                data: dev_y.as_slice_mut(),
-                                shape: xs,
-                                stride: stx,
-                            },
-                            mean: TensorMut {
-                                data: dev_mean.as_slice_mut(),
-                                shape: save_shape,
-                                stride: st_save,
-                            },
-                            inv_std: TensorMut {
-                                data: dev_inv.as_slice_mut(),
-                                shape: save_shape,
-                                stride: st_save,
-                            },
+                            x: TensorRef::new(dev_x.as_slice(), xs, stx).unwrap(),
+                            gamma: Some(TensorRef::new(dev_g.as_slice(), gs, stg).unwrap()),
+                            beta: Some(TensorRef::new(dev_b.as_slice(), gs, stg).unwrap()),
+                            y: TensorMut::new(dev_y.as_slice_mut(), xs, stx).unwrap(),
+                            mean: TensorMut::new(dev_mean.as_slice_mut(), save_shape, st_save)
+                                .unwrap(),
+                            inv_std: TensorMut::new(dev_inv.as_slice_mut(), save_shape, st_save)
+                                .unwrap(),
                         };
                         plan.run(&stream, Workspace::None, args)
                             .expect("baracuda layernorm");

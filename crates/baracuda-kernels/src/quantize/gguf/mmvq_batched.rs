@@ -281,33 +281,33 @@ impl<T: GgufMmvqBatchedActivation> GgufMmvqBatchedPlan<T> {
             crate::view_check::check_fits(t)?;
         }
         crate::view_check::check_fits(&args.output)?;
-        if args.activations.shape[1] != self.desc.n_cols {
+        if args.activations.shape()[1] != self.desc.n_cols {
             return Err(Error::InvalidProblem(
                 "GgufMmvqBatchedPlan: activations.shape[1] != n_cols",
             ));
         }
-        if args.output.shape[1] != self.desc.n_rows_per_expert {
+        if args.output.shape()[1] != self.desc.n_rows_per_expert {
             return Err(Error::InvalidProblem(
                 "GgufMmvqBatchedPlan: output.shape[1] != n_rows_per_expert",
             ));
         }
-        if args.output.shape[0] != args.activations.shape[0] {
+        if args.output.shape()[0] != args.activations.shape()[0] {
             return Err(Error::InvalidProblem(
                 "GgufMmvqBatchedPlan: output.shape[0] != activations.shape[0] (M_tokens mismatch)",
             ));
         }
-        if args.sorted_token_ids.shape[0] != self.desc.m_total {
+        if args.sorted_token_ids.shape()[0] != self.desc.m_total {
             return Err(Error::InvalidProblem(
                 "GgufMmvqBatchedPlan: sorted_token_ids.shape[0] != m_total",
             ));
         }
-        if args.expert_offsets.shape[0] != self.desc.n_experts + 1 {
+        if args.expert_offsets.shape()[0] != self.desc.n_experts + 1 {
             return Err(Error::InvalidProblem(
                 "GgufMmvqBatchedPlan: expert_offsets.shape[0] != n_experts + 1",
             ));
         }
         if let Some(ref tw) = args.topk_weights {
-            if tw.shape[0] != self.desc.m_total {
+            if tw.shape()[0] != self.desc.m_total {
                 return Err(Error::InvalidProblem(
                     "GgufMmvqBatchedPlan: topk_weights.shape[0] != m_total",
                 ));
@@ -329,7 +329,7 @@ impl<T: GgufMmvqBatchedActivation> GgufMmvqBatchedPlan<T> {
                     * (core::mem::size_of::<T>() as i64)
             }
         };
-        if (args.weights.shape[0] as i64) < expected_weight_bytes {
+        if (args.weights.shape()[0] as i64) < expected_weight_bytes {
             return Err(Error::InvalidProblem(
                 "GgufMmvqBatchedPlan: weights byte length < n_experts * n_rows_per_expert * (n_cols/bs) * type_size",
             ));
@@ -392,15 +392,15 @@ impl<T: GgufMmvqBatchedActivation> GgufMmvqBatchedPlan<T> {
             }
         };
 
-        let w_ptr = args.weights.data.as_raw().0 as *const c_void;
-        let y_ptr = args.activations.data.as_raw().0 as *const c_void;
-        let dst_ptr = args.output.data.as_raw().0 as *mut c_void;
-        let tids_ptr = args.sorted_token_ids.data.as_raw().0 as *const i32;
-        let off_ptr = args.expert_offsets.data.as_raw().0 as *const i32;
+        let w_ptr = args.weights.data().as_raw().0 as *const c_void;
+        let y_ptr = args.activations.data().as_raw().0 as *const c_void;
+        let dst_ptr = args.output.data().as_raw().0 as *mut c_void;
+        let tids_ptr = args.sorted_token_ids.data().as_raw().0 as *const i32;
+        let off_ptr = args.expert_offsets.data().as_raw().0 as *const i32;
         let tw_ptr = args
             .topk_weights
             .as_ref()
-            .map(|t| t.data.as_raw().0 as *const f32)
+            .map(|t| t.data().as_raw().0 as *const f32)
             .unwrap_or(core::ptr::null());
         let stream_ptr = stream.as_raw();
 

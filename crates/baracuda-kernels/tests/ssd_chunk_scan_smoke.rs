@@ -122,36 +122,12 @@ fn ssd_chunk_scan_f32_tiny_matches_cpu_ref() {
         &stream,
         Workspace::None,
         SsdChunkScanArgs {
-            x: TensorRef {
-                data: x_dev.as_slice(),
-                shape: shape_x,
-                stride: contiguous_stride(shape_x),
-            },
-            dt: TensorRef {
-                data: dt_dev.as_slice(),
-                shape: shape_dt,
-                stride: contiguous_stride(shape_dt),
-            },
-            a: TensorRef {
-                data: a_dev.as_slice(),
-                shape: shape_a,
-                stride: contiguous_stride(shape_a),
-            },
-            b: TensorRef {
-                data: b_dev.as_slice(),
-                shape: shape_bn,
-                stride: contiguous_stride(shape_bn),
-            },
-            c: TensorRef {
-                data: c_dev.as_slice(),
-                shape: shape_bn,
-                stride: contiguous_stride(shape_bn),
-            },
-            y: TensorMut {
-                data: y_dev.as_slice_mut(),
-                shape: shape_x,
-                stride: contiguous_stride(shape_x),
-            },
+            x: TensorRef::new(x_dev.as_slice(), shape_x, contiguous_stride(shape_x)).unwrap(),
+            dt: TensorRef::new(dt_dev.as_slice(), shape_dt, contiguous_stride(shape_dt)).unwrap(),
+            a: TensorRef::new(a_dev.as_slice(), shape_a, contiguous_stride(shape_a)).unwrap(),
+            b: TensorRef::new(b_dev.as_slice(), shape_bn, contiguous_stride(shape_bn)).unwrap(),
+            c: TensorRef::new(c_dev.as_slice(), shape_bn, contiguous_stride(shape_bn)).unwrap(),
+            y: TensorMut::new(y_dev.as_slice_mut(), shape_x, contiguous_stride(shape_x)).unwrap(),
         },
     )
     .expect("run");

@@ -55,26 +55,10 @@ fn where_backward_f32_3d() {
         .expect("select");
 
     let args = WhereBackwardArgs::<f32, 3> {
-        cond: TensorRef {
-            data: dev_cond.as_slice(),
-            shape,
-            stride,
-        },
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape,
-            stride,
-        },
-        da: TensorMut {
-            data: dev_da.as_slice_mut(),
-            shape,
-            stride,
-        },
-        db: TensorMut {
-            data: dev_db.as_slice_mut(),
-            shape,
-            stride,
-        },
+        cond: TensorRef::new(dev_cond.as_slice(), shape, stride).unwrap(),
+        dy: TensorRef::new(dev_dy.as_slice(), shape, stride).unwrap(),
+        da: TensorMut::new(dev_da.as_slice_mut(), shape, stride).unwrap(),
+        db: TensorMut::new(dev_db.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -133,26 +117,10 @@ fn where_backward_f16_3d() {
         .expect("select");
 
     let args = WhereBackwardArgs::<f16, 3> {
-        cond: TensorRef {
-            data: dev_cond.as_slice(),
-            shape,
-            stride,
-        },
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape,
-            stride,
-        },
-        da: TensorMut {
-            data: dev_da.as_slice_mut(),
-            shape,
-            stride,
-        },
-        db: TensorMut {
-            data: dev_db.as_slice_mut(),
-            shape,
-            stride,
-        },
+        cond: TensorRef::new(dev_cond.as_slice(), shape, stride).unwrap(),
+        dy: TensorRef::new(dev_dy.as_slice(), shape, stride).unwrap(),
+        da: TensorMut::new(dev_da.as_slice_mut(), shape, stride).unwrap(),
+        db: TensorMut::new(dev_db.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -211,26 +179,10 @@ fn where_backward_bf16_3d() {
         .expect("select");
 
     let args = WhereBackwardArgs::<bf16, 3> {
-        cond: TensorRef {
-            data: dev_cond.as_slice(),
-            shape,
-            stride,
-        },
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape,
-            stride,
-        },
-        da: TensorMut {
-            data: dev_da.as_slice_mut(),
-            shape,
-            stride,
-        },
-        db: TensorMut {
-            data: dev_db.as_slice_mut(),
-            shape,
-            stride,
-        },
+        cond: TensorRef::new(dev_cond.as_slice(), shape, stride).unwrap(),
+        dy: TensorRef::new(dev_dy.as_slice(), shape, stride).unwrap(),
+        da: TensorMut::new(dev_da.as_slice_mut(), shape, stride).unwrap(),
+        db: TensorMut::new(dev_db.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -287,26 +239,10 @@ fn where_backward_f64_3d() {
         .expect("select");
 
     let args = WhereBackwardArgs::<f64, 3> {
-        cond: TensorRef {
-            data: dev_cond.as_slice(),
-            shape,
-            stride,
-        },
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape,
-            stride,
-        },
-        da: TensorMut {
-            data: dev_da.as_slice_mut(),
-            shape,
-            stride,
-        },
-        db: TensorMut {
-            data: dev_db.as_slice_mut(),
-            shape,
-            stride,
-        },
+        cond: TensorRef::new(dev_cond.as_slice(), shape, stride).unwrap(),
+        dy: TensorRef::new(dev_dy.as_slice(), shape, stride).unwrap(),
+        da: TensorMut::new(dev_da.as_slice_mut(), shape, stride).unwrap(),
+        db: TensorMut::new(dev_db.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

@@ -58,21 +58,24 @@ fn grid_sample_identity_f32() {
     let plan =
         GridSamplePlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = GridSampleArgs {
-        input: TensorRef {
-            data: dev_in.as_slice(),
-            shape: [n, c, ih, iw],
-            stride: contiguous_stride([n, c, ih, iw]),
-        },
-        grid: TensorRef {
-            data: dev_grid.as_slice(),
-            shape: [n, oh, ow, 2],
-            stride: contiguous_stride([n, oh, ow, 2]),
-        },
-        output: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: [n, c, oh, ow],
-            stride: contiguous_stride([n, c, oh, ow]),
-        },
+        input: TensorRef::new(
+            dev_in.as_slice(),
+            [n, c, ih, iw],
+            contiguous_stride([n, c, ih, iw]),
+        )
+        .unwrap(),
+        grid: TensorRef::new(
+            dev_grid.as_slice(),
+            [n, oh, ow, 2],
+            contiguous_stride([n, oh, ow, 2]),
+        )
+        .unwrap(),
+        output: TensorMut::new(
+            dev_out.as_slice_mut(),
+            [n, c, oh, ow],
+            contiguous_stride([n, c, oh, ow]),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -112,21 +115,24 @@ fn grid_sample_zero_pad_oob_f32() {
     let plan =
         GridSamplePlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = GridSampleArgs {
-        input: TensorRef {
-            data: dev_in.as_slice(),
-            shape: [n, c, ih, iw],
-            stride: contiguous_stride([n, c, ih, iw]),
-        },
-        grid: TensorRef {
-            data: dev_grid.as_slice(),
-            shape: [n, oh, ow, 2],
-            stride: contiguous_stride([n, oh, ow, 2]),
-        },
-        output: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: [n, c, oh, ow],
-            stride: contiguous_stride([n, c, oh, ow]),
-        },
+        input: TensorRef::new(
+            dev_in.as_slice(),
+            [n, c, ih, iw],
+            contiguous_stride([n, c, ih, iw]),
+        )
+        .unwrap(),
+        grid: TensorRef::new(
+            dev_grid.as_slice(),
+            [n, oh, ow, 2],
+            contiguous_stride([n, oh, ow, 2]),
+        )
+        .unwrap(),
+        output: TensorMut::new(
+            dev_out.as_slice_mut(),
+            [n, c, oh, ow],
+            contiguous_stride([n, c, oh, ow]),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -174,31 +180,36 @@ fn grid_sample_backward_smoke_f32() {
     let plan = GridSampleBackwardPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = GridSampleBackwardArgs {
-        dout: TensorRef {
-            data: dev_dout.as_slice(),
-            shape: [n, c, oh, ow],
-            stride: contiguous_stride([n, c, oh, ow]),
-        },
-        input: TensorRef {
-            data: dev_in.as_slice(),
-            shape: [n, c, ih, iw],
-            stride: contiguous_stride([n, c, ih, iw]),
-        },
-        grid: TensorRef {
-            data: dev_grid.as_slice(),
-            shape: [n, oh, ow, 2],
-            stride: contiguous_stride([n, oh, ow, 2]),
-        },
-        dinput: TensorMut {
-            data: dev_din.as_slice_mut(),
-            shape: [n, c, ih, iw],
-            stride: contiguous_stride([n, c, ih, iw]),
-        },
-        dgrid: TensorMut {
-            data: dev_dgrid.as_slice_mut(),
-            shape: [n, oh, ow, 2],
-            stride: contiguous_stride([n, oh, ow, 2]),
-        },
+        dout: TensorRef::new(
+            dev_dout.as_slice(),
+            [n, c, oh, ow],
+            contiguous_stride([n, c, oh, ow]),
+        )
+        .unwrap(),
+        input: TensorRef::new(
+            dev_in.as_slice(),
+            [n, c, ih, iw],
+            contiguous_stride([n, c, ih, iw]),
+        )
+        .unwrap(),
+        grid: TensorRef::new(
+            dev_grid.as_slice(),
+            [n, oh, ow, 2],
+            contiguous_stride([n, oh, ow, 2]),
+        )
+        .unwrap(),
+        dinput: TensorMut::new(
+            dev_din.as_slice_mut(),
+            [n, c, ih, iw],
+            contiguous_stride([n, c, ih, iw]),
+        )
+        .unwrap(),
+        dgrid: TensorMut::new(
+            dev_dgrid.as_slice_mut(),
+            [n, oh, ow, 2],
+            contiguous_stride([n, oh, ow, 2]),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -228,16 +239,18 @@ fn affine_grid_identity_f32() {
     };
     let plan = AffineGridPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("");
     let args = AffineGridArgs {
-        theta: TensorRef {
-            data: dev_theta.as_slice(),
-            shape: [n, 2, 3],
-            stride: contiguous_stride([n, 2, 3]),
-        },
-        grid: TensorMut {
-            data: dev_grid.as_slice_mut(),
-            shape: [n, oh, ow, 2],
-            stride: contiguous_stride([n, oh, ow, 2]),
-        },
+        theta: TensorRef::new(
+            dev_theta.as_slice(),
+            [n, 2, 3],
+            contiguous_stride([n, 2, 3]),
+        )
+        .unwrap(),
+        grid: TensorMut::new(
+            dev_grid.as_slice_mut(),
+            [n, oh, ow, 2],
+            contiguous_stride([n, oh, ow, 2]),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

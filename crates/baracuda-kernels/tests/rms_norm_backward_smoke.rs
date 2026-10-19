@@ -189,36 +189,13 @@ fn rms_norm_bw_f32_with_gamma() {
         &stream,
         Workspace::None,
         RMSNormBackwardArgs {
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            gamma: Some(TensorRef {
-                data: dev_gamma.as_slice(),
-                shape: [extent as i32],
-                stride: [1],
-            }),
-            rms: TensorRef {
-                data: dev_rms.as_slice(),
-                shape: rms_shape,
-                stride: contiguous_stride(rms_shape),
-            },
-            dx: TensorMut {
-                data: dev_dx.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            dgamma: Some(TensorMut {
-                data: dev_dgamma.as_slice_mut(),
-                shape: [extent as i32],
-                stride: [1],
-            }),
+            dy: TensorRef::new(dev_dy.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            gamma: Some(TensorRef::new(dev_gamma.as_slice(), [extent as i32], [1]).unwrap()),
+            rms: TensorRef::new(dev_rms.as_slice(), rms_shape, contiguous_stride(rms_shape))
+                .unwrap(),
+            dx: TensorMut::new(dev_dx.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
+            dgamma: Some(TensorMut::new(dev_dgamma.as_slice_mut(), [extent as i32], [1]).unwrap()),
         },
     )
     .expect("run");
@@ -309,27 +286,12 @@ fn rms_norm_bw_f64_no_gamma() {
         &stream,
         Workspace::None,
         RMSNormBackwardArgs {
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            dy: TensorRef::new(dev_dy.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
             gamma: None,
-            rms: TensorRef {
-                data: dev_rms.as_slice(),
-                shape: rms_shape,
-                stride: contiguous_stride(rms_shape),
-            },
-            dx: TensorMut {
-                data: dev_dx.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            rms: TensorRef::new(dev_rms.as_slice(), rms_shape, contiguous_stride(rms_shape))
+                .unwrap(),
+            dx: TensorMut::new(dev_dx.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
             dgamma: None,
         },
     )
@@ -400,36 +362,13 @@ fn rms_norm_bw_f16_with_gamma() {
         &stream,
         Workspace::None,
         RMSNormBackwardArgs {
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            gamma: Some(TensorRef {
-                data: dev_gamma.as_slice(),
-                shape: [extent as i32],
-                stride: [1],
-            }),
-            rms: TensorRef {
-                data: dev_rms.as_slice(),
-                shape: rms_shape,
-                stride: contiguous_stride(rms_shape),
-            },
-            dx: TensorMut {
-                data: dev_dx.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            dgamma: Some(TensorMut {
-                data: dev_dgamma.as_slice_mut(),
-                shape: [extent as i32],
-                stride: [1],
-            }),
+            dy: TensorRef::new(dev_dy.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            gamma: Some(TensorRef::new(dev_gamma.as_slice(), [extent as i32], [1]).unwrap()),
+            rms: TensorRef::new(dev_rms.as_slice(), rms_shape, contiguous_stride(rms_shape))
+                .unwrap(),
+            dx: TensorMut::new(dev_dx.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
+            dgamma: Some(TensorMut::new(dev_dgamma.as_slice_mut(), [extent as i32], [1]).unwrap()),
         },
     )
     .expect("run");
@@ -492,27 +431,12 @@ fn rms_norm_bw_bf16_no_gamma() {
         &stream,
         Workspace::None,
         RMSNormBackwardArgs {
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            dy: TensorRef::new(dev_dy.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
             gamma: None,
-            rms: TensorRef {
-                data: dev_rms.as_slice(),
-                shape: rms_shape,
-                stride: contiguous_stride(rms_shape),
-            },
-            dx: TensorMut {
-                data: dev_dx.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            rms: TensorRef::new(dev_rms.as_slice(), rms_shape, contiguous_stride(rms_shape))
+                .unwrap(),
+            dx: TensorMut::new(dev_dx.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
             dgamma: None,
         },
     )

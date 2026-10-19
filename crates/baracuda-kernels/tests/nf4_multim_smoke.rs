@@ -80,26 +80,22 @@ fn run_for_m(m_test: i32) {
         let act_slice = dev_y_ref.slice((mi * k)..((mi + 1) * k));
         let out_slice_mut = dev_out_ref.slice_mut((mi * n)..((mi + 1) * n));
         let args = Nf4MmvqArgs::<f16> {
-            weight: TensorRef {
-                data: dev_w.as_slice(),
-                shape: [weight_bytes_len],
-                stride: contiguous_stride([weight_bytes_len]),
-            },
-            absmax: TensorRef {
-                data: dev_amax.as_slice(),
-                shape: [absmax_len],
-                stride: contiguous_stride([absmax_len]),
-            },
-            activation: TensorRef {
-                data: act_slice,
-                shape: [k as i32],
-                stride: contiguous_stride([k as i32]),
-            },
-            output: TensorMut {
-                data: out_slice_mut,
-                shape: [n as i32],
-                stride: contiguous_stride([n as i32]),
-            },
+            weight: TensorRef::new(
+                dev_w.as_slice(),
+                [weight_bytes_len],
+                contiguous_stride([weight_bytes_len]),
+            )
+            .unwrap(),
+            absmax: TensorRef::new(
+                dev_amax.as_slice(),
+                [absmax_len],
+                contiguous_stride([absmax_len]),
+            )
+            .unwrap(),
+            activation: TensorRef::new(act_slice, [k as i32], contiguous_stride([k as i32]))
+                .unwrap(),
+            output: TensorMut::new(out_slice_mut, [n as i32], contiguous_stride([n as i32]))
+                .unwrap(),
         };
         plan_m1
             .run(&stream, Workspace::None, args)
@@ -125,26 +121,30 @@ fn run_for_m(m_test: i32) {
             .expect("plan multi select");
 
     let args = Nf4MmvqMultiMArgs::<f16> {
-        weight: TensorRef {
-            data: dev_w.as_slice(),
-            shape: [weight_bytes_len],
-            stride: contiguous_stride([weight_bytes_len]),
-        },
-        absmax: TensorRef {
-            data: dev_amax.as_slice(),
-            shape: [absmax_len],
-            stride: contiguous_stride([absmax_len]),
-        },
-        activations: TensorRef {
-            data: dev_y_multi.as_slice(),
-            shape: [m_test, k as i32],
-            stride: contiguous_stride([m_test, k as i32]),
-        },
-        output: TensorMut {
-            data: dev_out_multi.as_slice_mut(),
-            shape: [m_test, n as i32],
-            stride: contiguous_stride([m_test, n as i32]),
-        },
+        weight: TensorRef::new(
+            dev_w.as_slice(),
+            [weight_bytes_len],
+            contiguous_stride([weight_bytes_len]),
+        )
+        .unwrap(),
+        absmax: TensorRef::new(
+            dev_amax.as_slice(),
+            [absmax_len],
+            contiguous_stride([absmax_len]),
+        )
+        .unwrap(),
+        activations: TensorRef::new(
+            dev_y_multi.as_slice(),
+            [m_test, k as i32],
+            contiguous_stride([m_test, k as i32]),
+        )
+        .unwrap(),
+        output: TensorMut::new(
+            dev_out_multi.as_slice_mut(),
+            [m_test, n as i32],
+            contiguous_stride([m_test, n as i32]),
+        )
+        .unwrap(),
     };
     plan_multi
         .run(&stream, Workspace::None, args)

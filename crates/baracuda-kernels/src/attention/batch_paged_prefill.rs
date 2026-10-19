@@ -192,12 +192,12 @@ impl<T: Element> BatchPagedPrefillPlan<T> {
         crate::view_check::check_fits(&args.lse)?;
         let d = &self.desc;
         let qo_shape = [d.total_num_rows, d.num_qo_heads, d.paged_kv.head_dim];
-        if args.q.shape != qo_shape || args.o.shape != qo_shape {
+        if args.q.shape() != qo_shape || args.o.shape() != qo_shape {
             return Err(Error::InvalidProblem(
                 "BatchPagedPrefillPlan: q/o shape mismatch",
             ));
         }
-        if args.q_indptr.shape != [d.batch_size + 1] {
+        if args.q_indptr.shape() != [d.batch_size + 1] {
             return Err(Error::InvalidProblem(
                 "BatchPagedPrefillPlan: q_indptr shape must be [batch + 1]",
             ));
@@ -208,22 +208,22 @@ impl<T: Element> BatchPagedPrefillPlan<T> {
             d.paged_kv.page_size,
             d.paged_kv.head_dim,
         ];
-        if args.k_data.shape != cache_shape || args.v_data.shape != cache_shape {
+        if args.k_data.shape() != cache_shape || args.v_data.shape() != cache_shape {
             return Err(Error::InvalidProblem(
                 "BatchPagedPrefillPlan: k_data/v_data shape mismatch",
             ));
         }
-        if args.kv_indptr.shape != [d.batch_size + 1] {
+        if args.kv_indptr.shape() != [d.batch_size + 1] {
             return Err(Error::InvalidProblem(
                 "BatchPagedPrefillPlan: kv_indptr shape must be [batch + 1]",
             ));
         }
-        if args.last_page_len.shape != [d.batch_size] {
+        if args.last_page_len.shape() != [d.batch_size] {
             return Err(Error::InvalidProblem(
                 "BatchPagedPrefillPlan: last_page_len shape must be [batch]",
             ));
         }
-        if args.lse.shape != [d.total_num_rows, d.num_qo_heads] {
+        if args.lse.shape() != [d.total_num_rows, d.num_qo_heads] {
             return Err(Error::InvalidProblem(
                 "BatchPagedPrefillPlan: lse shape must be [total_num_rows, num_qo_heads]",
             ));
@@ -279,15 +279,15 @@ impl<T: Element> BatchPagedPrefillPlan<T> {
         {
             let d = &self.desc;
             let stream_ptr = stream.as_raw() as *mut c_void;
-            let q_ptr = args.q.data.as_raw().0 as *const c_void;
-            let q_indptr_ptr = args.q_indptr.data.as_raw().0 as *mut c_void;
-            let k_ptr = args.k_data.data.as_raw().0 as *mut c_void;
-            let v_ptr = args.v_data.data.as_raw().0 as *mut c_void;
-            let kv_indices_ptr = args.kv_indices.data.as_raw().0 as *mut c_void;
-            let kv_indptr_ptr = args.kv_indptr.data.as_raw().0 as *mut c_void;
-            let last_page_len_ptr = args.last_page_len.data.as_raw().0 as *mut c_void;
-            let o_ptr = args.o.data.as_raw().0 as *mut c_void;
-            let lse_ptr = args.lse.data.as_raw().0 as *mut c_void;
+            let q_ptr = args.q.data().as_raw().0 as *const c_void;
+            let q_indptr_ptr = args.q_indptr.data().as_raw().0 as *mut c_void;
+            let k_ptr = args.k_data.data().as_raw().0 as *mut c_void;
+            let v_ptr = args.v_data.data().as_raw().0 as *mut c_void;
+            let kv_indices_ptr = args.kv_indices.data().as_raw().0 as *mut c_void;
+            let kv_indptr_ptr = args.kv_indptr.data().as_raw().0 as *mut c_void;
+            let last_page_len_ptr = args.last_page_len.data().as_raw().0 as *mut c_void;
+            let o_ptr = args.o.data().as_raw().0 as *mut c_void;
+            let lse_ptr = args.lse.data().as_raw().0 as *mut c_void;
             let causal = if d.causal { 1 } else { 0 };
             let enable_split = if d.enable_kv_split { 1 } else { 0 };
 

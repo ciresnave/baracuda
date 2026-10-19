@@ -102,17 +102,9 @@ fn rope_backward_f32_default_positions() {
         &stream,
         Workspace::None,
         RopeBackwardArgs {
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            dy: TensorRef::new(dev_dy.as_slice(), shape, contiguous_stride(shape)).unwrap(),
             positions: None,
-            dx: TensorMut {
-                data: dev_dx.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            dx: TensorMut::new(dev_dx.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
         },
     )
     .expect("run");
@@ -191,17 +183,9 @@ fn rope_backward_f64_default_positions() {
         &stream,
         Workspace::None,
         RopeBackwardArgs {
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            dy: TensorRef::new(dev_dy.as_slice(), shape, contiguous_stride(shape)).unwrap(),
             positions: None,
-            dx: TensorMut {
-                data: dev_dx.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            dx: TensorMut::new(dev_dx.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
         },
     )
     .expect("run");
@@ -262,17 +246,9 @@ fn rope_backward_f16_default_positions() {
         &stream,
         Workspace::None,
         RopeBackwardArgs {
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            dy: TensorRef::new(dev_dy.as_slice(), shape, contiguous_stride(shape)).unwrap(),
             positions: None,
-            dx: TensorMut {
-                data: dev_dx.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            dx: TensorMut::new(dev_dx.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
         },
     )
     .expect("run");
@@ -334,17 +310,9 @@ fn rope_backward_bf16_default_positions() {
         &stream,
         Workspace::None,
         RopeBackwardArgs {
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            dy: TensorRef::new(dev_dy.as_slice(), shape, contiguous_stride(shape)).unwrap(),
             positions: None,
-            dx: TensorMut {
-                data: dev_dx.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            dx: TensorMut::new(dev_dx.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
         },
     )
     .expect("run");

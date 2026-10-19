@@ -335,7 +335,7 @@ impl<T: Element> EigPlan<T> {
 
     fn check_args(&self, args: &EigArgs<'_, T>) -> Result<()> {
         let n = self.desc.n;
-        if args.a.shape != [n, n] {
+        if args.a.shape() != [n, n] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::EigPlan: A shape != [N, N]",
             ));
@@ -343,19 +343,19 @@ impl<T: Element> EigPlan<T> {
         // W shape depends on input dtype: real input packs wr + wi into
         // 2N reals; complex input has N complex.
         let w_len = w_packed_len::<T>(n);
-        if args.w.shape != [w_len] {
+        if args.w.shape() != [w_len] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::EigPlan: W shape != [2*N] (real input) or [N] (complex input)",
             ));
         }
-        if args.info.shape != [1] {
+        if args.info.shape() != [1] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::EigPlan: info shape != [1]",
             ));
         }
         if self.desc.compute_left {
             match args.vl.as_ref() {
-                Some(vl) if vl.shape == [n, n] => {}
+                Some(vl) if vl.shape() == [n, n] => {}
                 Some(_) => {
                     return Err(Error::InvalidProblem(
                         "baracuda-kernels::EigPlan: VL shape != [N, N]",
@@ -370,7 +370,7 @@ impl<T: Element> EigPlan<T> {
         }
         if self.desc.compute_right {
             match args.vr.as_ref() {
-                Some(vr) if vr.shape == [n, n] => {}
+                Some(vr) if vr.shape() == [n, n] => {}
                 Some(_) => {
                     return Err(Error::InvalidProblem(
                         "baracuda-kernels::EigPlan: VR shape != [N, N]",
@@ -437,19 +437,19 @@ impl<T: Element> EigPlan<T> {
         };
         let dtype = dtype_tag::<T>();
 
-        let a_ptr = args.a.data.as_raw().0 as *mut c_void;
-        let w_ptr = args.w.data.as_raw().0 as *mut c_void;
+        let a_ptr = args.a.data().as_raw().0 as *mut c_void;
+        let w_ptr = args.w.data().as_raw().0 as *mut c_void;
         let vl_ptr = args
             .vl
             .as_ref()
-            .map(|v| v.data.as_raw().0 as *mut c_void)
+            .map(|v| v.data().as_raw().0 as *mut c_void)
             .unwrap_or(core::ptr::null_mut());
         let vr_ptr = args
             .vr
             .as_ref()
-            .map(|v| v.data.as_raw().0 as *mut c_void)
+            .map(|v| v.data().as_raw().0 as *mut c_void)
             .unwrap_or(core::ptr::null_mut());
-        let info_ptr = args.info.data.as_raw().0 as *mut i32;
+        let info_ptr = args.info.data().as_raw().0 as *mut i32;
 
         let status = unsafe {
             cusolverDnXgeev(

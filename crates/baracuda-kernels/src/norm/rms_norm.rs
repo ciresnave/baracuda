@@ -220,18 +220,18 @@ impl<T: Element, const N: usize> RMSNormPlan<T, N> {
         }
         crate::view_check::check_fits(&args.y)?;
         crate::view_check::check_fits(&args.rms)?;
-        if args.x.shape != self.desc.input_shape {
+        if args.x.shape() != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::RMSNormPlan: x shape mismatch",
             ));
         }
-        if args.y.shape != self.desc.input_shape {
+        if args.y.shape() != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::RMSNormPlan: y shape mismatch",
             ));
         }
         let rms_shape = self.desc.rms_shape();
-        if args.rms.shape != rms_shape {
+        if args.rms.shape() != rms_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::RMSNormPlan: rms shape mismatch with desc.rms_shape()",
             ));
@@ -239,15 +239,15 @@ impl<T: Element, const N: usize> RMSNormPlan<T, N> {
         let total_extent = self.desc.norm_total_extent() as i64;
         match (&args.gamma, self.desc.has_gamma) {
             (Some(g), true) => {
-                if g.shape[0] as i64 != total_extent {
+                if g.shape()[0] as i64 != total_extent {
                     return Err(Error::InvalidProblem(
                         "baracuda-kernels::RMSNormPlan: gamma length != norm_total_extent",
                     ));
                 }
-                if (g.data.len() as i64) < total_extent {
+                if (g.data().len() as i64) < total_extent {
                     return Err(Error::BufferTooSmall {
                         needed: total_extent as usize,
-                        got: g.data.len(),
+                        got: g.data().len(),
                     });
                 }
             }
@@ -265,9 +265,9 @@ impl<T: Element, const N: usize> RMSNormPlan<T, N> {
         }
         let numel = args.x.numel();
         let rms_numel = args.rms.numel();
-        let x_len = args.x.data.len() as i64;
-        let y_len = args.y.data.len() as i64;
-        let rms_len = args.rms.data.len() as i64;
+        let x_len = args.x.data().len() as i64;
+        let y_len = args.y.data().len() as i64;
+        let rms_len = args.rms.data().len() as i64;
         if x_len < numel || y_len < numel {
             return Err(Error::BufferTooSmall {
                 needed: numel as usize,
@@ -315,18 +315,18 @@ impl<T: Element, const N: usize> RMSNormPlan<T, N> {
             return Ok(());
         }
         let stream_ptr = stream.as_raw();
-        let x_ptr = args.x.data.as_raw().0 as *const c_void;
-        let y_ptr = args.y.data.as_raw().0 as *mut c_void;
-        let rms_ptr = args.rms.data.as_raw().0 as *mut c_void;
+        let x_ptr = args.x.data().as_raw().0 as *const c_void;
+        let y_ptr = args.y.data().as_raw().0 as *mut c_void;
+        let rms_ptr = args.rms.data().as_raw().0 as *mut c_void;
         let gamma_ptr = match &args.gamma {
-            Some(g) => g.data.as_raw().0 as *const c_void,
+            Some(g) => g.data().as_raw().0 as *const c_void,
             None => core::ptr::null(),
         };
 
         let shape = self.desc.input_shape;
-        let stride_x = args.x.stride;
-        let stride_y = args.y.stride;
-        let stride_rms = args.rms.stride;
+        let stride_x = args.x.stride();
+        let stride_y = args.y.stride();
+        let stride_rms = args.rms.stride();
         let rank = N as i32;
         let mask = self.desc.norm_axes_mask as i32;
         let total_extent = self.desc.norm_total_extent();

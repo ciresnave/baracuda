@@ -217,23 +217,26 @@ impl<T: Element> SelectiveScanPlan<T> {
         let shape_udy = [self.desc.batch_size, self.desc.seq_len, self.desc.dim];
         let shape_a = [self.desc.dim, self.desc.dstate];
         let shape_bc = [self.desc.batch_size, self.desc.seq_len, self.desc.dstate];
-        if args.u.shape != shape_udy || args.delta.shape != shape_udy || args.y.shape != shape_udy {
+        if args.u.shape() != shape_udy
+            || args.delta.shape() != shape_udy
+            || args.y.shape() != shape_udy
+        {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SelectiveScanPlan: u/delta/y shape must be [B, L, D]",
             ));
         }
-        if args.a.shape != shape_a {
+        if args.a.shape() != shape_a {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SelectiveScanPlan: A shape must be [D, N]",
             ));
         }
-        if args.b.shape != shape_bc || args.c.shape != shape_bc {
+        if args.b.shape() != shape_bc || args.c.shape() != shape_bc {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SelectiveScanPlan: B / C shape must be [B, L, N]",
             ));
         }
         if let Some(ds) = &args.d_skip {
-            if ds.shape != [self.desc.dim] {
+            if ds.shape() != [self.desc.dim] {
                 return Err(Error::InvalidProblem(
                     "baracuda-kernels::SelectiveScanPlan: D (skip) shape must be [D]",
                 ));
@@ -245,7 +248,7 @@ impl<T: Element> SelectiveScanPlan<T> {
             }
         }
         if let Some(z) = &args.z {
-            if z.shape != shape_udy {
+            if z.shape() != shape_udy {
                 return Err(Error::InvalidProblem(
                     "baracuda-kernels::SelectiveScanPlan: z shape must be [B, L, D]",
                 ));
@@ -257,7 +260,7 @@ impl<T: Element> SelectiveScanPlan<T> {
             }
         }
         if let Some(db) = &args.delta_bias {
-            if db.shape != [self.desc.dim] {
+            if db.shape() != [self.desc.dim] {
                 return Err(Error::InvalidProblem(
                     "baracuda-kernels::SelectiveScanPlan: delta_bias shape must be [D]",
                 ));
@@ -269,7 +272,7 @@ impl<T: Element> SelectiveScanPlan<T> {
             }
         }
         if let Some(ls) = &args.last_state {
-            if ls.shape != [self.desc.batch_size, self.desc.dim, self.desc.dstate] {
+            if ls.shape() != [self.desc.batch_size, self.desc.dim, self.desc.dstate] {
                 return Err(Error::InvalidProblem(
                     "baracuda-kernels::SelectiveScanPlan: last_state shape must be [B, D, N]",
                 ));
@@ -324,31 +327,31 @@ impl<T: Element> SelectiveScanPlan<T> {
             return Ok(());
         }
         let stream_ptr = stream.as_raw() as *mut c_void;
-        let u_ptr = args.u.data.as_raw().0 as *const c_void;
-        let delta_ptr = args.delta.data.as_raw().0 as *const c_void;
-        let a_ptr = args.a.data.as_raw().0 as *const c_void;
-        let b_ptr = args.b.data.as_raw().0 as *const c_void;
-        let c_ptr = args.c.data.as_raw().0 as *const c_void;
+        let u_ptr = args.u.data().as_raw().0 as *const c_void;
+        let delta_ptr = args.delta.data().as_raw().0 as *const c_void;
+        let a_ptr = args.a.data().as_raw().0 as *const c_void;
+        let b_ptr = args.b.data().as_raw().0 as *const c_void;
+        let c_ptr = args.c.data().as_raw().0 as *const c_void;
         let d_ptr = args
             .d_skip
             .as_ref()
-            .map(|d| d.data.as_raw().0 as *const c_void)
+            .map(|d| d.data().as_raw().0 as *const c_void)
             .unwrap_or(core::ptr::null());
         let z_ptr = args
             .z
             .as_ref()
-            .map(|z| z.data.as_raw().0 as *const c_void)
+            .map(|z| z.data().as_raw().0 as *const c_void)
             .unwrap_or(core::ptr::null());
         let db_ptr = args
             .delta_bias
             .as_ref()
-            .map(|db| db.data.as_raw().0 as *const c_void)
+            .map(|db| db.data().as_raw().0 as *const c_void)
             .unwrap_or(core::ptr::null());
-        let y_ptr = args.y.data.as_raw().0 as *mut c_void;
+        let y_ptr = args.y.data().as_raw().0 as *mut c_void;
         let ls_ptr = args
             .last_state
             .as_mut()
-            .map(|ls| ls.data.as_raw().0 as *mut c_void)
+            .map(|ls| ls.data().as_raw().0 as *mut c_void)
             .unwrap_or(core::ptr::null_mut());
         let dsp = if self.desc.delta_softplus { 1 } else { 0 };
 
@@ -644,46 +647,46 @@ impl<T: Element> SelectiveScanBackwardPlan<T> {
             ));
         }
 
-        let u_ptr = args.u.data.as_raw().0 as *const c_void;
-        let delta_ptr = args.delta.data.as_raw().0 as *const c_void;
-        let a_ptr = args.a.data.as_raw().0 as *const c_void;
-        let b_ptr = args.b.data.as_raw().0 as *const c_void;
-        let c_ptr = args.c.data.as_raw().0 as *const c_void;
+        let u_ptr = args.u.data().as_raw().0 as *const c_void;
+        let delta_ptr = args.delta.data().as_raw().0 as *const c_void;
+        let a_ptr = args.a.data().as_raw().0 as *const c_void;
+        let b_ptr = args.b.data().as_raw().0 as *const c_void;
+        let c_ptr = args.c.data().as_raw().0 as *const c_void;
         let d_in_ptr = args
             .d_skip
             .as_ref()
-            .map(|d| d.data.as_raw().0 as *const c_void)
+            .map(|d| d.data().as_raw().0 as *const c_void)
             .unwrap_or(core::ptr::null());
         let z_ptr = args
             .z
             .as_ref()
-            .map(|z| z.data.as_raw().0 as *const c_void)
+            .map(|z| z.data().as_raw().0 as *const c_void)
             .unwrap_or(core::ptr::null());
         let db_ptr = args
             .delta_bias
             .as_ref()
-            .map(|db| db.data.as_raw().0 as *const c_void)
+            .map(|db| db.data().as_raw().0 as *const c_void)
             .unwrap_or(core::ptr::null());
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let du_ptr = args.du.data.as_raw().0 as *mut c_void;
-        let dB_ptr = args.d_b.data.as_raw().0 as *mut c_void;
-        let dC_ptr = args.d_c.data.as_raw().0 as *mut c_void;
-        let ddelta_ptr = args.d_delta.data.as_raw().0 as *mut c_void;
-        let dA_ptr = args.d_a.data.as_raw().0 as *mut c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let du_ptr = args.du.data().as_raw().0 as *mut c_void;
+        let dB_ptr = args.d_b.data().as_raw().0 as *mut c_void;
+        let dC_ptr = args.d_c.data().as_raw().0 as *mut c_void;
+        let ddelta_ptr = args.d_delta.data().as_raw().0 as *mut c_void;
+        let dA_ptr = args.d_a.data().as_raw().0 as *mut c_void;
         let dD_ptr = args
             .d_d
             .as_mut()
-            .map(|d| d.data.as_raw().0 as *mut c_void)
+            .map(|d| d.data().as_raw().0 as *mut c_void)
             .unwrap_or(core::ptr::null_mut());
         let dz_ptr = args
             .dz
             .as_mut()
-            .map(|z| z.data.as_raw().0 as *mut c_void)
+            .map(|z| z.data().as_raw().0 as *mut c_void)
             .unwrap_or(core::ptr::null_mut());
         let ddb_ptr = args
             .d_delta_bias
             .as_mut()
-            .map(|db| db.data.as_raw().0 as *mut c_void)
+            .map(|db| db.data().as_raw().0 as *mut c_void)
             .unwrap_or(core::ptr::null_mut());
         let dsp = if self.desc.delta_softplus { 1 } else { 0 };
 

@@ -214,12 +214,12 @@ impl<T: Element> SvdPlan<T> {
         let m = self.desc.m;
         let n = self.desc.n;
         let k = m.min(n);
-        if args.a.shape != [m, n] {
+        if args.a.shape() != [m, n] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SvdPlan: A shape != [M, N]",
             ));
         }
-        if args.s.shape != [k] {
+        if args.s.shape() != [k] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SvdPlan: S shape != [min(M, N)]",
             ));
@@ -229,17 +229,17 @@ impl<T: Element> SvdPlan<T> {
         } else {
             (k, k)
         };
-        if args.u.shape != [m, u_cols] {
+        if args.u.shape() != [m, u_cols] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SvdPlan: U shape != [M, M] (full) or [M, K] (thin)",
             ));
         }
-        if args.vt.shape != [vt_rows, n] {
+        if args.vt.shape() != [vt_rows, n] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SvdPlan: V^T shape != [N, N] (full) or [K, N] (thin)",
             ));
         }
-        if args.info.shape != [1] {
+        if args.info.shape() != [1] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SvdPlan: info shape != [1]",
             ));
@@ -277,11 +277,11 @@ impl SvdPlan<f32> {
         let jobu = if self.desc.full_matrices { b'A' } else { b'S' };
         let jobv = if self.desc.full_matrices { b'A' } else { b'S' };
 
-        let a_ptr = args.a.data.as_raw().0 as *mut f32;
-        let s_ptr = args.s.data.as_raw().0 as *mut f32;
-        let u_ptr = args.u.data.as_raw().0 as *mut f32;
-        let vt_ptr = args.vt.data.as_raw().0 as *mut f32;
-        let info_ptr = args.info.data.as_raw().0 as *mut i32;
+        let a_ptr = args.a.data().as_raw().0 as *mut f32;
+        let s_ptr = args.s.data().as_raw().0 as *mut f32;
+        let u_ptr = args.u.data().as_raw().0 as *mut f32;
+        let vt_ptr = args.vt.data().as_raw().0 as *mut f32;
+        let info_ptr = args.info.data().as_raw().0 as *mut i32;
         let ldu = m;
         let ldvt = if self.desc.full_matrices { n } else { m.min(n) };
 
@@ -341,11 +341,11 @@ impl SvdPlan<f64> {
         let jobu = if self.desc.full_matrices { b'A' } else { b'S' };
         let jobv = if self.desc.full_matrices { b'A' } else { b'S' };
 
-        let a_ptr = args.a.data.as_raw().0 as *mut f64;
-        let s_ptr = args.s.data.as_raw().0 as *mut f64;
-        let u_ptr = args.u.data.as_raw().0 as *mut f64;
-        let vt_ptr = args.vt.data.as_raw().0 as *mut f64;
-        let info_ptr = args.info.data.as_raw().0 as *mut i32;
+        let a_ptr = args.a.data().as_raw().0 as *mut f64;
+        let s_ptr = args.s.data().as_raw().0 as *mut f64;
+        let u_ptr = args.u.data().as_raw().0 as *mut f64;
+        let vt_ptr = args.vt.data().as_raw().0 as *mut f64;
+        let info_ptr = args.info.data().as_raw().0 as *mut i32;
         let ldu = m;
         let ldvt = if self.desc.full_matrices { n } else { m.min(n) };
 

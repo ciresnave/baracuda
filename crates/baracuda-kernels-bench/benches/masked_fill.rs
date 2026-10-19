@@ -84,42 +84,18 @@ fn bench<T>(
 
             warmup(&stream, || {
                 let args = MaskedFillArgs::<T, 2> {
-                    src: TensorRef {
-                        data: dev_src.as_slice(),
-                        shape: xs,
-                        stride: stx,
-                    },
-                    mask: TensorRef {
-                        data: dev_mask.as_slice(),
-                        shape: xs,
-                        stride: stx,
-                    },
-                    out: TensorMut {
-                        data: dev_out.as_slice_mut(),
-                        shape: xs,
-                        stride: stx,
-                    },
+                    src: TensorRef::new(dev_src.as_slice(), xs, stx).unwrap(),
+                    mask: TensorRef::new(dev_mask.as_slice(), xs, stx).unwrap(),
+                    out: TensorMut::new(dev_out.as_slice_mut(), xs, stx).unwrap(),
                 };
                 plan.run(&stream, Workspace::None, args)
                     .expect("baracuda masked_fill");
             });
             let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 50, || {
                 let args = MaskedFillArgs::<T, 2> {
-                    src: TensorRef {
-                        data: dev_src.as_slice(),
-                        shape: xs,
-                        stride: stx,
-                    },
-                    mask: TensorRef {
-                        data: dev_mask.as_slice(),
-                        shape: xs,
-                        stride: stx,
-                    },
-                    out: TensorMut {
-                        data: dev_out.as_slice_mut(),
-                        shape: xs,
-                        stride: stx,
-                    },
+                    src: TensorRef::new(dev_src.as_slice(), xs, stx).unwrap(),
+                    mask: TensorRef::new(dev_mask.as_slice(), xs, stx).unwrap(),
+                    out: TensorMut::new(dev_out.as_slice_mut(), xs, stx).unwrap(),
                 };
                 plan.run(&stream, Workspace::None, args)
                     .expect("baracuda masked_fill");
@@ -140,21 +116,9 @@ fn bench<T>(
                 bb.iter_custom(|iters| {
                     time_with_events(&ctx, &stream, iters, || {
                         let args = MaskedFillArgs::<T, 2> {
-                            src: TensorRef {
-                                data: dev_src.as_slice(),
-                                shape: xs,
-                                stride: stx,
-                            },
-                            mask: TensorRef {
-                                data: dev_mask.as_slice(),
-                                shape: xs,
-                                stride: stx,
-                            },
-                            out: TensorMut {
-                                data: dev_out.as_slice_mut(),
-                                shape: xs,
-                                stride: stx,
-                            },
+                            src: TensorRef::new(dev_src.as_slice(), xs, stx).unwrap(),
+                            mask: TensorRef::new(dev_mask.as_slice(), xs, stx).unwrap(),
+                            out: TensorMut::new(dev_out.as_slice_mut(), xs, stx).unwrap(),
                         };
                         plan.run(&stream, Workspace::None, args)
                             .expect("baracuda masked_fill");

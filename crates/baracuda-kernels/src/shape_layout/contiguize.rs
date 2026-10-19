@@ -217,12 +217,12 @@ impl<T: DeviceRepr + Copy + 'static, const N: usize> ContiguizePlan<T, N> {
     pub fn can_implement(&self, args: &ContiguizeArgs<'_, T, N>) -> Result<()> {
         crate::view_check::check_fits_at(&args.source, self.desc.source_offset)?;
         crate::view_check::check_fits(&args.dest)?;
-        if args.source.shape != self.desc.shape {
+        if args.source.shape() != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::ContiguizePlan: source shape mismatch with descriptor",
             ));
         }
-        if args.dest.shape != self.desc.shape {
+        if args.dest.shape() != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::ContiguizePlan: dest shape mismatch with descriptor",
             ));
@@ -234,7 +234,7 @@ impl<T: DeviceRepr + Copy + 'static, const N: usize> ContiguizePlan<T, N> {
             ));
         }
         let numel = args.dest.numel();
-        let dest_len = args.dest.data.len() as i64;
+        let dest_len = args.dest.data().len() as i64;
         // Nibble-packed dtypes (S4/U4) store two logical elements per
         // byte/storage-slot, so the storage requirement is
         // ceil(numel/2), not numel.
@@ -281,8 +281,8 @@ impl<T: DeviceRepr + Copy + 'static, const N: usize> ContiguizePlan<T, N> {
         if numel == 0 {
             return Ok(());
         }
-        let source_ptr = args.source.data.as_raw().0 as *const c_void;
-        let dest_ptr = args.dest.data.as_raw().0 as *mut c_void;
+        let source_ptr = args.source.data().as_raw().0 as *const c_void;
+        let dest_ptr = args.dest.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         let shape = self.desc.shape;
         let source_strides = self.desc.source_strides;

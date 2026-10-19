@@ -59,21 +59,10 @@ fn segment_mean_f32_basic() {
     let plan =
         SegmentMeanPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = SegmentMeanArgs::<f32> {
-        input: TensorRef {
-            data: dev_in.as_slice(),
-            shape: [n, d],
-            stride: contiguous_stride([n, d]),
-        },
-        segment_ids: TensorRef {
-            data: dev_seg.as_slice(),
-            shape: [n],
-            stride: contiguous_stride([n]),
-        },
-        output: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: [ns, d],
-            stride: contiguous_stride([ns, d]),
-        },
+        input: TensorRef::new(dev_in.as_slice(), [n, d], contiguous_stride([n, d])).unwrap(),
+        segment_ids: TensorRef::new(dev_seg.as_slice(), [n], contiguous_stride([n])).unwrap(),
+        output: TensorMut::new(dev_out.as_slice_mut(), [ns, d], contiguous_stride([ns, d]))
+            .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

@@ -128,17 +128,17 @@ impl<T: Element> SearchsortedPlan<T> {
         crate::view_check::check_fits(&args.sorted_seq)?;
         crate::view_check::check_fits(&args.values)?;
         crate::view_check::check_fits(&args.output)?;
-        if args.sorted_seq.shape != [self.desc.len_sorted] {
+        if args.sorted_seq.shape() != [self.desc.len_sorted] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SearchsortedPlan: sorted_seq shape != [len_sorted]",
             ));
         }
-        if (args.values.shape[0] as i64) != self.desc.num_queries {
+        if (args.values.shape()[0] as i64) != self.desc.num_queries {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SearchsortedPlan: values shape != [num_queries]",
             ));
         }
-        if (args.output.shape[0] as i64) != self.desc.num_queries {
+        if (args.output.shape()[0] as i64) != self.desc.num_queries {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SearchsortedPlan: output shape != [num_queries]",
             ));
@@ -175,9 +175,9 @@ impl<T: Element> SearchsortedPlan<T> {
         if self.desc.num_queries == 0 {
             return Ok(());
         }
-        let seq_ptr = args.sorted_seq.data.as_raw().0 as *const c_void;
-        let val_ptr = args.values.data.as_raw().0 as *const c_void;
-        let out_ptr = args.output.data.as_raw().0 as *mut c_void;
+        let seq_ptr = args.sorted_seq.data().as_raw().0 as *const c_void;
+        let val_ptr = args.values.data().as_raw().0 as *const c_void;
+        let out_ptr = args.output.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         let right_flag = if self.desc.right { 1 } else { 0 };
 

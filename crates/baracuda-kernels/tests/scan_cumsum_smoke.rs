@@ -96,16 +96,8 @@ fn cumsum_f32_1d_forward() {
     };
     let plan = ScanPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = ScanArgs::<f32, 1> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -141,16 +133,8 @@ fn cumsum_f32_2d_axis_1_reverse() {
     };
     let plan = ScanPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = ScanArgs::<f32, 2> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -215,16 +199,8 @@ fn cumsum_f64_3d_axis_1_forward() {
     };
     let plan = ScanPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = ScanArgs::<f64, 3> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -257,16 +233,8 @@ fn cumsum_f16_2d_axis_0_forward() {
     };
     let plan = ScanPlan::<f16, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = ScanArgs::<f16, 2> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -307,16 +275,8 @@ fn cumsum_bf16_2d_axis_1_reverse() {
     };
     let plan = ScanPlan::<bf16, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = ScanArgs::<bf16, 2> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

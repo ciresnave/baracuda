@@ -199,31 +199,18 @@ fn run_case_f16(b: i32, h: i32, k_len: i32, d: i32, tol: f32, label: &str) {
         DeviceBuffer::zeros(&ctx, (sy[0] * sy[1] * k_len) as usize).expect("alloc a");
 
     let args = FlashDecodingArgs::<f16> {
-        q: TensorRef {
-            data: dq.as_slice(),
-            shape: sq,
-            stride: contiguous_stride(sq),
-        },
-        k: TensorRef {
-            data: dk.as_slice(),
-            shape: sk,
-            stride: contiguous_stride(sk),
-        },
-        v: TensorRef {
-            data: dv.as_slice(),
-            shape: sv,
-            stride: contiguous_stride(sv),
-        },
-        y: TensorMut {
-            data: dy.as_slice_mut(),
-            shape: sy,
-            stride: contiguous_stride(sy),
-        },
-        a: Some(TensorMut {
-            data: da.as_slice_mut(),
-            shape: [sy[0], sy[1], k_len],
-            stride: contiguous_stride([sy[0], sy[1], k_len]),
-        }),
+        q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+        k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+        v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
+        y: TensorMut::new(dy.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
+        a: Some(
+            TensorMut::new(
+                da.as_slice_mut(),
+                [sy[0], sy[1], k_len],
+                contiguous_stride([sy[0], sy[1], k_len]),
+            )
+            .unwrap(),
+        ),
         a_mean: None,
     };
     plan.run(&stream, Workspace::Borrowed(ws.as_slice_mut()), args)
@@ -286,31 +273,18 @@ fn run_case_bf16(b: i32, h: i32, k_len: i32, d: i32, tol: f32, label: &str) {
         DeviceBuffer::zeros(&ctx, (sy[0] * sy[1] * k_len) as usize).expect("alloc a");
 
     let args = FlashDecodingArgs::<bf16> {
-        q: TensorRef {
-            data: dq.as_slice(),
-            shape: sq,
-            stride: contiguous_stride(sq),
-        },
-        k: TensorRef {
-            data: dk.as_slice(),
-            shape: sk,
-            stride: contiguous_stride(sk),
-        },
-        v: TensorRef {
-            data: dv.as_slice(),
-            shape: sv,
-            stride: contiguous_stride(sv),
-        },
-        y: TensorMut {
-            data: dy.as_slice_mut(),
-            shape: sy,
-            stride: contiguous_stride(sy),
-        },
-        a: Some(TensorMut {
-            data: da.as_slice_mut(),
-            shape: [sy[0], sy[1], k_len],
-            stride: contiguous_stride([sy[0], sy[1], k_len]),
-        }),
+        q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+        k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+        v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
+        y: TensorMut::new(dy.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
+        a: Some(
+            TensorMut::new(
+                da.as_slice_mut(),
+                [sy[0], sy[1], k_len],
+                contiguous_stride([sy[0], sy[1], k_len]),
+            )
+            .unwrap(),
+        ),
         a_mean: None,
     };
     plan.run(&stream, Workspace::Borrowed(ws.as_slice_mut()), args)
@@ -416,31 +390,18 @@ fn run_gqa_case_f16(b: i32, h_q: i32, h_kv: i32, k_len: i32, d: i32, tol: f32, l
         DeviceBuffer::zeros(&ctx, (sy[0] * sy[1] * k_len) as usize).expect("alloc a");
 
     let args = FlashDecodingArgs::<f16> {
-        q: TensorRef {
-            data: dq.as_slice(),
-            shape: sq,
-            stride: contiguous_stride(sq),
-        },
-        k: TensorRef {
-            data: dk.as_slice(),
-            shape: sk,
-            stride: contiguous_stride(sk),
-        },
-        v: TensorRef {
-            data: dv.as_slice(),
-            shape: sv,
-            stride: contiguous_stride(sv),
-        },
-        y: TensorMut {
-            data: dy.as_slice_mut(),
-            shape: sy,
-            stride: contiguous_stride(sy),
-        },
-        a: Some(TensorMut {
-            data: da.as_slice_mut(),
-            shape: [sy[0], sy[1], k_len],
-            stride: contiguous_stride([sy[0], sy[1], k_len]),
-        }),
+        q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+        k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+        v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
+        y: TensorMut::new(dy.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
+        a: Some(
+            TensorMut::new(
+                da.as_slice_mut(),
+                [sy[0], sy[1], k_len],
+                contiguous_stride([sy[0], sy[1], k_len]),
+            )
+            .unwrap(),
+        ),
         a_mean: None,
     };
     plan.run(&stream, Workspace::Borrowed(ws.as_slice_mut()), args)
@@ -556,37 +517,17 @@ fn flash_decoding_a_cost_sweep_f16() {
         for (idx, &with_a) in [false, true].iter().enumerate() {
             for _ in 0..WARMUP {
                 let a = if with_a {
-                    Some(TensorMut {
-                        data: da.as_slice_mut(),
-                        shape: sa,
-                        stride: contiguous_stride(sa),
-                    })
+                    Some(TensorMut::new(da.as_slice_mut(), sa, contiguous_stride(sa)).unwrap())
                 } else {
                     None
                 };
                 let args = FlashDecodingArgs::<f16> {
                     a,
                     a_mean: None,
-                    q: TensorRef {
-                        data: dq.as_slice(),
-                        shape: sq,
-                        stride: contiguous_stride(sq),
-                    },
-                    k: TensorRef {
-                        data: dk.as_slice(),
-                        shape: sk,
-                        stride: contiguous_stride(sk),
-                    },
-                    v: TensorRef {
-                        data: dv.as_slice(),
-                        shape: sv,
-                        stride: contiguous_stride(sv),
-                    },
-                    y: TensorMut {
-                        data: dy.as_slice_mut(),
-                        shape: sy,
-                        stride: contiguous_stride(sy),
-                    },
+                    q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+                    k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+                    v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
+                    y: TensorMut::new(dy.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
                 };
                 plan.run(&stream, Workspace::Borrowed(ws.as_slice_mut()), args)
                     .expect("run");
@@ -597,37 +538,17 @@ fn flash_decoding_a_cost_sweep_f16() {
                 let t0 = Instant::now();
                 for _ in 0..ITERS {
                     let a = if with_a {
-                        Some(TensorMut {
-                            data: da.as_slice_mut(),
-                            shape: sa,
-                            stride: contiguous_stride(sa),
-                        })
+                        Some(TensorMut::new(da.as_slice_mut(), sa, contiguous_stride(sa)).unwrap())
                     } else {
                         None
                     };
                     let args = FlashDecodingArgs::<f16> {
                         a,
                         a_mean: None,
-                        q: TensorRef {
-                            data: dq.as_slice(),
-                            shape: sq,
-                            stride: contiguous_stride(sq),
-                        },
-                        k: TensorRef {
-                            data: dk.as_slice(),
-                            shape: sk,
-                            stride: contiguous_stride(sk),
-                        },
-                        v: TensorRef {
-                            data: dv.as_slice(),
-                            shape: sv,
-                            stride: contiguous_stride(sv),
-                        },
-                        y: TensorMut {
-                            data: dy.as_slice_mut(),
-                            shape: sy,
-                            stride: contiguous_stride(sy),
-                        },
+                        q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+                        k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+                        v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
+                        y: TensorMut::new(dy.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
                     };
                     plan.run(&stream, Workspace::Borrowed(ws.as_slice_mut()), args)
                         .expect("run");
@@ -709,36 +630,36 @@ fn flash_decoding_head_mean_f16() {
         let mut ws: DeviceBuffer<u8> =
             DeviceBuffer::zeros(&ctx, plan.workspace_size()).expect("ws");
         let args = FlashDecodingArgs::<f16> {
-            q: TensorRef {
-                data: dq.as_slice(),
-                shape: [B, H, D],
-                stride: contiguous_stride([B, H, D]),
-            },
-            k: TensorRef {
-                data: dk.as_slice(),
-                shape: [B, H, k_len, D],
-                stride: contiguous_stride([B, H, k_len, D]),
-            },
-            v: TensorRef {
-                data: dv.as_slice(),
-                shape: [B, H, k_len, D],
-                stride: contiguous_stride([B, H, k_len, D]),
-            },
-            y: TensorMut {
-                data: dy.as_slice_mut(),
-                shape: [B, H, D],
-                stride: contiguous_stride([B, H, D]),
-            },
-            a: Some(TensorMut {
-                data: da.as_slice_mut(),
-                shape: [B, H, k_len],
-                stride: contiguous_stride([B, H, k_len]),
-            }),
-            a_mean: Some(TensorMut {
-                data: dam.as_slice_mut(),
-                shape: [B, k_len],
-                stride: contiguous_stride([B, k_len]),
-            }),
+            q: TensorRef::new(dq.as_slice(), [B, H, D], contiguous_stride([B, H, D])).unwrap(),
+            k: TensorRef::new(
+                dk.as_slice(),
+                [B, H, k_len, D],
+                contiguous_stride([B, H, k_len, D]),
+            )
+            .unwrap(),
+            v: TensorRef::new(
+                dv.as_slice(),
+                [B, H, k_len, D],
+                contiguous_stride([B, H, k_len, D]),
+            )
+            .unwrap(),
+            y: TensorMut::new(dy.as_slice_mut(), [B, H, D], contiguous_stride([B, H, D])).unwrap(),
+            a: Some(
+                TensorMut::new(
+                    da.as_slice_mut(),
+                    [B, H, k_len],
+                    contiguous_stride([B, H, k_len]),
+                )
+                .unwrap(),
+            ),
+            a_mean: Some(
+                TensorMut::new(
+                    dam.as_slice_mut(),
+                    [B, k_len],
+                    contiguous_stride([B, k_len]),
+                )
+                .unwrap(),
+            ),
         };
         plan.run(&stream, Workspace::Borrowed(ws.as_slice_mut()), args)
             .expect("run");
@@ -788,41 +709,17 @@ fn flash_decoding_head_mean_f16() {
         for (idx, &with_mean) in [false, true].iter().enumerate() {
             for _ in 0..WARMUP {
                 let a_mean = if with_mean {
-                    Some(TensorMut {
-                        data: dam.as_slice_mut(),
-                        shape: sam,
-                        stride: contiguous_stride(sam),
-                    })
+                    Some(TensorMut::new(dam.as_slice_mut(), sam, contiguous_stride(sam)).unwrap())
                 } else {
                     None
                 };
                 let args = FlashDecodingArgs::<f16> {
                     a_mean,
-                    a: Some(TensorMut {
-                        data: da.as_slice_mut(),
-                        shape: sa,
-                        stride: contiguous_stride(sa),
-                    }),
-                    q: TensorRef {
-                        data: dq.as_slice(),
-                        shape: sq,
-                        stride: contiguous_stride(sq),
-                    },
-                    k: TensorRef {
-                        data: dk.as_slice(),
-                        shape: sk,
-                        stride: contiguous_stride(sk),
-                    },
-                    v: TensorRef {
-                        data: dv.as_slice(),
-                        shape: sk,
-                        stride: contiguous_stride(sk),
-                    },
-                    y: TensorMut {
-                        data: dy.as_slice_mut(),
-                        shape: sq,
-                        stride: contiguous_stride(sq),
-                    },
+                    a: Some(TensorMut::new(da.as_slice_mut(), sa, contiguous_stride(sa)).unwrap()),
+                    q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+                    k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+                    v: TensorRef::new(dv.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+                    y: TensorMut::new(dy.as_slice_mut(), sq, contiguous_stride(sq)).unwrap(),
                 };
                 plan.run(&stream, Workspace::Borrowed(ws.as_slice_mut()), args)
                     .expect("run");
@@ -833,41 +730,22 @@ fn flash_decoding_head_mean_f16() {
                 let t0 = Instant::now();
                 for _ in 0..ITERS {
                     let a_mean = if with_mean {
-                        Some(TensorMut {
-                            data: dam.as_slice_mut(),
-                            shape: sam,
-                            stride: contiguous_stride(sam),
-                        })
+                        Some(
+                            TensorMut::new(dam.as_slice_mut(), sam, contiguous_stride(sam))
+                                .unwrap(),
+                        )
                     } else {
                         None
                     };
                     let args = FlashDecodingArgs::<f16> {
                         a_mean,
-                        a: Some(TensorMut {
-                            data: da.as_slice_mut(),
-                            shape: sa,
-                            stride: contiguous_stride(sa),
-                        }),
-                        q: TensorRef {
-                            data: dq.as_slice(),
-                            shape: sq,
-                            stride: contiguous_stride(sq),
-                        },
-                        k: TensorRef {
-                            data: dk.as_slice(),
-                            shape: sk,
-                            stride: contiguous_stride(sk),
-                        },
-                        v: TensorRef {
-                            data: dv.as_slice(),
-                            shape: sk,
-                            stride: contiguous_stride(sk),
-                        },
-                        y: TensorMut {
-                            data: dy.as_slice_mut(),
-                            shape: sq,
-                            stride: contiguous_stride(sq),
-                        },
+                        a: Some(
+                            TensorMut::new(da.as_slice_mut(), sa, contiguous_stride(sa)).unwrap(),
+                        ),
+                        q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+                        k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+                        v: TensorRef::new(dv.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+                        y: TensorMut::new(dy.as_slice_mut(), sq, contiguous_stride(sq)).unwrap(),
                     };
                     plan.run(&stream, Workspace::Borrowed(ws.as_slice_mut()), args)
                         .expect("run");
@@ -975,32 +853,12 @@ fn flash_decoding_a_cost_gqa_sweep_f16() {
             // Probe once: confirm this (H_q, H_kv) point is supported before we time it.
             {
                 let args = FlashDecodingArgs::<f16> {
-                    a: Some(TensorMut {
-                        data: da.as_slice_mut(),
-                        shape: sa,
-                        stride: contiguous_stride(sa),
-                    }),
+                    a: Some(TensorMut::new(da.as_slice_mut(), sa, contiguous_stride(sa)).unwrap()),
                     a_mean: None,
-                    q: TensorRef {
-                        data: dq.as_slice(),
-                        shape: sq,
-                        stride: contiguous_stride(sq),
-                    },
-                    k: TensorRef {
-                        data: dk.as_slice(),
-                        shape: sk,
-                        stride: contiguous_stride(sk),
-                    },
-                    v: TensorRef {
-                        data: dv.as_slice(),
-                        shape: sv,
-                        stride: contiguous_stride(sv),
-                    },
-                    y: TensorMut {
-                        data: dy.as_slice_mut(),
-                        shape: sy,
-                        stride: contiguous_stride(sy),
-                    },
+                    q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+                    k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+                    v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
+                    y: TensorMut::new(dy.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
                 };
                 if let Err(e) = plan.run(&stream, Workspace::Borrowed(ws.as_slice_mut()), args) {
                     println!(
@@ -1016,37 +874,17 @@ fn flash_decoding_a_cost_gqa_sweep_f16() {
             for (idx, &with_a) in [false, true].iter().enumerate() {
                 for _ in 0..WARMUP {
                     let a = if with_a {
-                        Some(TensorMut {
-                            data: da.as_slice_mut(),
-                            shape: sa,
-                            stride: contiguous_stride(sa),
-                        })
+                        Some(TensorMut::new(da.as_slice_mut(), sa, contiguous_stride(sa)).unwrap())
                     } else {
                         None
                     };
                     let args = FlashDecodingArgs::<f16> {
                         a,
                         a_mean: None,
-                        q: TensorRef {
-                            data: dq.as_slice(),
-                            shape: sq,
-                            stride: contiguous_stride(sq),
-                        },
-                        k: TensorRef {
-                            data: dk.as_slice(),
-                            shape: sk,
-                            stride: contiguous_stride(sk),
-                        },
-                        v: TensorRef {
-                            data: dv.as_slice(),
-                            shape: sv,
-                            stride: contiguous_stride(sv),
-                        },
-                        y: TensorMut {
-                            data: dy.as_slice_mut(),
-                            shape: sy,
-                            stride: contiguous_stride(sy),
-                        },
+                        q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+                        k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+                        v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
+                        y: TensorMut::new(dy.as_slice_mut(), sy, contiguous_stride(sy)).unwrap(),
                     };
                     plan.run(&stream, Workspace::Borrowed(ws.as_slice_mut()), args)
                         .expect("run");
@@ -1057,37 +895,21 @@ fn flash_decoding_a_cost_gqa_sweep_f16() {
                     let t0 = Instant::now();
                     for _ in 0..ITERS {
                         let a = if with_a {
-                            Some(TensorMut {
-                                data: da.as_slice_mut(),
-                                shape: sa,
-                                stride: contiguous_stride(sa),
-                            })
+                            Some(
+                                TensorMut::new(da.as_slice_mut(), sa, contiguous_stride(sa))
+                                    .unwrap(),
+                            )
                         } else {
                             None
                         };
                         let args = FlashDecodingArgs::<f16> {
                             a,
                             a_mean: None,
-                            q: TensorRef {
-                                data: dq.as_slice(),
-                                shape: sq,
-                                stride: contiguous_stride(sq),
-                            },
-                            k: TensorRef {
-                                data: dk.as_slice(),
-                                shape: sk,
-                                stride: contiguous_stride(sk),
-                            },
-                            v: TensorRef {
-                                data: dv.as_slice(),
-                                shape: sv,
-                                stride: contiguous_stride(sv),
-                            },
-                            y: TensorMut {
-                                data: dy.as_slice_mut(),
-                                shape: sy,
-                                stride: contiguous_stride(sy),
-                            },
+                            q: TensorRef::new(dq.as_slice(), sq, contiguous_stride(sq)).unwrap(),
+                            k: TensorRef::new(dk.as_slice(), sk, contiguous_stride(sk)).unwrap(),
+                            v: TensorRef::new(dv.as_slice(), sv, contiguous_stride(sv)).unwrap(),
+                            y: TensorMut::new(dy.as_slice_mut(), sy, contiguous_stride(sy))
+                                .unwrap(),
                         };
                         plan.run(&stream, Workspace::Borrowed(ws.as_slice_mut()), args)
                             .expect("run");
@@ -1146,21 +968,11 @@ fn flash_decoding_a_mean_validation_rejects() {
     macro_rules! qkv {
         () => {
             (
-                TensorRef {
-                    data: dq.as_slice(),
-                    shape: [B, H, D],
-                    stride: contiguous_stride([B, H, D]),
-                },
-                TensorRef {
-                    data: dk.as_slice(),
-                    shape: [B, H, K, D],
-                    stride: contiguous_stride([B, H, K, D]),
-                },
-                TensorRef {
-                    data: dv.as_slice(),
-                    shape: [B, H, K, D],
-                    stride: contiguous_stride([B, H, K, D]),
-                },
+                TensorRef::new(dq.as_slice(), [B, H, D], contiguous_stride([B, H, D])).unwrap(),
+                TensorRef::new(dk.as_slice(), [B, H, K, D], contiguous_stride([B, H, K, D]))
+                    .unwrap(),
+                TensorRef::new(dv.as_slice(), [B, H, K, D], contiguous_stride([B, H, K, D]))
+                    .unwrap(),
             )
         };
     }
@@ -1172,17 +984,11 @@ fn flash_decoding_a_mean_validation_rejects() {
             q,
             k,
             v,
-            y: TensorMut {
-                data: dy.as_slice_mut(),
-                shape: [B, H, D],
-                stride: contiguous_stride([B, H, D]),
-            },
+            y: TensorMut::new(dy.as_slice_mut(), [B, H, D], contiguous_stride([B, H, D])).unwrap(),
             a: None,
-            a_mean: Some(TensorMut {
-                data: dam.as_slice_mut(),
-                shape: [B, K],
-                stride: contiguous_stride([B, K]),
-            }),
+            a_mean: Some(
+                TensorMut::new(dam.as_slice_mut(), [B, K], contiguous_stride([B, K])).unwrap(),
+            ),
         };
         let r = plan.can_implement(&args);
         assert!(
@@ -1202,16 +1008,15 @@ fn flash_decoding_a_mean_validation_rejects() {
             q,
             k,
             v,
-            y: TensorMut {
-                data: dy.as_slice_mut(),
-                shape: [B, H, D],
-                stride: contiguous_stride([B, H, D]),
-            },
-            a: Some(TensorMut {
-                data: da_wide.as_slice_mut(),
-                shape: [B, H, K],
-                stride: [(2 * H * K) as i64, (2 * K) as i64, 2],
-            }),
+            y: TensorMut::new(dy.as_slice_mut(), [B, H, D], contiguous_stride([B, H, D])).unwrap(),
+            a: Some(
+                TensorMut::new(
+                    da_wide.as_slice_mut(),
+                    [B, H, K],
+                    [(2 * H * K) as i64, (2 * K) as i64, 2],
+                )
+                .unwrap(),
+            ),
             a_mean: None,
         };
         let r = plan.can_implement(&args);
@@ -1230,21 +1035,13 @@ fn flash_decoding_a_mean_validation_rejects() {
             q,
             k,
             v,
-            y: TensorMut {
-                data: dy.as_slice_mut(),
-                shape: [B, H, D],
-                stride: contiguous_stride([B, H, D]),
-            },
-            a: Some(TensorMut {
-                data: da.as_slice_mut(),
-                shape: [B, H, K],
-                stride: contiguous_stride([B, H, K]),
-            }),
-            a_mean: Some(TensorMut {
-                data: dam_wide.as_slice_mut(),
-                shape: [B, K],
-                stride: [(2 * K) as i64, 2],
-            }),
+            y: TensorMut::new(dy.as_slice_mut(), [B, H, D], contiguous_stride([B, H, D])).unwrap(),
+            a: Some(
+                TensorMut::new(da.as_slice_mut(), [B, H, K], contiguous_stride([B, H, K])).unwrap(),
+            ),
+            a_mean: Some(
+                TensorMut::new(dam_wide.as_slice_mut(), [B, K], [(2 * K) as i64, 2]).unwrap(),
+            ),
         };
         let r = plan.can_implement(&args);
         assert!(
@@ -1260,21 +1057,13 @@ fn flash_decoding_a_mean_validation_rejects() {
             q,
             k,
             v,
-            y: TensorMut {
-                data: dy.as_slice_mut(),
-                shape: [B, H, D],
-                stride: contiguous_stride([B, H, D]),
-            },
-            a: Some(TensorMut {
-                data: da.as_slice_mut(),
-                shape: [B, H, K],
-                stride: contiguous_stride([B, H, K]),
-            }),
-            a_mean: Some(TensorMut {
-                data: dam.as_slice_mut(),
-                shape: [B, K],
-                stride: contiguous_stride([B, K]),
-            }),
+            y: TensorMut::new(dy.as_slice_mut(), [B, H, D], contiguous_stride([B, H, D])).unwrap(),
+            a: Some(
+                TensorMut::new(da.as_slice_mut(), [B, H, K], contiguous_stride([B, H, K])).unwrap(),
+            ),
+            a_mean: Some(
+                TensorMut::new(dam.as_slice_mut(), [B, K], contiguous_stride([B, K])).unwrap(),
+            ),
         };
         let r = plan.can_implement(&args);
         assert!(r.is_ok(), "well-formed a + a_mean must pass, got {r:?}");

@@ -56,21 +56,9 @@ fn run_case<const N: usize>(shape: [i32; N]) {
         .expect("select BinaryPlan<f32, N>");
 
     let args = BinaryArgs::<f32, N> {
-        a: TensorRef {
-            data: dev_a.as_slice(),
-            shape,
-            stride,
-        },
-        b: TensorRef {
-            data: dev_b.as_slice(),
-            shape,
-            stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
+        a: TensorRef::new(dev_a.as_slice(), shape, stride).unwrap(),
+        b: TensorRef::new(dev_b.as_slice(), shape, stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args)
         .expect("binary mul run");
@@ -149,21 +137,9 @@ fn run_case_f16_3d(shape: [i32; 3]) {
     let plan = BinaryPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select BinaryPlan<f16, 3>");
     let args = BinaryArgs::<f16, 3> {
-        a: TensorRef {
-            data: dev_a.as_slice(),
-            shape,
-            stride,
-        },
-        b: TensorRef {
-            data: dev_b.as_slice(),
-            shape,
-            stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
+        a: TensorRef::new(dev_a.as_slice(), shape, stride).unwrap(),
+        b: TensorRef::new(dev_b.as_slice(), shape, stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args)
         .expect("binary mul f16 run");
@@ -232,21 +208,9 @@ fn run_case_bf16_3d(shape: [i32; 3]) {
     let plan = BinaryPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select BinaryPlan<bf16, 3>");
     let args = BinaryArgs::<bf16, 3> {
-        a: TensorRef {
-            data: dev_a.as_slice(),
-            shape,
-            stride,
-        },
-        b: TensorRef {
-            data: dev_b.as_slice(),
-            shape,
-            stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
+        a: TensorRef::new(dev_a.as_slice(), shape, stride).unwrap(),
+        b: TensorRef::new(dev_b.as_slice(), shape, stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args)
         .expect("binary mul bf16 run");
@@ -311,21 +275,9 @@ fn run_case_f64_3d(shape: [i32; 3]) {
     let plan = BinaryPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select BinaryPlan<f64, 3>");
     let args = BinaryArgs::<f64, 3> {
-        a: TensorRef {
-            data: dev_a.as_slice(),
-            shape,
-            stride,
-        },
-        b: TensorRef {
-            data: dev_b.as_slice(),
-            shape,
-            stride,
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
+        a: TensorRef::new(dev_a.as_slice(), shape, stride).unwrap(),
+        b: TensorRef::new(dev_b.as_slice(), shape, stride).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::None, args)
         .expect("binary mul f64 run");

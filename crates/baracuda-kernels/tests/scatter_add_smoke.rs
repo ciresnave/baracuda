@@ -52,21 +52,15 @@ fn scatter_add_f32_2d_dim1() {
     let plan = ScatterAddPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = ScatterAddArgs::<f32, 2> {
-        updates: TensorRef {
-            data: dev_upd.as_slice(),
-            shape: upd_shape,
-            stride: contiguous_stride(upd_shape),
-        },
-        index: TensorRef {
-            data: dev_idx.as_slice(),
-            shape: upd_shape,
-            stride: contiguous_stride(upd_shape),
-        },
-        out: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: out_shape,
-            stride: contiguous_stride(out_shape),
-        },
+        updates: TensorRef::new(dev_upd.as_slice(), upd_shape, contiguous_stride(upd_shape))
+            .unwrap(),
+        index: TensorRef::new(dev_idx.as_slice(), upd_shape, contiguous_stride(upd_shape)).unwrap(),
+        out: TensorMut::new(
+            dev_out.as_slice_mut(),
+            out_shape,
+            contiguous_stride(out_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -112,21 +106,15 @@ fn scatter_add_f64_2d_dim0() {
     let plan = ScatterAddPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = ScatterAddArgs::<f64, 2> {
-        updates: TensorRef {
-            data: dev_upd.as_slice(),
-            shape: upd_shape,
-            stride: contiguous_stride(upd_shape),
-        },
-        index: TensorRef {
-            data: dev_idx.as_slice(),
-            shape: upd_shape,
-            stride: contiguous_stride(upd_shape),
-        },
-        out: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: out_shape,
-            stride: contiguous_stride(out_shape),
-        },
+        updates: TensorRef::new(dev_upd.as_slice(), upd_shape, contiguous_stride(upd_shape))
+            .unwrap(),
+        index: TensorRef::new(dev_idx.as_slice(), upd_shape, contiguous_stride(upd_shape)).unwrap(),
+        out: TensorMut::new(
+            dev_out.as_slice_mut(),
+            out_shape,
+            contiguous_stride(out_shape),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

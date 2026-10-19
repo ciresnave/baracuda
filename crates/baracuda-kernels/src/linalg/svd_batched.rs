@@ -288,29 +288,29 @@ impl<T: Element> BatchedSvdPlan<T> {
     fn check_args(&self, args: &BatchedSvdArgs<'_, T>) -> Result<()> {
         let b = self.desc.batch_size;
         let n = self.desc.matrix_size;
-        if args.a.shape != [b, n, n] {
+        if args.a.shape() != [b, n, n] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::BatchedSvdPlan: A shape != [batch, N, N]",
             ));
         }
-        if args.s.shape != [b, n] {
+        if args.s.shape() != [b, n] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::BatchedSvdPlan: S shape != [batch, N]",
             ));
         }
         if self.desc.compute_vectors {
-            if args.u.shape != [b, n, n] {
+            if args.u.shape() != [b, n, n] {
                 return Err(Error::InvalidProblem(
                     "baracuda-kernels::BatchedSvdPlan: U shape != [batch, N, N]",
                 ));
             }
-            if args.v.shape != [b, n, n] {
+            if args.v.shape() != [b, n, n] {
                 return Err(Error::InvalidProblem(
                     "baracuda-kernels::BatchedSvdPlan: V shape != [batch, N, N]",
                 ));
             }
         }
-        if args.info.shape != [b] {
+        if args.info.shape() != [b] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::BatchedSvdPlan: info shape != [batch]",
             ));
@@ -349,19 +349,19 @@ macro_rules! impl_batched_svd_run {
                 let (ws_ptr, ws_bytes) = unpack_workspace(workspace, needed)?;
                 let lwork = (ws_bytes / core::mem::size_of::<$T>()) as i32;
 
-                let a_ptr = args.a.data.as_raw().0 as *mut $T;
-                let s_ptr = args.s.data.as_raw().0 as *mut $T;
+                let a_ptr = args.a.data().as_raw().0 as *mut $T;
+                let s_ptr = args.s.data().as_raw().0 as *mut $T;
                 let u_ptr = if self.desc.compute_vectors {
-                    args.u.data.as_raw().0 as *mut $T
+                    args.u.data().as_raw().0 as *mut $T
                 } else {
                     core::ptr::null_mut()
                 };
                 let v_ptr = if self.desc.compute_vectors {
-                    args.v.data.as_raw().0 as *mut $T
+                    args.v.data().as_raw().0 as *mut $T
                 } else {
                     core::ptr::null_mut()
                 };
-                let info_ptr = args.info.data.as_raw().0 as *mut i32;
+                let info_ptr = args.info.data().as_raw().0 as *mut i32;
 
                 let status = unsafe {
                     $gesvdj_batched(

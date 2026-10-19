@@ -138,30 +138,30 @@ impl<T: Element> EmbeddingBackwardPlan<T> {
         &self,
         args: &EmbeddingBackwardArgs<'_, T, I>,
     ) -> Result<()> {
-        if args.dout.shape[0] != self.desc.num_indices
-            || args.dout.shape[1] != self.desc.embedding_dim
+        if args.dout.shape()[0] != self.desc.num_indices
+            || args.dout.shape()[1] != self.desc.embedding_dim
         {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::EmbeddingBackwardPlan: dout shape must be \
                  [num_indices, embedding_dim]",
             ));
         }
-        if args.indices.shape[0] != self.desc.num_indices {
+        if args.indices.shape()[0] != self.desc.num_indices {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::EmbeddingBackwardPlan: indices.shape[0] mismatch with descriptor",
             ));
         }
-        if args.dweight.shape[0] != self.desc.num_embeddings
-            || args.dweight.shape[1] != self.desc.embedding_dim
+        if args.dweight.shape()[0] != self.desc.num_embeddings
+            || args.dweight.shape()[1] != self.desc.embedding_dim
         {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::EmbeddingBackwardPlan: dweight shape must be \
                  [num_embeddings, embedding_dim]",
             ));
         }
-        let dout_len = args.dout.data.len() as i64;
-        let idx_len = args.indices.data.len() as i64;
-        let dw_len = args.dweight.data.len() as i64;
+        let dout_len = args.dout.data().len() as i64;
+        let idx_len = args.indices.data().len() as i64;
+        let dw_len = args.dweight.data().len() as i64;
         let dout_numel = args.dout.numel();
         let idx_numel = args.indices.numel();
         let dw_numel = args.dweight.numel();
@@ -218,9 +218,9 @@ impl<T: Element> EmbeddingBackwardPlan<T> {
         if num_indices == 0 || self.desc.embedding_dim == 0 {
             return Ok(());
         }
-        let dout_ptr = args.dout.data.as_raw().0 as *const c_void;
-        let idx_ptr = args.indices.data.as_raw().0 as *const c_void;
-        let dweight_ptr = args.dweight.data.as_raw().0 as *mut c_void;
+        let dout_ptr = args.dout.data().as_raw().0 as *const c_void;
+        let idx_ptr = args.indices.data().as_raw().0 as *const c_void;
+        let dweight_ptr = args.dweight.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         // Phase 11.5: padding_idx widens to i64 across FFI.
         let padding_idx: i64 = self.desc.padding_idx.unwrap_or(PADDING_DISABLED) as i64;

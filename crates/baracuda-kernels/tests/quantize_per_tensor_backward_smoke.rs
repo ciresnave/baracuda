@@ -58,23 +58,12 @@ fn quantize_per_tensor_backward_f32_s8_ste() {
         QuantizePerTensorBackwardPlan::<f32, S8>::select(&stream, &desc, PlanPreference::default())
             .expect("select");
     let args = QuantizePerTensorBackwardArgs::<f32, S8> {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape: [numel],
-            stride: contiguous_stride([numel]),
-        },
+        input: TensorRef::new(dev_x.as_slice(), [numel], contiguous_stride([numel])).unwrap(),
         scale,
         zero_point,
-        d_output: TensorRef {
-            data: dev_dy.as_slice(),
-            shape: [numel],
-            stride: contiguous_stride([numel]),
-        },
-        d_input: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape: [numel],
-            stride: contiguous_stride([numel]),
-        },
+        d_output: TensorRef::new(dev_dy.as_slice(), [numel], contiguous_stride([numel])).unwrap(),
+        d_input: TensorMut::new(dev_dx.as_slice_mut(), [numel], contiguous_stride([numel]))
+            .unwrap(),
         _phantom: PhantomData,
     };
     plan.run(&stream, Workspace::None, args).expect("run");

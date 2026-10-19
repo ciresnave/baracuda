@@ -45,16 +45,13 @@ fn adaptive_avg_pool1d_8_to_4_f32() {
         &stream,
         Workspace::None,
         AdaptivePool1dFwArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape: [1, 1, 8],
-                stride: contiguous_stride([1, 1, 8]),
-            },
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: [1, 1, 4],
-                stride: contiguous_stride([1, 1, 4]),
-            },
+            x: TensorRef::new(dev_x.as_slice(), [1, 1, 8], contiguous_stride([1, 1, 8])).unwrap(),
+            y: TensorMut::new(
+                dev_y.as_slice_mut(),
+                [1, 1, 4],
+                contiguous_stride([1, 1, 4]),
+            )
+            .unwrap(),
         },
     )
     .expect("fw");
@@ -84,16 +81,18 @@ fn adaptive_avg_pool3d_2x2x2_to_1x1x1_f32() {
         &stream,
         Workspace::None,
         AdaptivePool3dFwArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape: [1, 1, 2, 2, 2],
-                stride: contiguous_stride([1, 1, 2, 2, 2]),
-            },
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: [1, 1, 1, 1, 1],
-                stride: contiguous_stride([1, 1, 1, 1, 1]),
-            },
+            x: TensorRef::new(
+                dev_x.as_slice(),
+                [1, 1, 2, 2, 2],
+                contiguous_stride([1, 1, 2, 2, 2]),
+            )
+            .unwrap(),
+            y: TensorMut::new(
+                dev_y.as_slice_mut(),
+                [1, 1, 1, 1, 1],
+                contiguous_stride([1, 1, 1, 1, 1]),
+            )
+            .unwrap(),
         },
     )
     .expect("fw");
@@ -124,16 +123,13 @@ fn adaptive_max_pool1d_8_to_4_f32() {
         &stream,
         Workspace::None,
         AdaptivePool1dFwArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape: [1, 1, 8],
-                stride: contiguous_stride([1, 1, 8]),
-            },
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: [1, 1, 4],
-                stride: contiguous_stride([1, 1, 4]),
-            },
+            x: TensorRef::new(dev_x.as_slice(), [1, 1, 8], contiguous_stride([1, 1, 8])).unwrap(),
+            y: TensorMut::new(
+                dev_y.as_slice_mut(),
+                [1, 1, 4],
+                contiguous_stride([1, 1, 4]),
+            )
+            .unwrap(),
         },
     )
     .expect("fw");
@@ -165,16 +161,18 @@ fn adaptive_max_pool2d_4x4_to_2x2_f32() {
         &stream,
         Workspace::None,
         AdaptivePool2dFwArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape: [1, 1, 4, 4],
-                stride: contiguous_stride([1, 1, 4, 4]),
-            },
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: [1, 1, 2, 2],
-                stride: contiguous_stride([1, 1, 2, 2]),
-            },
+            x: TensorRef::new(
+                dev_x.as_slice(),
+                [1, 1, 4, 4],
+                contiguous_stride([1, 1, 4, 4]),
+            )
+            .unwrap(),
+            y: TensorMut::new(
+                dev_y.as_slice_mut(),
+                [1, 1, 2, 2],
+                contiguous_stride([1, 1, 2, 2]),
+            )
+            .unwrap(),
         },
     )
     .expect("fw");
@@ -205,16 +203,18 @@ fn adaptive_max_pool3d_2x2x2_to_1x1x1_f32() {
         &stream,
         Workspace::None,
         AdaptivePool3dFwArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape: [1, 1, 2, 2, 2],
-                stride: contiguous_stride([1, 1, 2, 2, 2]),
-            },
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: [1, 1, 1, 1, 1],
-                stride: contiguous_stride([1, 1, 1, 1, 1]),
-            },
+            x: TensorRef::new(
+                dev_x.as_slice(),
+                [1, 1, 2, 2, 2],
+                contiguous_stride([1, 1, 2, 2, 2]),
+            )
+            .unwrap(),
+            y: TensorMut::new(
+                dev_y.as_slice_mut(),
+                [1, 1, 1, 1, 1],
+                contiguous_stride([1, 1, 1, 1, 1]),
+            )
+            .unwrap(),
         },
     )
     .expect("fw");

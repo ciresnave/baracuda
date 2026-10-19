@@ -48,32 +48,12 @@ fn perrow_top_k_top_p_one_hot() {
         &stream,
         Workspace::None,
         PerRowSamplingArgs {
-            probs: TensorRef {
-                data: probs_dev.as_slice(),
-                shape: pshape,
-                stride: contiguous_stride(pshape),
-            },
-            top_k_arr: Some(TensorRef {
-                data: top_k_dev.as_slice(),
-                shape: [2],
-                stride: [1],
-            }),
-            top_p_arr: Some(TensorRef {
-                data: top_p_dev.as_slice(),
-                shape: [2],
-                stride: [1],
-            }),
+            probs: TensorRef::new(probs_dev.as_slice(), pshape, contiguous_stride(pshape)).unwrap(),
+            top_k_arr: Some(TensorRef::new(top_k_dev.as_slice(), [2], [1]).unwrap()),
+            top_p_arr: Some(TensorRef::new(top_p_dev.as_slice(), [2], [1]).unwrap()),
             min_p_arr: None,
-            output: TensorMut {
-                data: out_dev.as_slice_mut(),
-                shape: [2],
-                stride: [1],
-            },
-            valid: Some(TensorMut {
-                data: valid_dev.as_slice_mut(),
-                shape: [2],
-                stride: [1],
-            }),
+            output: TensorMut::new(out_dev.as_slice_mut(), [2], [1]).unwrap(),
+            valid: Some(TensorMut::new(valid_dev.as_slice_mut(), [2], [1]).unwrap()),
             seed_val: 7,
             offset_val: 0,
         },
@@ -114,23 +94,11 @@ fn perrow_top_k_one_hot() {
         &stream,
         Workspace::None,
         PerRowSamplingArgs {
-            probs: TensorRef {
-                data: probs_dev.as_slice(),
-                shape: pshape,
-                stride: contiguous_stride(pshape),
-            },
-            top_k_arr: Some(TensorRef {
-                data: top_k_dev.as_slice(),
-                shape: [2],
-                stride: [1],
-            }),
+            probs: TensorRef::new(probs_dev.as_slice(), pshape, contiguous_stride(pshape)).unwrap(),
+            top_k_arr: Some(TensorRef::new(top_k_dev.as_slice(), [2], [1]).unwrap()),
             top_p_arr: None,
             min_p_arr: None,
-            output: TensorMut {
-                data: out_dev.as_slice_mut(),
-                shape: [2],
-                stride: [1],
-            },
+            output: TensorMut::new(out_dev.as_slice_mut(), [2], [1]).unwrap(),
             valid: None,
             seed_val: 11,
             offset_val: 0,
@@ -185,36 +153,26 @@ fn speculative_all_accept() {
         &stream,
         Workspace::None,
         SpeculativeSamplingArgs {
-            draft_probs: TensorRef {
-                data: draft_dev.as_slice(),
-                shape: dshape,
-                stride: contiguous_stride(dshape),
-            },
-            draft_token_ids: TensorRef {
-                data: draft_ids_dev.as_slice(),
-                shape: [1, NSPEC as i32],
-                stride: contiguous_stride([1, NSPEC as i32]),
-            },
-            target_probs: TensorRef {
-                data: target_dev.as_slice(),
-                shape: tshape,
-                stride: contiguous_stride(tshape),
-            },
-            output_token_ids: TensorMut {
-                data: out_ids_dev.as_slice_mut(),
-                shape: [1, NSPEC as i32 + 1],
-                stride: contiguous_stride([1, NSPEC as i32 + 1]),
-            },
-            output_accepted_token_num: TensorMut {
-                data: accepted_dev.as_slice_mut(),
-                shape: [1],
-                stride: [1],
-            },
-            output_emitted_draft_token_num: TensorMut {
-                data: emitted_dev.as_slice_mut(),
-                shape: [1],
-                stride: [1],
-            },
+            draft_probs: TensorRef::new(draft_dev.as_slice(), dshape, contiguous_stride(dshape))
+                .unwrap(),
+            draft_token_ids: TensorRef::new(
+                draft_ids_dev.as_slice(),
+                [1, NSPEC as i32],
+                contiguous_stride([1, NSPEC as i32]),
+            )
+            .unwrap(),
+            target_probs: TensorRef::new(target_dev.as_slice(), tshape, contiguous_stride(tshape))
+                .unwrap(),
+            output_token_ids: TensorMut::new(
+                out_ids_dev.as_slice_mut(),
+                [1, NSPEC as i32 + 1],
+                contiguous_stride([1, NSPEC as i32 + 1]),
+            )
+            .unwrap(),
+            output_accepted_token_num: TensorMut::new(accepted_dev.as_slice_mut(), [1], [1])
+                .unwrap(),
+            output_emitted_draft_token_num: TensorMut::new(emitted_dev.as_slice_mut(), [1], [1])
+                .unwrap(),
             seed_val: 42,
             offset_val: 0,
         },

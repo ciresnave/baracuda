@@ -136,11 +136,11 @@ impl<T: Element> GridSampleBackwardPlan<T> {
         crate::view_check::check_fits(&args.grid)?;
         crate::view_check::check_fits(&args.dinput)?;
         crate::view_check::check_fits(&args.dgrid)?;
-        if args.dout.shape != [self.desc.n, self.desc.c, self.desc.oh, self.desc.ow]
-            || args.input.shape != [self.desc.n, self.desc.c, self.desc.ih, self.desc.iw]
-            || args.grid.shape != [self.desc.n, self.desc.oh, self.desc.ow, 2]
-            || args.dinput.shape != [self.desc.n, self.desc.c, self.desc.ih, self.desc.iw]
-            || args.dgrid.shape != [self.desc.n, self.desc.oh, self.desc.ow, 2]
+        if args.dout.shape() != [self.desc.n, self.desc.c, self.desc.oh, self.desc.ow]
+            || args.input.shape() != [self.desc.n, self.desc.c, self.desc.ih, self.desc.iw]
+            || args.grid.shape() != [self.desc.n, self.desc.oh, self.desc.ow, 2]
+            || args.dinput.shape() != [self.desc.n, self.desc.c, self.desc.ih, self.desc.iw]
+            || args.dgrid.shape() != [self.desc.n, self.desc.oh, self.desc.ow, 2]
         {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::GridSampleBackwardPlan: operand shape mismatch",
@@ -178,11 +178,11 @@ impl<T: Element> GridSampleBackwardPlan<T> {
         if args.dout.numel() == 0 {
             return Ok(());
         }
-        let dout_ptr = args.dout.data.as_raw().0 as *const c_void;
-        let input_ptr = args.input.data.as_raw().0 as *const c_void;
-        let grid_ptr = args.grid.data.as_raw().0 as *const c_void;
-        let din_ptr = args.dinput.data.as_raw().0 as *mut c_void;
-        let dgrid_ptr = args.dgrid.data.as_raw().0 as *mut c_void;
+        let dout_ptr = args.dout.data().as_raw().0 as *const c_void;
+        let input_ptr = args.input.data().as_raw().0 as *const c_void;
+        let grid_ptr = args.grid.data().as_raw().0 as *const c_void;
+        let din_ptr = args.dinput.data().as_raw().0 as *mut c_void;
+        let dgrid_ptr = args.dgrid.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         let status = match T::KIND {
             ElementKind::F32 => unsafe {

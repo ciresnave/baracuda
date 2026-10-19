@@ -48,16 +48,18 @@ fn affine_f32_contig_path_still_correct() {
     let plan =
         AffinePlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = AffineArgs {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape: [numel as i32],
-            stride: contiguous_stride([numel as i32]),
-        },
-        output: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: [numel as i32],
-            stride: contiguous_stride([numel as i32]),
-        },
+        input: TensorRef::new(
+            dev_x.as_slice(),
+            [numel as i32],
+            contiguous_stride([numel as i32]),
+        )
+        .unwrap(),
+        output: TensorMut::new(
+            dev_y.as_slice_mut(),
+            [numel as i32],
+            contiguous_stride([numel as i32]),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -101,16 +103,13 @@ fn affine_f32_strided_input_stride2() {
     let plan =
         AffinePlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = AffineArgs {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape: [numel as i32],
-            stride: [stride as i64],
-        },
-        output: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: [numel as i32],
-            stride: contiguous_stride([numel as i32]),
-        },
+        input: TensorRef::new(dev_x.as_slice(), [numel as i32], [stride as i64]).unwrap(),
+        output: TensorMut::new(
+            dev_y.as_slice_mut(),
+            [numel as i32],
+            contiguous_stride([numel as i32]),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -156,16 +155,13 @@ fn affine_f32_strided_output_stride2_interior_view() {
     let plan =
         AffinePlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = AffineArgs {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape: [numel as i32],
-            stride: contiguous_stride([numel as i32]),
-        },
-        output: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: [numel as i32],
-            stride: [stride as i64],
-        },
+        input: TensorRef::new(
+            dev_x.as_slice(),
+            [numel as i32],
+            contiguous_stride([numel as i32]),
+        )
+        .unwrap(),
+        output: TensorMut::new(dev_y.as_slice_mut(), [numel as i32], [stride as i64]).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -222,16 +218,13 @@ fn affine_bf16_strided_input_stride2() {
     let plan =
         AffinePlan::<bf16>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = AffineArgs {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape: [numel as i32],
-            stride: [stride as i64],
-        },
-        output: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: [numel as i32],
-            stride: contiguous_stride([numel as i32]),
-        },
+        input: TensorRef::new(dev_x.as_slice(), [numel as i32], [stride as i64]).unwrap(),
+        output: TensorMut::new(
+            dev_y.as_slice_mut(),
+            [numel as i32],
+            contiguous_stride([numel as i32]),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -281,16 +274,13 @@ fn affine_i32_strided_input_stride2() {
     let plan =
         AffinePlan::<i32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = AffineArgs {
-        input: TensorRef {
-            data: dev_x.as_slice(),
-            shape: [numel as i32],
-            stride: [stride as i64],
-        },
-        output: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: [numel as i32],
-            stride: contiguous_stride([numel as i32]),
-        },
+        input: TensorRef::new(dev_x.as_slice(), [numel as i32], [stride as i64]).unwrap(),
+        output: TensorMut::new(
+            dev_y.as_slice_mut(),
+            [numel as i32],
+            contiguous_stride([numel as i32]),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

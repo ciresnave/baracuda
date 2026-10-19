@@ -162,6 +162,9 @@ impl<T: IntElement, BT: BiasElement> IntGemmPlan<T, BT> {
                     crate::view_check::check_matrix(m, n, c.ld, eb, c.data.len(), eb)?;
                 }
                 crate::view_check::check_matrix(m, n, args.d.ld, eb, args.d.data.len(), eb)?;
+                if let Some(b) = &args.bias {
+                    crate::view_check::check_vector(b, self.desc.n)?;
+                }
                 Ok(())
             }
         }

@@ -249,7 +249,7 @@ impl<T: Element, const N: usize> BinaryPlan<T, N> {
         // Output must match the descriptor exactly. No broadcast on the
         // output side — `y` is the destination of the broadcast, not
         // a participant in it.
-        if args.y.shape != self.desc.shape {
+        if args.y.shape() != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::BinaryPlan: Y shape mismatch with descriptor",
             ));
@@ -259,16 +259,16 @@ impl<T: Element, const N: usize> BinaryPlan<T, N> {
         // either match the output's axis exactly, or be 1 with stride 0.
         for d in 0..N {
             let y_dim = self.desc.shape[d];
-            let a_dim = args.a.shape[d];
-            let b_dim = args.b.shape[d];
-            if a_dim != y_dim && !(a_dim == 1 && args.a.stride[d] == 0) {
+            let a_dim = args.a.shape()[d];
+            let b_dim = args.b.shape()[d];
+            if a_dim != y_dim && !(a_dim == 1 && args.a.stride()[d] == 0) {
                 return Err(Error::InvalidProblem(
                     "baracuda-kernels::BinaryPlan: A axis is not broadcast-compatible \
                      with output (require shape[d] == y.shape[d], OR \
                      shape[d] == 1 AND stride[d] == 0)",
                 ));
             }
-            if b_dim != y_dim && !(b_dim == 1 && args.b.stride[d] == 0) {
+            if b_dim != y_dim && !(b_dim == 1 && args.b.stride()[d] == 0) {
                 return Err(Error::InvalidProblem(
                     "baracuda-kernels::BinaryPlan: B axis is not broadcast-compatible \
                      with output",
@@ -295,9 +295,9 @@ impl<T: Element, const N: usize> BinaryPlan<T, N> {
         let y_numel = args.y.numel();
         let a_numel = args.a.numel();
         let b_numel = args.b.numel();
-        let a_len = args.a.data.len() as i64;
-        let b_len = args.b.data.len() as i64;
-        let y_len = args.y.data.len() as i64;
+        let a_len = args.a.data().len() as i64;
+        let b_len = args.b.data().len() as i64;
+        let y_len = args.y.data().len() as i64;
         if y_len < y_numel {
             return Err(Error::BufferTooSmall {
                 needed: y_numel as usize,
@@ -349,17 +349,17 @@ impl<T: Element, const N: usize> BinaryPlan<T, N> {
         if numel == 0 {
             return Ok(());
         }
-        let a_ptr = args.a.data.as_raw().0 as *const c_void;
-        let b_ptr = args.b.data.as_raw().0 as *const c_void;
-        let y_ptr = args.y.data.as_raw().0 as *mut c_void;
+        let a_ptr = args.a.data().as_raw().0 as *const c_void;
+        let b_ptr = args.b.data().as_raw().0 as *const c_void;
+        let y_ptr = args.y.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
 
         // Contig fast path requires all three operands to be fully
         // contiguous AND have identical shape (no broadcast). Any other
         // case (broadcast, transposed, strided slice) goes through the
         // strided kernel.
-        let all_contig_same_shape = args.a.shape == args.y.shape
-            && args.b.shape == args.y.shape
+        let all_contig_same_shape = args.a.shape() == args.y.shape()
+            && args.b.shape() == args.y.shape()
             && args.a.is_contiguous()
             && args.b.is_contiguous()
             && args.y.is_contiguous();
@@ -1247,10 +1247,10 @@ impl<T: Element, const N: usize> BinaryPlan<T, N> {
     ) -> Result<()> {
         // Output shape (== descriptor shape) drives the kernel's coord
         // loop. Stride arrays come from each operand.
-        let shape = args.y.shape;
-        let stride_a = args.a.stride;
-        let stride_b = args.b.stride;
-        let stride_y = args.y.stride;
+        let shape = args.y.shape();
+        let stride_a = args.a.stride();
+        let stride_b = args.b.stride();
+        let stride_y = args.y.stride();
         let rank = N as i32;
 
         let status = match (self.desc.kind, T::KIND) {

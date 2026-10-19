@@ -60,26 +60,10 @@ fn loss_gaussian_nll_f32_mean() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         GaussianNllLossArgs {
-            input: TensorRef {
-                data: dev_x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            target: TensorRef {
-                data: dev_t.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            var: TensorRef {
-                data: dev_v.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            out: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: [1, 1],
-                stride: [1, 1],
-            },
+            input: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            target: TensorRef::new(dev_t.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            var: TensorRef::new(dev_v.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            out: TensorMut::new(dev_y.as_slice_mut(), [1, 1], [1, 1]).unwrap(),
         },
     )
     .unwrap();
@@ -124,26 +108,10 @@ fn loss_gaussian_nll_f64_mean() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         GaussianNllLossArgs {
-            input: TensorRef {
-                data: dev_x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            target: TensorRef {
-                data: dev_t.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            var: TensorRef {
-                data: dev_v.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            out: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: [1, 1],
-                stride: [1, 1],
-            },
+            input: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            target: TensorRef::new(dev_t.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            var: TensorRef::new(dev_v.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            out: TensorMut::new(dev_y.as_slice_mut(), [1, 1], [1, 1]).unwrap(),
         },
     )
     .unwrap();
@@ -189,26 +157,10 @@ fn loss_gaussian_nll_f16_mean() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         GaussianNllLossArgs {
-            input: TensorRef {
-                data: dev_x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            target: TensorRef {
-                data: dev_t.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            var: TensorRef {
-                data: dev_v.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            out: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: [1, 1],
-                stride: [1, 1],
-            },
+            input: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            target: TensorRef::new(dev_t.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            var: TensorRef::new(dev_v.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            out: TensorMut::new(dev_y.as_slice_mut(), [1, 1], [1, 1]).unwrap(),
         },
     )
     .unwrap();
@@ -260,26 +212,10 @@ fn loss_gaussian_nll_bf16_mean() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         GaussianNllLossArgs {
-            input: TensorRef {
-                data: dev_x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            target: TensorRef {
-                data: dev_t.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            var: TensorRef {
-                data: dev_v.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            out: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: [1, 1],
-                stride: [1, 1],
-            },
+            input: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            target: TensorRef::new(dev_t.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            var: TensorRef::new(dev_v.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            out: TensorMut::new(dev_y.as_slice_mut(), [1, 1], [1, 1]).unwrap(),
         },
     )
     .unwrap();

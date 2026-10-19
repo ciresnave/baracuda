@@ -76,16 +76,8 @@ fn flip_backward_f32_2d() {
     let plan =
         FlipBackwardPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = FlipBackwardArgs::<f32, 2> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        dx: TensorMut::new(dev_dx.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -115,16 +107,8 @@ fn flip_backward_f32_3d_both() {
     let plan =
         FlipBackwardPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = FlipBackwardArgs::<f32, 3> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        dx: TensorMut::new(dev_dx.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -152,16 +136,8 @@ fn flip_backward_f32_no_axes_is_copy() {
     let plan =
         FlipBackwardPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = FlipBackwardArgs::<f32, 2> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        dx: TensorMut::new(dev_dx.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -199,16 +175,8 @@ fn flip_backward_f16_2d() {
     let plan =
         FlipBackwardPlan::<f16, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = FlipBackwardArgs::<f16, 2> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        dx: TensorMut::new(dev_dx.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -242,16 +210,8 @@ fn flip_backward_bf16_2d() {
     let plan = FlipBackwardPlan::<bf16, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let args = FlipBackwardArgs::<bf16, 2> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        dx: TensorMut::new(dev_dx.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -283,16 +243,8 @@ fn flip_backward_f64_2d() {
     let plan =
         FlipBackwardPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = FlipBackwardArgs::<f64, 2> {
-        dy: TensorRef {
-            data: dev_dy.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        dx: TensorMut {
-            data: dev_dx.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        dy: TensorRef::new(dev_dy.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        dx: TensorMut::new(dev_dx.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

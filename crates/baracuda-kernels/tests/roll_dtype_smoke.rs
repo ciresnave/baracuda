@@ -53,16 +53,8 @@ fn roll_2d_mixed_f16() {
     let plan =
         RollPlan::<f16, 2>::select(&stream, &desc, PlanPreference::default()).expect("select f16");
     let args = RollArgs::<f16, 2> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run f16");
     stream.synchronize().expect("sync");
@@ -106,16 +98,8 @@ fn roll_2d_mixed_bf16() {
     let plan = RollPlan::<bf16, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select bf16");
     let args = RollArgs::<bf16, 2> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run bf16");
     stream.synchronize().expect("sync");
@@ -157,16 +141,8 @@ fn roll_2d_mixed_f64() {
     let plan =
         RollPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default()).expect("select f64");
     let args = RollArgs::<f64, 2> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride: contiguous_stride(shape),
-        },
+        x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run f64");
     stream.synchronize().expect("sync");

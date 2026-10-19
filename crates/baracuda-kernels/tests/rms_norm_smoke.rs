@@ -135,26 +135,15 @@ fn rms_norm_f32_with_gamma() {
         &stream,
         Workspace::None,
         RMSNormArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            gamma: Some(TensorRef {
-                data: dev_gamma.as_slice(),
-                shape: [extent as i32],
-                stride: [1],
-            }),
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            rms: TensorMut {
-                data: dev_rms.as_slice_mut(),
-                shape: rms_shape,
-                stride: contiguous_stride(rms_shape),
-            },
+            x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            gamma: Some(TensorRef::new(dev_gamma.as_slice(), [extent as i32], [1]).unwrap()),
+            y: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
+            rms: TensorMut::new(
+                dev_rms.as_slice_mut(),
+                rms_shape,
+                contiguous_stride(rms_shape),
+            )
+            .unwrap(),
         },
     )
     .expect("run");
@@ -232,22 +221,15 @@ fn rms_norm_f64_no_gamma() {
         &stream,
         Workspace::None,
         RMSNormArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
             gamma: None,
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            rms: TensorMut {
-                data: dev_rms.as_slice_mut(),
-                shape: rms_shape,
-                stride: contiguous_stride(rms_shape),
-            },
+            y: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
+            rms: TensorMut::new(
+                dev_rms.as_slice_mut(),
+                rms_shape,
+                contiguous_stride(rms_shape),
+            )
+            .unwrap(),
         },
     )
     .expect("run");
@@ -312,26 +294,15 @@ fn rms_norm_f16_with_gamma() {
         &stream,
         Workspace::None,
         RMSNormArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            gamma: Some(TensorRef {
-                data: dev_gamma.as_slice(),
-                shape: [extent as i32],
-                stride: [1],
-            }),
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            rms: TensorMut {
-                data: dev_rms.as_slice_mut(),
-                shape: rms_shape,
-                stride: contiguous_stride(rms_shape),
-            },
+            x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
+            gamma: Some(TensorRef::new(dev_gamma.as_slice(), [extent as i32], [1]).unwrap()),
+            y: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
+            rms: TensorMut::new(
+                dev_rms.as_slice_mut(),
+                rms_shape,
+                contiguous_stride(rms_shape),
+            )
+            .unwrap(),
         },
     )
     .expect("run");
@@ -378,22 +349,15 @@ fn rms_norm_bf16_no_gamma() {
         &stream,
         Workspace::None,
         RMSNormArgs {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
+            x: TensorRef::new(dev_x.as_slice(), shape, contiguous_stride(shape)).unwrap(),
             gamma: None,
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape,
-                stride: contiguous_stride(shape),
-            },
-            rms: TensorMut {
-                data: dev_rms.as_slice_mut(),
-                shape: rms_shape,
-                stride: contiguous_stride(rms_shape),
-            },
+            y: TensorMut::new(dev_y.as_slice_mut(), shape, contiguous_stride(shape)).unwrap(),
+            rms: TensorMut::new(
+                dev_rms.as_slice_mut(),
+                rms_shape,
+                contiguous_stride(rms_shape),
+            )
+            .unwrap(),
         },
     )
     .expect("run");

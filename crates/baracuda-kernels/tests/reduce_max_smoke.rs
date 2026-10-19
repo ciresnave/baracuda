@@ -101,16 +101,13 @@ fn reduce_max_f32() {
     let plan =
         ReducePlan::<f32, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = ReduceArgs::<f32, 3> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape: SHAPE,
-            stride: contiguous_stride(SHAPE),
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: out_shape(),
-            stride: contiguous_stride(out_shape()),
-        },
+        x: TensorRef::new(dev_x.as_slice(), SHAPE, contiguous_stride(SHAPE)).unwrap(),
+        y: TensorMut::new(
+            dev_y.as_slice_mut(),
+            out_shape(),
+            contiguous_stride(out_shape()),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -148,16 +145,13 @@ fn reduce_max_f64() {
     let plan =
         ReducePlan::<f64, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = ReduceArgs::<f64, 3> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape: SHAPE,
-            stride: contiguous_stride(SHAPE),
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: out_shape(),
-            stride: contiguous_stride(out_shape()),
-        },
+        x: TensorRef::new(dev_x.as_slice(), SHAPE, contiguous_stride(SHAPE)).unwrap(),
+        y: TensorMut::new(
+            dev_y.as_slice_mut(),
+            out_shape(),
+            contiguous_stride(out_shape()),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -195,16 +189,13 @@ fn reduce_max_f16() {
     let plan =
         ReducePlan::<f16, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = ReduceArgs::<f16, 3> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape: SHAPE,
-            stride: contiguous_stride(SHAPE),
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: out_shape(),
-            stride: contiguous_stride(out_shape()),
-        },
+        x: TensorRef::new(dev_x.as_slice(), SHAPE, contiguous_stride(SHAPE)).unwrap(),
+        y: TensorMut::new(
+            dev_y.as_slice_mut(),
+            out_shape(),
+            contiguous_stride(out_shape()),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -244,16 +235,13 @@ fn reduce_max_bf16() {
     let plan =
         ReducePlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = ReduceArgs::<bf16, 3> {
-        x: TensorRef {
-            data: dev_x.as_slice(),
-            shape: SHAPE,
-            stride: contiguous_stride(SHAPE),
-        },
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape: out_shape(),
-            stride: contiguous_stride(out_shape()),
-        },
+        x: TensorRef::new(dev_x.as_slice(), SHAPE, contiguous_stride(SHAPE)).unwrap(),
+        y: TensorMut::new(
+            dev_y.as_slice_mut(),
+            out_shape(),
+            contiguous_stride(out_shape()),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

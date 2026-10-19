@@ -41,11 +41,7 @@ fn run_case(p: f32, seed: u64) {
     let plan = RandomPlan::<Bool, 1>::select(&stream, &desc, PlanPreference::default())
         .expect("select RandomPlan<Bool>");
     let args = RandomBoolArgs::<1> {
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
         .expect("bernoulli run");
@@ -105,11 +101,7 @@ fn bernoulli_p_zero() {
     };
     let plan = RandomPlan::<Bool, 1>::select(&stream, &desc, PlanPreference::default()).unwrap();
     let args = RandomBoolArgs::<1> {
-        y: TensorMut {
-            data: dev_y.as_slice_mut(),
-            shape,
-            stride,
-        },
+        y: TensorMut::new(dev_y.as_slice_mut(), shape, stride).unwrap(),
     };
     plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
         .unwrap();

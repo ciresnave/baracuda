@@ -161,12 +161,12 @@ impl<T: Element> RopePlan<T> {
             self.desc.seq_len,
             self.desc.head_dim,
         ];
-        if args.x.shape != want_shape {
+        if args.x.shape() != want_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::RopePlan: x shape mismatch with descriptor",
             ));
         }
-        if args.y.shape != want_shape {
+        if args.y.shape() != want_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::RopePlan: y shape mismatch with descriptor",
             ));
@@ -174,22 +174,22 @@ impl<T: Element> RopePlan<T> {
         // Phase 14.4: strided variant supports arbitrary outer strides
         // but the innermost head_dim axis MUST remain stride=1 because
         // RoPE rotates adjacent pairs (2i, 2i+1).
-        if args.x.stride[3] != 1 || args.y.stride[3] != 1 {
+        if args.x.stride()[3] != 1 || args.y.stride()[3] != 1 {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::RopePlan: head_dim axis must have stride=1 \
                  (RoPE rotates adjacent pairs)",
             ));
         }
         if let Some(ref p) = args.positions {
-            if p.shape != [self.desc.seq_len] {
+            if p.shape() != [self.desc.seq_len] {
                 return Err(Error::InvalidProblem(
                     "baracuda-kernels::RopePlan: positions shape must be [seq_len]",
                 ));
             }
-            if (p.data.len() as i64) < self.desc.seq_len as i64 {
+            if (p.data().len() as i64) < self.desc.seq_len as i64 {
                 return Err(Error::BufferTooSmall {
                     needed: self.desc.seq_len as usize,
-                    got: p.data.len(),
+                    got: p.data().len(),
                 });
             }
         }
@@ -202,10 +202,10 @@ impl<T: Element> RopePlan<T> {
         // siblings).
         if args.x.is_contiguous() && args.y.is_contiguous() {
             let numel = args.x.numel();
-            if (args.x.data.len() as i64) < numel || (args.y.data.len() as i64) < numel {
+            if (args.x.data().len() as i64) < numel || (args.y.data().len() as i64) < numel {
                 return Err(Error::BufferTooSmall {
                     needed: numel as usize,
-                    got: args.x.data.len().min(args.y.data.len()),
+                    got: args.x.data().len().min(args.y.data().len()),
                 });
             }
         }
@@ -249,10 +249,10 @@ impl<T: Element> RopePlan<T> {
             return Ok(());
         }
         let stream_ptr = stream.as_raw();
-        let x_ptr = args.x.data.as_raw().0 as *const c_void;
-        let y_ptr = args.y.data.as_raw().0 as *mut c_void;
+        let x_ptr = args.x.data().as_raw().0 as *const c_void;
+        let y_ptr = args.y.data().as_raw().0 as *mut c_void;
         let (pos_ptr, pos_default_flag) = match &args.positions {
-            Some(p) => (p.data.as_raw().0 as *const c_void, 0i32),
+            Some(p) => (p.data().as_raw().0 as *const c_void, 0i32),
             None => (core::ptr::null::<c_void>(), 1i32),
         };
 
@@ -326,12 +326,12 @@ impl<T: Element> RopePlan<T> {
             } else {
                 // Strided sibling. Pass per-outer-dim strides for x and y.
                 // head_dim axis stride is implicitly 1 (enforced above).
-                let sxb = args.x.stride[0];
-                let sxh = args.x.stride[1];
-                let sxs = args.x.stride[2];
-                let syb = args.y.stride[0];
-                let syh = args.y.stride[1];
-                let sys = args.y.stride[2];
+                let sxb = args.x.stride()[0];
+                let sxh = args.x.stride()[1];
+                let sxs = args.x.stride()[2];
+                let syb = args.y.stride()[0];
+                let syh = args.y.stride()[1];
+                let sys = args.y.stride()[2];
                 match T::KIND {
                     ElementKind::F32 => {
                         baracuda_kernels_sys::baracuda_kernels_rope_f32_strided_run(

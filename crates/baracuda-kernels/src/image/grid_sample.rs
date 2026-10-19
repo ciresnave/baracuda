@@ -129,17 +129,17 @@ impl<T: Element> GridSamplePlan<T> {
         crate::view_check::check_fits(&args.input)?;
         crate::view_check::check_fits(&args.grid)?;
         crate::view_check::check_fits(&args.output)?;
-        if args.input.shape != [self.desc.n, self.desc.c, self.desc.ih, self.desc.iw] {
+        if args.input.shape() != [self.desc.n, self.desc.c, self.desc.ih, self.desc.iw] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::GridSamplePlan: input shape mismatch",
             ));
         }
-        if args.grid.shape != [self.desc.n, self.desc.oh, self.desc.ow, 2] {
+        if args.grid.shape() != [self.desc.n, self.desc.oh, self.desc.ow, 2] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::GridSamplePlan: grid shape must be [N, OH, OW, 2]",
             ));
         }
-        if args.output.shape != [self.desc.n, self.desc.c, self.desc.oh, self.desc.ow] {
+        if args.output.shape() != [self.desc.n, self.desc.c, self.desc.oh, self.desc.ow] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::GridSamplePlan: output shape mismatch",
             ));
@@ -176,9 +176,9 @@ impl<T: Element> GridSamplePlan<T> {
         if args.output.numel() == 0 {
             return Ok(());
         }
-        let input_ptr = args.input.data.as_raw().0 as *const c_void;
-        let grid_ptr = args.grid.data.as_raw().0 as *const c_void;
-        let out_ptr = args.output.data.as_raw().0 as *mut c_void;
+        let input_ptr = args.input.data().as_raw().0 as *const c_void;
+        let grid_ptr = args.grid.data().as_raw().0 as *const c_void;
+        let out_ptr = args.output.data().as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw();
         let status = match T::KIND {
             ElementKind::F32 => unsafe {

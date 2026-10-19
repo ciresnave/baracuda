@@ -96,26 +96,30 @@ fn sparse24_throughput_smoke_documentation() {
         &stream,
         Workspace::Borrowed(dws.as_slice_mut()),
         GemmSparse24Args {
-            w_compressed: TensorRef {
-                data: dwc.as_slice(),
-                shape: [M_DIM, K_DIM / 2],
-                stride: contiguous_stride([M_DIM, K_DIM / 2]),
-            },
-            w_metadata: TensorRef {
-                data: dwm.as_slice(),
-                shape: [M_DIM, K_DIM / 8],
-                stride: contiguous_stride([M_DIM, K_DIM / 8]),
-            },
-            x: TensorRef {
-                data: dx.as_slice(),
-                shape: [N_DIM, K_DIM],
-                stride: contiguous_stride([N_DIM, K_DIM]),
-            },
-            y: TensorMut {
-                data: dy.as_slice_mut(),
-                shape: [N_DIM, M_DIM],
-                stride: contiguous_stride([N_DIM, M_DIM]),
-            },
+            w_compressed: TensorRef::new(
+                dwc.as_slice(),
+                [M_DIM, K_DIM / 2],
+                contiguous_stride([M_DIM, K_DIM / 2]),
+            )
+            .unwrap(),
+            w_metadata: TensorRef::new(
+                dwm.as_slice(),
+                [M_DIM, K_DIM / 8],
+                contiguous_stride([M_DIM, K_DIM / 8]),
+            )
+            .unwrap(),
+            x: TensorRef::new(
+                dx.as_slice(),
+                [N_DIM, K_DIM],
+                contiguous_stride([N_DIM, K_DIM]),
+            )
+            .unwrap(),
+            y: TensorMut::new(
+                dy.as_slice_mut(),
+                [N_DIM, M_DIM],
+                contiguous_stride([N_DIM, M_DIM]),
+            )
+            .unwrap(),
         },
     )
     .expect("warmup run");
@@ -131,26 +135,30 @@ fn sparse24_throughput_smoke_documentation() {
             &stream,
             Workspace::Borrowed(dws.as_slice_mut()),
             GemmSparse24Args {
-                w_compressed: TensorRef {
-                    data: dwc.as_slice(),
-                    shape: [M_DIM, K_DIM / 2],
-                    stride: contiguous_stride([M_DIM, K_DIM / 2]),
-                },
-                w_metadata: TensorRef {
-                    data: dwm.as_slice(),
-                    shape: [M_DIM, K_DIM / 8],
-                    stride: contiguous_stride([M_DIM, K_DIM / 8]),
-                },
-                x: TensorRef {
-                    data: dx.as_slice(),
-                    shape: [N_DIM, K_DIM],
-                    stride: contiguous_stride([N_DIM, K_DIM]),
-                },
-                y: TensorMut {
-                    data: dy.as_slice_mut(),
-                    shape: [N_DIM, M_DIM],
-                    stride: contiguous_stride([N_DIM, M_DIM]),
-                },
+                w_compressed: TensorRef::new(
+                    dwc.as_slice(),
+                    [M_DIM, K_DIM / 2],
+                    contiguous_stride([M_DIM, K_DIM / 2]),
+                )
+                .unwrap(),
+                w_metadata: TensorRef::new(
+                    dwm.as_slice(),
+                    [M_DIM, K_DIM / 8],
+                    contiguous_stride([M_DIM, K_DIM / 8]),
+                )
+                .unwrap(),
+                x: TensorRef::new(
+                    dx.as_slice(),
+                    [N_DIM, K_DIM],
+                    contiguous_stride([N_DIM, K_DIM]),
+                )
+                .unwrap(),
+                y: TensorMut::new(
+                    dy.as_slice_mut(),
+                    [N_DIM, M_DIM],
+                    contiguous_stride([N_DIM, M_DIM]),
+                )
+                .unwrap(),
             },
         )
         .expect("run");

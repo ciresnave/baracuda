@@ -142,21 +142,9 @@ fn conv_transpose2d_f32_fw() {
             Workspace::Borrowed(dev_ws.as_slice_mut())
         },
         ConvTranspose2dArgs::<f32> {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape: x_shape,
-                stride: contiguous_stride(x_shape),
-            },
-            w: TensorRef {
-                data: dev_w.as_slice(),
-                shape: w_shape,
-                stride: contiguous_stride(w_shape),
-            },
-            y: TensorMut {
-                data: dev_y.as_slice_mut(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
+            x: TensorRef::new(dev_x.as_slice(), x_shape, contiguous_stride(x_shape)).unwrap(),
+            w: TensorRef::new(dev_w.as_slice(), w_shape, contiguous_stride(w_shape)).unwrap(),
+            y: TensorMut::new(dev_y.as_slice_mut(), y_shape, contiguous_stride(y_shape)).unwrap(),
         },
     )
     .expect("run_fw");
@@ -228,21 +216,9 @@ fn conv_transpose2d_f32_bw_directions_run() {
             Workspace::Borrowed(dev_ws_bd.as_slice_mut())
         },
         ConvTranspose2dBwArgs::<f32> {
-            w: TensorRef {
-                data: dev_w.as_slice(),
-                shape: w_shape,
-                stride: contiguous_stride(w_shape),
-            },
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
-            dx: TensorMut {
-                data: dev_dx.as_slice_mut(),
-                shape: x_shape,
-                stride: contiguous_stride(x_shape),
-            },
+            w: TensorRef::new(dev_w.as_slice(), w_shape, contiguous_stride(w_shape)).unwrap(),
+            dy: TensorRef::new(dev_dy.as_slice(), y_shape, contiguous_stride(y_shape)).unwrap(),
+            dx: TensorMut::new(dev_dx.as_slice_mut(), x_shape, contiguous_stride(x_shape)).unwrap(),
         },
     )
     .expect("run_bw_data");
@@ -268,21 +244,9 @@ fn conv_transpose2d_f32_bw_directions_run() {
             Workspace::Borrowed(dev_ws_bf.as_slice_mut())
         },
         ConvTranspose2dDwArgs::<f32> {
-            x: TensorRef {
-                data: dev_x.as_slice(),
-                shape: x_shape,
-                stride: contiguous_stride(x_shape),
-            },
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape: y_shape,
-                stride: contiguous_stride(y_shape),
-            },
-            dw: TensorMut {
-                data: dev_dw.as_slice_mut(),
-                shape: w_shape,
-                stride: contiguous_stride(w_shape),
-            },
+            x: TensorRef::new(dev_x.as_slice(), x_shape, contiguous_stride(x_shape)).unwrap(),
+            dy: TensorRef::new(dev_dy.as_slice(), y_shape, contiguous_stride(y_shape)).unwrap(),
+            dw: TensorMut::new(dev_dw.as_slice_mut(), w_shape, contiguous_stride(w_shape)).unwrap(),
         },
     )
     .expect("run_dw");

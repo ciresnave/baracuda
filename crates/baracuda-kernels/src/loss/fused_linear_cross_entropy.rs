@@ -352,17 +352,17 @@ impl<T: Element> FusedLinearCrossEntropyPlan<T> {
         let bt = self.desc.bt;
         let h = self.desc.h;
         let v = self.desc.v;
-        if args.input.shape != [bt, h] {
+        if args.input.shape() != [bt, h] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FusedLinearCrossEntropyPlan: input shape != [bt, h]",
             ));
         }
-        if args.weight.shape != [v, h] {
+        if args.weight.shape() != [v, h] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FusedLinearCrossEntropyPlan: weight shape != [v, h]",
             ));
         }
-        if args.target.shape != [bt] {
+        if args.target.shape() != [bt] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FusedLinearCrossEntropyPlan: target shape != [bt]",
             ));
@@ -378,21 +378,21 @@ impl<T: Element> FusedLinearCrossEntropyPlan<T> {
             LossReduction::None => bt,
             LossReduction::Mean | LossReduction::Sum => 1,
         };
-        if args.out.shape != [expected_out_n] {
+        if args.out.shape() != [expected_out_n] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FusedLinearCrossEntropyPlan: out shape mismatch (expected \
                  [BT] for None or [1] for Mean/Sum)",
             ));
         }
         if let Some(ref gi) = args.grad_input {
-            if gi.shape != [bt, h] {
+            if gi.shape() != [bt, h] {
                 return Err(Error::InvalidProblem(
                     "baracuda-kernels::FusedLinearCrossEntropyPlan: grad_input shape != [bt, h]",
                 ));
             }
         }
         if let Some(ref gw) = args.grad_weight {
-            if gw.shape != [v, h] {
+            if gw.shape() != [v, h] {
                 return Err(Error::InvalidProblem(
                     "baracuda-kernels::FusedLinearCrossEntropyPlan: grad_weight shape != [v, h]",
                 ));
@@ -461,28 +461,28 @@ impl<T: Element> FusedLinearCrossEntropyPlan<T> {
 
         // Raw pointers for the GEMM dispatch — kept here so the loop
         // body stays readable.
-        let input_ptr_base = args.input.data.as_raw().0 as *const c_void;
-        let weight_ptr = args.weight.data.as_raw().0 as *const c_void;
-        let target_ptr = args.target.data.as_raw().0 as *const c_void;
+        let input_ptr_base = args.input.data().as_raw().0 as *const c_void;
+        let weight_ptr = args.weight.data().as_raw().0 as *const c_void;
+        let target_ptr = args.target.data().as_raw().0 as *const c_void;
         let logits_ptr = logits_scratch.as_slice_mut().as_raw().0 as *mut c_void;
         let loss_1d_ptr = loss_1d.as_slice_mut().as_raw().0 as *mut c_void;
         let grad_input_ptr_base = args
             .grad_input
             .as_ref()
-            .map(|gi| gi.data.as_raw().0 as *mut c_void)
+            .map(|gi| gi.data().as_raw().0 as *mut c_void)
             .unwrap_or(core::ptr::null_mut());
         let grad_weight_ptr = args
             .grad_weight
             .as_ref()
-            .map(|gw| gw.data.as_raw().0 as *mut c_void)
+            .map(|gw| gw.data().as_raw().0 as *mut c_void)
             .unwrap_or(core::ptr::null_mut());
 
         let elem_t = core::mem::size_of::<T>() as isize;
-        let input_row_stride_elems = args.input.stride[0] as isize;
+        let input_row_stride_elems = args.input.stride()[0] as isize;
         let grad_input_row_stride_elems = args
             .grad_input
             .as_ref()
-            .map(|gi| gi.stride[0] as isize)
+            .map(|gi| gi.stride()[0] as isize)
             .unwrap_or(0);
 
         for chunk_id in 0..n_chunks {
@@ -734,7 +734,7 @@ impl<T: Element> FusedLinearCrossEntropyPlan<T> {
         }
 
         // ---- 5. Finalize: loss_1d → scalar / per-row out ----------------
-        let out_ptr = args.out.data.as_raw().0 as *mut c_void;
+        let out_ptr = args.out.data().as_raw().0 as *mut c_void;
         let bt_i64 = bt as i64;
         let status = match self.desc.reduction {
             LossReduction::None => unsafe {
@@ -886,7 +886,7 @@ impl<T: Element> FusedLinearCrossEntropyPlan<T> {
             baracuda_kernels_sys::baracuda_kernels_loss_flce_count_non_ignore_run(
                 bt,
                 self.desc.ignore_index,
-                target.data.as_raw().0 as *const c_void,
+                target.data().as_raw().0 as *const c_void,
                 count_dev.as_slice_mut().as_raw().0 as *mut c_void,
                 stream.as_raw(),
             )
@@ -913,7 +913,7 @@ impl<T: Element> FusedLinearCrossEntropyPlan<T> {
         use baracuda_driver::memory::memset_u8_async;
         let out_bytes = args.out.numel() as usize * core::mem::size_of::<T>();
         if out_bytes > 0 {
-            memset_u8_async(args.out.data.as_raw(), 0, out_bytes, stream).map_err(|_| {
+            memset_u8_async(args.out.data().as_raw(), 0, out_bytes, stream).map_err(|_| {
                 Error::InvalidProblem(
                     "baracuda-kernels::FusedLinearCrossEntropyPlan: zero out failed",
                 )
@@ -922,7 +922,7 @@ impl<T: Element> FusedLinearCrossEntropyPlan<T> {
         if let Some(ref gi) = args.grad_input {
             let bytes = gi.numel() as usize * core::mem::size_of::<T>();
             if bytes > 0 {
-                memset_u8_async(gi.data.as_raw(), 0, bytes, stream).map_err(|_| {
+                memset_u8_async(gi.data().as_raw(), 0, bytes, stream).map_err(|_| {
                     Error::InvalidProblem(
                         "baracuda-kernels::FusedLinearCrossEntropyPlan: zero grad_input failed",
                     )
@@ -1132,7 +1132,7 @@ impl<T: Element> FusedLinearCrossEntropyBackwardPlan<T> {
                         baracuda_kernels_sys::baracuda_kernels_loss_flce_inplace_scale_f32_run(
                             numel,
                             dy_scalar_f32,
-                            gi.data.as_raw().0 as *mut c_void,
+                            gi.data().as_raw().0 as *mut c_void,
                             stream.as_raw(),
                         )
                     }
@@ -1140,7 +1140,7 @@ impl<T: Element> FusedLinearCrossEntropyBackwardPlan<T> {
                         baracuda_kernels_sys::baracuda_kernels_loss_flce_inplace_scale_f16_run(
                             numel,
                             dy_scalar_f32,
-                            gi.data.as_raw().0 as *mut c_void,
+                            gi.data().as_raw().0 as *mut c_void,
                             stream.as_raw(),
                         )
                     }
@@ -1148,7 +1148,7 @@ impl<T: Element> FusedLinearCrossEntropyBackwardPlan<T> {
                         baracuda_kernels_sys::baracuda_kernels_loss_flce_inplace_scale_bf16_run(
                             numel,
                             dy_scalar_f32,
-                            gi.data.as_raw().0 as *mut c_void,
+                            gi.data().as_raw().0 as *mut c_void,
                             stream.as_raw(),
                         )
                     }
@@ -1156,7 +1156,7 @@ impl<T: Element> FusedLinearCrossEntropyBackwardPlan<T> {
                         baracuda_kernels_sys::baracuda_kernels_loss_flce_inplace_scale_f64_run(
                             numel,
                             dy_scalar_f32,
-                            gi.data.as_raw().0 as *mut c_void,
+                            gi.data().as_raw().0 as *mut c_void,
                             stream.as_raw(),
                         )
                     }
@@ -1175,7 +1175,7 @@ impl<T: Element> FusedLinearCrossEntropyBackwardPlan<T> {
                         baracuda_kernels_sys::baracuda_kernels_loss_flce_inplace_scale_f32_run(
                             numel,
                             dy_scalar_f32,
-                            gw.data.as_raw().0 as *mut c_void,
+                            gw.data().as_raw().0 as *mut c_void,
                             stream.as_raw(),
                         )
                     }
@@ -1183,7 +1183,7 @@ impl<T: Element> FusedLinearCrossEntropyBackwardPlan<T> {
                         baracuda_kernels_sys::baracuda_kernels_loss_flce_inplace_scale_f16_run(
                             numel,
                             dy_scalar_f32,
-                            gw.data.as_raw().0 as *mut c_void,
+                            gw.data().as_raw().0 as *mut c_void,
                             stream.as_raw(),
                         )
                     }
@@ -1191,7 +1191,7 @@ impl<T: Element> FusedLinearCrossEntropyBackwardPlan<T> {
                         baracuda_kernels_sys::baracuda_kernels_loss_flce_inplace_scale_bf16_run(
                             numel,
                             dy_scalar_f32,
-                            gw.data.as_raw().0 as *mut c_void,
+                            gw.data().as_raw().0 as *mut c_void,
                             stream.as_raw(),
                         )
                     }
@@ -1199,7 +1199,7 @@ impl<T: Element> FusedLinearCrossEntropyBackwardPlan<T> {
                         baracuda_kernels_sys::baracuda_kernels_loss_flce_inplace_scale_f64_run(
                             numel,
                             dy_scalar_f32,
-                            gw.data.as_raw().0 as *mut c_void,
+                            gw.data().as_raw().0 as *mut c_void,
                             stream.as_raw(),
                         )
                     }

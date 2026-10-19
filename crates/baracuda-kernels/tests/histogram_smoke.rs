@@ -44,16 +44,18 @@ fn histogram_f32_basic() {
         &stream,
         Workspace::None,
         HistogramArgs::<f32> {
-            input: TensorRef {
-                data: dev_in.as_slice(),
-                shape: [numel as i32],
-                stride: contiguous_stride([numel as i32]),
-            },
-            output: TensorMut {
-                data: dev_out.as_slice_mut(),
-                shape: [num_bins],
-                stride: contiguous_stride([num_bins]),
-            },
+            input: TensorRef::new(
+                dev_in.as_slice(),
+                [numel as i32],
+                contiguous_stride([numel as i32]),
+            )
+            .unwrap(),
+            output: TensorMut::new(
+                dev_out.as_slice_mut(),
+                [num_bins],
+                contiguous_stride([num_bins]),
+            )
+            .unwrap(),
         },
     )
     .expect("run");
@@ -96,16 +98,18 @@ fn bincount_i32_basic() {
         &stream,
         Workspace::None,
         BincountArgs::<i32> {
-            input: TensorRef {
-                data: dev_in.as_slice(),
-                shape: [input.len() as i32],
-                stride: contiguous_stride([input.len() as i32]),
-            },
-            output: TensorMut {
-                data: dev_out.as_slice_mut(),
-                shape: [num_bins],
-                stride: contiguous_stride([num_bins]),
-            },
+            input: TensorRef::new(
+                dev_in.as_slice(),
+                [input.len() as i32],
+                contiguous_stride([input.len() as i32]),
+            )
+            .unwrap(),
+            output: TensorMut::new(
+                dev_out.as_slice_mut(),
+                [num_bins],
+                contiguous_stride([num_bins]),
+            )
+            .unwrap(),
         },
     )
     .expect("run");

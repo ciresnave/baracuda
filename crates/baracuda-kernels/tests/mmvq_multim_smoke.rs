@@ -116,21 +116,24 @@ fn run_for_m(m: i32) {
 
     let weight_bytes_len = host_w.len() as i32;
     let args = GgufMmvqMultiMArgs::<f32> {
-        weight: TensorRef {
-            data: dev_w.as_slice(),
-            shape: [weight_bytes_len],
-            stride: contiguous_stride([weight_bytes_len]),
-        },
-        activations: TensorRef {
-            data: dev_act.as_slice(),
-            shape: [m, ncols],
-            stride: contiguous_stride([m, ncols]),
-        },
-        output: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: [m, nrows],
-            stride: contiguous_stride([m, nrows]),
-        },
+        weight: TensorRef::new(
+            dev_w.as_slice(),
+            [weight_bytes_len],
+            contiguous_stride([weight_bytes_len]),
+        )
+        .unwrap(),
+        activations: TensorRef::new(
+            dev_act.as_slice(),
+            [m, ncols],
+            contiguous_stride([m, ncols]),
+        )
+        .unwrap(),
+        output: TensorMut::new(
+            dev_out.as_slice_mut(),
+            [m, nrows],
+            contiguous_stride([m, nrows]),
+        )
+        .unwrap(),
     };
     plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
         .expect("multim run");
@@ -264,21 +267,24 @@ fn run_per_format(fmt: GgufBlockFormat, m: i32) {
 
     let weight_bytes_len = host_w.len() as i32;
     let args_multim = GgufMmvqMultiMArgs::<f32> {
-        weight: TensorRef {
-            data: dev_w.as_slice(),
-            shape: [weight_bytes_len],
-            stride: contiguous_stride([weight_bytes_len]),
-        },
-        activations: TensorRef {
-            data: dev_act.as_slice(),
-            shape: [m, ncols],
-            stride: contiguous_stride([m, ncols]),
-        },
-        output: TensorMut {
-            data: dev_out_multim.as_slice_mut(),
-            shape: [m, nrows],
-            stride: contiguous_stride([m, nrows]),
-        },
+        weight: TensorRef::new(
+            dev_w.as_slice(),
+            [weight_bytes_len],
+            contiguous_stride([weight_bytes_len]),
+        )
+        .unwrap(),
+        activations: TensorRef::new(
+            dev_act.as_slice(),
+            [m, ncols],
+            contiguous_stride([m, ncols]),
+        )
+        .unwrap(),
+        output: TensorMut::new(
+            dev_out_multim.as_slice_mut(),
+            [m, nrows],
+            contiguous_stride([m, nrows]),
+        )
+        .unwrap(),
     };
     plan_multim
         .run(
@@ -312,21 +318,20 @@ fn run_per_format(fmt: GgufBlockFormat, m: i32) {
         let mi_act = &host_act[(mi * ncols) as usize..((mi + 1) * ncols) as usize];
         let dev_act_mi = DeviceBuffer::from_slice(&ctx, mi_act).expect("up act_mi");
         let args_1 = GgufMmvqArgs::<f32> {
-            weight: TensorRef {
-                data: dev_w.as_slice(),
-                shape: [weight_bytes_len],
-                stride: contiguous_stride([weight_bytes_len]),
-            },
-            activation: TensorRef {
-                data: dev_act_mi.as_slice(),
-                shape: [ncols],
-                stride: contiguous_stride([ncols]),
-            },
-            output: TensorMut {
-                data: dev_out_1.as_slice_mut(),
-                shape: [nrows],
-                stride: contiguous_stride([nrows]),
-            },
+            weight: TensorRef::new(
+                dev_w.as_slice(),
+                [weight_bytes_len],
+                contiguous_stride([weight_bytes_len]),
+            )
+            .unwrap(),
+            activation: TensorRef::new(dev_act_mi.as_slice(), [ncols], contiguous_stride([ncols]))
+                .unwrap(),
+            output: TensorMut::new(
+                dev_out_1.as_slice_mut(),
+                [nrows],
+                contiguous_stride([nrows]),
+            )
+            .unwrap(),
         };
         plan_base
             .run(&stream, Workspace::None, args_1)

@@ -345,17 +345,17 @@ impl<T: Element> BatchedOrmqrWyPlan<T> {
         let m = self.desc.m;
         let n = self.desc.n;
         let k = self.desc.k;
-        if args.a.shape != [b, m, k] {
+        if args.a.shape() != [b, m, k] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::BatchedOrmqrWyPlan: A shape != [batch, M, K]",
             ));
         }
-        if args.tau.shape != [b, k] {
+        if args.tau.shape() != [b, k] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::BatchedOrmqrWyPlan: tau shape != [batch, K]",
             ));
         }
-        if args.c.shape != [b, m, n] {
+        if args.c.shape() != [b, m, n] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::BatchedOrmqrWyPlan: C shape != [batch, M, N]",
             ));
@@ -474,9 +474,9 @@ macro_rules! impl_batched_ormqr_wy_run {
                 debug_assert_eq!(needed, (t_elems + v_elems + w_elems + w2_elems) * elem);
                 let _ = w2_elems; // used implicitly via ws-bytes accounting above
 
-                let a_ptr_v = args.a.data.as_raw().0 as *const c_void;
-                let tau_ptr_v = args.tau.data.as_raw().0 as *const c_void;
-                let c_ptr = args.c.data.as_raw().0 as *mut $CublasT;
+                let a_ptr_v = args.a.data().as_raw().0 as *const c_void;
+                let tau_ptr_v = args.tau.data().as_raw().0 as *const c_void;
+                let c_ptr = args.c.data().as_raw().0 as *mut $CublasT;
                 let stream_ptr = stream.as_raw();
 
                 // ----- Step 1: build T for every block in one launch ---------

@@ -127,12 +127,12 @@ impl PerRowSamplingPlan {
             crate::view_check::check_fits(t)?;
         }
         let b = self.desc.batch_size;
-        if args.probs.shape != [b, self.desc.vocab_size] {
+        if args.probs.shape() != [b, self.desc.vocab_size] {
             return Err(Error::InvalidProblem(
                 "PerRowSamplingPlan: probs shape must be [batch, vocab]",
             ));
         }
-        if args.output.shape != [b] {
+        if args.output.shape() != [b] {
             return Err(Error::InvalidProblem(
                 "PerRowSamplingPlan: output shape must be [batch]",
             ));
@@ -162,28 +162,28 @@ impl PerRowSamplingPlan {
             ));
         }
         if let Some(t) = &args.top_k_arr {
-            if t.shape != [b] {
+            if t.shape() != [b] {
                 return Err(Error::InvalidProblem(
                     "PerRowSamplingPlan: top_k_arr must be [batch]",
                 ));
             }
         }
         if let Some(t) = &args.top_p_arr {
-            if t.shape != [b] {
+            if t.shape() != [b] {
                 return Err(Error::InvalidProblem(
                     "PerRowSamplingPlan: top_p_arr must be [batch]",
                 ));
             }
         }
         if let Some(t) = &args.min_p_arr {
-            if t.shape != [b] {
+            if t.shape() != [b] {
                 return Err(Error::InvalidProblem(
                     "PerRowSamplingPlan: min_p_arr must be [batch]",
                 ));
             }
         }
         if let Some(v) = &args.valid {
-            if v.shape != [b] {
+            if v.shape() != [b] {
                 return Err(Error::InvalidProblem(
                     "PerRowSamplingPlan: valid must be [batch]",
                 ));
@@ -233,10 +233,10 @@ impl PerRowSamplingPlan {
         #[cfg(feature = "flashinfer")]
         {
             let stream_ptr = stream.as_raw() as *mut c_void;
-            let probs_ptr = args.probs.data.as_raw().0 as *const c_void;
-            let output_ptr = args.output.data.as_raw().0 as *mut c_void;
+            let probs_ptr = args.probs.data().as_raw().0 as *const c_void;
+            let output_ptr = args.output.data().as_raw().0 as *mut c_void;
             let valid_ptr = match &args.valid {
-                Some(v) => v.data.as_raw().0 as *mut c_void,
+                Some(v) => v.data().as_raw().0 as *mut c_void,
                 None => core::ptr::null_mut::<c_void>(),
             };
             let det = if self.desc.deterministic { 1 } else { 0 };
@@ -244,19 +244,19 @@ impl PerRowSamplingPlan {
                 .top_k_arr
                 .as_ref()
                 .map_or(core::ptr::null::<c_void>(), |t| {
-                    t.data.as_raw().0 as *const c_void
+                    t.data().as_raw().0 as *const c_void
                 });
             let p_ptr = args
                 .top_p_arr
                 .as_ref()
                 .map_or(core::ptr::null::<c_void>(), |t| {
-                    t.data.as_raw().0 as *const c_void
+                    t.data().as_raw().0 as *const c_void
                 });
             let mp_ptr = args
                 .min_p_arr
                 .as_ref()
                 .map_or(core::ptr::null::<c_void>(), |t| {
-                    t.data.as_raw().0 as *const c_void
+                    t.data().as_raw().0 as *const c_void
                 });
 
             let status = match self.desc.sampler {
@@ -400,28 +400,28 @@ impl SpeculativeSamplingPlan {
         crate::view_check::check_fits(&args.output_accepted_token_num)?;
         crate::view_check::check_fits(&args.output_emitted_draft_token_num)?;
         let d = &self.desc;
-        if args.draft_probs.shape != [d.batch_size, d.num_speculative_tokens, d.vocab_size] {
+        if args.draft_probs.shape() != [d.batch_size, d.num_speculative_tokens, d.vocab_size] {
             return Err(Error::InvalidProblem(
                 "SpeculativeSamplingPlan: draft_probs shape",
             ));
         }
-        if args.draft_token_ids.shape != [d.batch_size, d.num_speculative_tokens] {
+        if args.draft_token_ids.shape() != [d.batch_size, d.num_speculative_tokens] {
             return Err(Error::InvalidProblem(
                 "SpeculativeSamplingPlan: draft_token_ids shape",
             ));
         }
-        if args.target_probs.shape != [d.batch_size, d.num_speculative_tokens + 1, d.vocab_size] {
+        if args.target_probs.shape() != [d.batch_size, d.num_speculative_tokens + 1, d.vocab_size] {
             return Err(Error::InvalidProblem(
                 "SpeculativeSamplingPlan: target_probs shape",
             ));
         }
-        if args.output_token_ids.shape != [d.batch_size, d.num_speculative_tokens + 1] {
+        if args.output_token_ids.shape() != [d.batch_size, d.num_speculative_tokens + 1] {
             return Err(Error::InvalidProblem(
                 "SpeculativeSamplingPlan: output_token_ids shape",
             ));
         }
-        if args.output_accepted_token_num.shape != [d.batch_size]
-            || args.output_emitted_draft_token_num.shape != [d.batch_size]
+        if args.output_accepted_token_num.shape() != [d.batch_size]
+            || args.output_emitted_draft_token_num.shape() != [d.batch_size]
         {
             return Err(Error::InvalidProblem(
                 "SpeculativeSamplingPlan: output count arrays must be [batch]",
@@ -483,12 +483,12 @@ impl SpeculativeSamplingPlan {
                     if self.desc.deterministic { 1 } else { 0 },
                     args.seed_val,
                     args.offset_val,
-                    args.draft_probs.data.as_raw().0 as *const c_void,
-                    args.draft_token_ids.data.as_raw().0 as *const c_void,
-                    args.target_probs.data.as_raw().0 as *const c_void,
-                    args.output_token_ids.data.as_raw().0 as *mut c_void,
-                    args.output_accepted_token_num.data.as_raw().0 as *mut c_void,
-                    args.output_emitted_draft_token_num.data.as_raw().0 as *mut c_void,
+                    args.draft_probs.data().as_raw().0 as *const c_void,
+                    args.draft_token_ids.data().as_raw().0 as *const c_void,
+                    args.target_probs.data().as_raw().0 as *const c_void,
+                    args.output_token_ids.data().as_raw().0 as *mut c_void,
+                    args.output_accepted_token_num.data().as_raw().0 as *mut c_void,
+                    args.output_emitted_draft_token_num.data().as_raw().0 as *mut c_void,
                     stream_ptr,
                 )
             };

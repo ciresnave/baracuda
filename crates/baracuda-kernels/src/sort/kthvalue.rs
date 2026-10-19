@@ -127,17 +127,17 @@ impl<T: Element> KthvaluePlan<T> {
         crate::view_check::check_fits(&args.input)?;
         crate::view_check::check_fits(&args.values)?;
         crate::view_check::check_fits(&args.indices)?;
-        if args.input.shape != [self.desc.batch, self.desc.row_len] {
+        if args.input.shape() != [self.desc.batch, self.desc.row_len] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::KthvaluePlan: input shape != [batch, row_len]",
             ));
         }
-        if args.values.shape != [self.desc.batch] {
+        if args.values.shape() != [self.desc.batch] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::KthvaluePlan: values shape != [batch]",
             ));
         }
-        if args.indices.shape != [self.desc.batch] {
+        if args.indices.shape() != [self.desc.batch] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::KthvaluePlan: indices shape != [batch]",
             ));
@@ -205,16 +205,16 @@ impl<T: Element> KthvaluePlan<T> {
 
         let topk_args = TopkArgs::<T> {
             input: args.input,
-            values: TensorMut {
-                data: topk_vals.as_slice_mut(),
-                shape: [self.desc.batch, kp1],
-                stride: contiguous_stride([self.desc.batch, kp1]),
-            },
-            indices: TensorMut {
-                data: topk_idx.as_slice_mut(),
-                shape: [self.desc.batch, kp1],
-                stride: contiguous_stride([self.desc.batch, kp1]),
-            },
+            values: crate::view_check::valid(TensorMut::new(
+                topk_vals.as_slice_mut(),
+                [self.desc.batch, kp1],
+                contiguous_stride([self.desc.batch, kp1]),
+            ))?,
+            indices: crate::view_check::valid(TensorMut::new(
+                topk_idx.as_slice_mut(),
+                [self.desc.batch, kp1],
+                contiguous_stride([self.desc.batch, kp1]),
+            ))?,
         };
         topk_plan.run(stream, Workspace::None, topk_args)?;
         stream
@@ -266,13 +266,13 @@ impl<T: Element> KthvaluePlan<T> {
 
         unsafe {
             copy_h2d_async(
-                args.values.data.as_raw().0 as *mut c_void,
+                args.values.data().as_raw().0 as *mut c_void,
                 out_vals.as_ptr() as *const c_void,
                 out_val_bytes,
                 stream,
             )?;
             copy_h2d_async(
-                args.indices.data.as_raw().0 as *mut c_void,
+                args.indices.data().as_raw().0 as *mut c_void,
                 out_idx.as_ptr() as *const c_void,
                 out_idx_bytes,
                 stream,

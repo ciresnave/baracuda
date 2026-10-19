@@ -93,26 +93,11 @@ fn loss_multi_margin_backward_f32_mean() {
         &stream,
         Workspace::None,
         MultiMarginLossBackwardArgs {
-            input: TensorRef {
-                data: dev_in.as_slice(),
-                shape: [n as i32, c as i32],
-                stride: [c as i64, 1],
-            },
-            target: TensorRef {
-                data: dev_t.as_slice(),
-                shape: [n as i32, 1],
-                stride: [1, 1],
-            },
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape: [1, 1],
-                stride: [1, 1],
-            },
-            dinput: TensorMut {
-                data: dev_dx.as_slice_mut(),
-                shape: [n as i32, c as i32],
-                stride: [c as i64, 1],
-            },
+            input: TensorRef::new(dev_in.as_slice(), [n as i32, c as i32], [c as i64, 1]).unwrap(),
+            target: TensorRef::new(dev_t.as_slice(), [n as i32, 1], [1, 1]).unwrap(),
+            dy: TensorRef::new(dev_dy.as_slice(), [1, 1], [1, 1]).unwrap(),
+            dinput: TensorMut::new(dev_dx.as_slice_mut(), [n as i32, c as i32], [c as i64, 1])
+                .unwrap(),
         },
     )
     .unwrap();
@@ -160,26 +145,11 @@ fn loss_multi_margin_backward_f64_mean() {
         &stream,
         Workspace::None,
         MultiMarginLossBackwardArgs {
-            input: TensorRef {
-                data: dev_in.as_slice(),
-                shape: [n as i32, c as i32],
-                stride: [c as i64, 1],
-            },
-            target: TensorRef {
-                data: dev_t.as_slice(),
-                shape: [n as i32, 1],
-                stride: [1, 1],
-            },
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape: [1, 1],
-                stride: [1, 1],
-            },
-            dinput: TensorMut {
-                data: dev_dx.as_slice_mut(),
-                shape: [n as i32, c as i32],
-                stride: [c as i64, 1],
-            },
+            input: TensorRef::new(dev_in.as_slice(), [n as i32, c as i32], [c as i64, 1]).unwrap(),
+            target: TensorRef::new(dev_t.as_slice(), [n as i32, 1], [1, 1]).unwrap(),
+            dy: TensorRef::new(dev_dy.as_slice(), [1, 1], [1, 1]).unwrap(),
+            dinput: TensorMut::new(dev_dx.as_slice_mut(), [n as i32, c as i32], [c as i64, 1])
+                .unwrap(),
         },
     )
     .unwrap();
@@ -224,26 +194,11 @@ fn loss_multi_margin_backward_f16_mean() {
         &stream,
         Workspace::None,
         MultiMarginLossBackwardArgs {
-            input: TensorRef {
-                data: dev_in.as_slice(),
-                shape: [n as i32, c as i32],
-                stride: [c as i64, 1],
-            },
-            target: TensorRef {
-                data: dev_t.as_slice(),
-                shape: [n as i32, 1],
-                stride: [1, 1],
-            },
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape: [1, 1],
-                stride: [1, 1],
-            },
-            dinput: TensorMut {
-                data: dev_dx.as_slice_mut(),
-                shape: [n as i32, c as i32],
-                stride: [c as i64, 1],
-            },
+            input: TensorRef::new(dev_in.as_slice(), [n as i32, c as i32], [c as i64, 1]).unwrap(),
+            target: TensorRef::new(dev_t.as_slice(), [n as i32, 1], [1, 1]).unwrap(),
+            dy: TensorRef::new(dev_dy.as_slice(), [1, 1], [1, 1]).unwrap(),
+            dinput: TensorMut::new(dev_dx.as_slice_mut(), [n as i32, c as i32], [c as i64, 1])
+                .unwrap(),
         },
     )
     .unwrap();
@@ -295,26 +250,11 @@ fn loss_multi_margin_backward_bf16_mean() {
         &stream,
         Workspace::None,
         MultiMarginLossBackwardArgs {
-            input: TensorRef {
-                data: dev_in.as_slice(),
-                shape: [n as i32, c as i32],
-                stride: [c as i64, 1],
-            },
-            target: TensorRef {
-                data: dev_t.as_slice(),
-                shape: [n as i32, 1],
-                stride: [1, 1],
-            },
-            dy: TensorRef {
-                data: dev_dy.as_slice(),
-                shape: [1, 1],
-                stride: [1, 1],
-            },
-            dinput: TensorMut {
-                data: dev_dx.as_slice_mut(),
-                shape: [n as i32, c as i32],
-                stride: [c as i64, 1],
-            },
+            input: TensorRef::new(dev_in.as_slice(), [n as i32, c as i32], [c as i64, 1]).unwrap(),
+            target: TensorRef::new(dev_t.as_slice(), [n as i32, 1], [1, 1]).unwrap(),
+            dy: TensorRef::new(dev_dy.as_slice(), [1, 1], [1, 1]).unwrap(),
+            dinput: TensorMut::new(dev_dx.as_slice_mut(), [n as i32, c as i32], [c as i64, 1])
+                .unwrap(),
         },
     )
     .unwrap();

@@ -183,10 +183,10 @@ impl<T: Element> FractionalMaxPool3dPlan<T> {
     ) -> Result<()> {
         check_fw_args(&self.desc, &args)?;
         let stream_ptr = stream.as_raw() as *mut c_void;
-        let x = args.x.data.as_raw().0 as *const c_void;
-        let y = args.y.data.as_raw().0 as *mut c_void;
-        let indices = args.indices.data.as_raw().0 as *mut c_void;
-        let rs = args.random_samples.data.as_raw().0 as *const f32;
+        let x = args.x.data().as_raw().0 as *const c_void;
+        let y = args.y.data().as_raw().0 as *mut c_void;
+        let indices = args.indices.data().as_raw().0 as *mut c_void;
+        let rs = args.random_samples.data().as_raw().0 as *const f32;
         let status = unsafe {
             match T::KIND {
                 ElementKind::F32 => baracuda_kernels_fractional_max_pool_3d_fw_f32_run(
@@ -280,9 +280,9 @@ impl<T: Element> FractionalMaxPool3dPlan<T> {
     ) -> Result<()> {
         check_bw_args(&self.desc, &args)?;
         let stream_ptr = stream.as_raw() as *mut c_void;
-        let dy = args.dy.data.as_raw().0 as *const c_void;
-        let indices = args.indices.data.as_raw().0 as *const c_void;
-        let dx = args.dx.data.as_raw().0 as *mut c_void;
+        let dy = args.dy.data().as_raw().0 as *const c_void;
+        let indices = args.indices.data().as_raw().0 as *const c_void;
+        let dx = args.dx.data().as_raw().0 as *mut c_void;
         let status = unsafe {
             match T::KIND {
                 ElementKind::F32 => baracuda_kernels_fractional_max_pool_3d_bw_f32_run(
@@ -406,22 +406,22 @@ fn check_fw_args<T: Element>(
         desc.h_out,
         desc.w_out,
     ];
-    if args.x.shape != x_shape {
+    if args.x.shape() != x_shape {
         return Err(Error::InvalidProblem(
             "baracuda-kernels::FractionalMaxPool3dPlan: x shape != [N, C, D_in, H_in, W_in]",
         ));
     }
-    if args.y.shape != y_shape {
+    if args.y.shape() != y_shape {
         return Err(Error::InvalidProblem(
             "baracuda-kernels::FractionalMaxPool3dPlan: y shape != [N, C, D_out, H_out, W_out]",
         ));
     }
-    if args.indices.shape != y_shape {
+    if args.indices.shape() != y_shape {
         return Err(Error::InvalidProblem(
             "baracuda-kernels::FractionalMaxPool3dPlan: indices shape != [N, C, D_out, H_out, W_out]",
         ));
     }
-    if args.random_samples.shape != [desc.batch, desc.channels, 3] {
+    if args.random_samples.shape() != [desc.batch, desc.channels, 3] {
         return Err(Error::InvalidProblem(
             "baracuda-kernels::FractionalMaxPool3dPlan: random_samples shape != [N, C, 3]",
         ));
@@ -441,17 +441,17 @@ fn check_bw_args<T: Element>(
         desc.h_out,
         desc.w_out,
     ];
-    if args.dy.shape != y_shape {
+    if args.dy.shape() != y_shape {
         return Err(Error::InvalidProblem(
             "baracuda-kernels::FractionalMaxPool3dPlan: dy shape != [N, C, D_out, H_out, W_out]",
         ));
     }
-    if args.indices.shape != y_shape {
+    if args.indices.shape() != y_shape {
         return Err(Error::InvalidProblem(
             "baracuda-kernels::FractionalMaxPool3dPlan: indices shape != [N, C, D_out, H_out, W_out]",
         ));
     }
-    if args.dx.shape != x_shape {
+    if args.dx.shape() != x_shape {
         return Err(Error::InvalidProblem(
             "baracuda-kernels::FractionalMaxPool3dPlan: dx shape != [N, C, D_in, H_in, W_in]",
         ));

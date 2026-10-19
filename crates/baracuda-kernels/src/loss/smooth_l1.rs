@@ -128,7 +128,9 @@ impl<T: Element, const N: usize> SmoothL1LossPlan<T, N> {
         crate::view_check::check_dense(&args.pred)?;
         crate::view_check::check_dense(&args.target)?;
         crate::view_check::check_dense(&args.out)?;
-        if args.pred.shape != self.desc.input_shape || args.target.shape != self.desc.input_shape {
+        if args.pred.shape() != self.desc.input_shape
+            || args.target.shape() != self.desc.input_shape
+        {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SmoothL1LossPlan: pred / target shape mismatch",
             ));
@@ -139,9 +141,9 @@ impl<T: Element, const N: usize> SmoothL1LossPlan<T, N> {
         }
         let (ws_ptr, ws_bytes) = unpack_workspace(workspace, self.workspace_size())?;
         let stream_ptr = stream.as_raw();
-        let pred_ptr = args.pred.data.as_raw().0 as *const c_void;
-        let target_ptr = args.target.data.as_raw().0 as *const c_void;
-        let out_ptr = args.out.data.as_raw().0 as *mut c_void;
+        let pred_ptr = args.pred.data().as_raw().0 as *const c_void;
+        let target_ptr = args.target.data().as_raw().0 as *const c_void;
+        let out_ptr = args.out.data().as_raw().0 as *mut c_void;
         let mode = self.desc.reduction as i32;
         let beta = self.desc.beta;
 
@@ -287,9 +289,9 @@ impl<T: Element, const N: usize> SmoothL1LossBackwardPlan<T, N> {
         crate::view_check::check_dense(&args.target)?;
         crate::view_check::check_dense(&args.dy)?;
         crate::view_check::check_dense(&args.dpred)?;
-        if args.pred.shape != self.desc.input_shape
-            || args.target.shape != self.desc.input_shape
-            || args.dpred.shape != self.desc.input_shape
+        if args.pred.shape() != self.desc.input_shape
+            || args.target.shape() != self.desc.input_shape
+            || args.dpred.shape() != self.desc.input_shape
         {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SmoothL1LossBackwardPlan: shape mismatch",
@@ -307,10 +309,10 @@ impl<T: Element, const N: usize> SmoothL1LossBackwardPlan<T, N> {
         };
         let beta = self.desc.beta;
         let stream_ptr = stream.as_raw();
-        let pred_ptr = args.pred.data.as_raw().0 as *const c_void;
-        let target_ptr = args.target.data.as_raw().0 as *const c_void;
-        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
-        let dpred_ptr = args.dpred.data.as_raw().0 as *mut c_void;
+        let pred_ptr = args.pred.data().as_raw().0 as *const c_void;
+        let target_ptr = args.target.data().as_raw().0 as *const c_void;
+        let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
+        let dpred_ptr = args.dpred.data().as_raw().0 as *mut c_void;
 
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
