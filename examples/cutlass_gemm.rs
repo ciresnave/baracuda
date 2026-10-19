@@ -89,6 +89,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ld: k as i64,
             },
             c: None,
+            bias: None,
             d: MatrixMut {
                 data: dev_d.as_slice_mut(),
                 rows: m,

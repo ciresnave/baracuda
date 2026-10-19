@@ -5,7 +5,8 @@
 //! then `include_str!`-ed by `forge_hello.rs` at runtime.
 //!
 //! When the feature is off, this script is a no-op so non-CUDA developers
-//! can still `cargo check --workspace`.
+//! can still `cargo check --workspace`. Under `DOCS_RS=1` the kernel build is
+//! skipped and an empty placeholder PTX is written (type-check only).
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
@@ -19,6 +20,18 @@ fn build_forge_hello() {
     use baracuda_forge::KernelBuilder;
 
     let out_dir = std::env::var("OUT_DIR").expect("OUT_DIR must be set by cargo");
+
+    // DOCS_RS=1 (docs.rs, and CI's no-CUDA feature check) means "type-check only,
+    // no toolkit": write an empty PTX placeholder so `include_str!` resolves and
+    // the example's Rust still compiles. The result is never run.
+    if std::env::var_os("DOCS_RS").is_some() {
+        std::fs::write(std::path::Path::new(&out_dir).join("forge_hello.ptx"), "")
+            .expect("write placeholder forge_hello.ptx");
+        println!(
+            "cargo:warning=baracuda-examples: DOCS_RS=1 detected; skipping the nvcc build of forge_hello.cu"
+        );
+        return;
+    }
 
     let result = KernelBuilder::new()
         .source_files(["kernels/forge_hello.cu"])

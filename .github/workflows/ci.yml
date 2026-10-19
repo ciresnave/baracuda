@@ -429,3 +429,28 @@ jobs:
           cargo check --locked -p baracuda-cuda-emit --tests --features nvrtc,device-tests
           cargo check --locked -p baracuda-cuda-seam --tests --features nvrtc
           cargo check --locked -p baracuda-cuda-seam --tests --features nvrtc,device-tests
+
+  # Every declared cargo feature of every workspace crate compiles, one at a time.
+  # The arch-gated job above only ever enabled sm80/sm89/sm90a (+ device-tests), so
+  # features such as `mhc`, `xformers_blocksparse`, `xformers_sparse24` (and, after the
+  # private-view migration, `ring_attention`) could not compile for months while every
+  # check stayed green. The (crate, feature) set is DERIVED from `cargo metadata` by
+  # scripts/check-each-feature.py, so a newly declared feature joins automatically.
+  # DOCS_RS=1 makes the nvcc crates skip their forge, so this type-checks the Rust
+  # (it does not build or run any kernel); anything that truly cannot build without
+  # the toolkit must be listed in that script's NEEDS_TOOLKIT with a reason.
+  each-feature-check:
+    name: Every declared feature compiles (DOCS_RS check, no CUDA) (shard ${{ matrix.shard }}/4)
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    runs-on: ubuntu-latest
+    env:
+      DOCS_RS: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: cargo check every (crate, feature)
+        run: python3 scripts/check-each-feature.py --shard ${{ matrix.shard }}/4

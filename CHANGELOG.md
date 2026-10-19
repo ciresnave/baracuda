@@ -16,6 +16,13 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.139 - 2026-10-19 (every declared feature now compiles; CI builds each one)
+
+Workspace alpha.139 (proposed; PM allocates at gate).
+
+- Every cargo feature of every workspace crate now compiles, and a new CI job (`each-feature-check`, 4 shards, `scripts/check-each-feature.py`) builds each (crate, feature) pair on its own with `DOCS_RS=1` (167 pairs, derived from `cargo metadata`, so new features join automatically). On origin/main the same script found 17 failing pairs: `baracuda-kernels` `mhc`, `xformers_blocksparse`, `xformers_sparse24` (missing `c_void` / `map_status` imports), `ring_attention` (missed by the alpha.138 private-field migration), and `awq`, `bnb_nf4`, `mamba`, `ring_attention`, `xformers_blocksparse`, `xformers_sparse24` of `baracuda-kernels-sys` (73 undocumented FFI fns under `missing_docs`); `baracuda-examples` `cutlass-smoke` (missing `GemmArgs::bias`) and `forge-hello` (build.rs ignored `DOCS_RS`); `baracuda-kernels-bench` `cuda_l2` (build.rs ignored `DOCS_RS`; bench used removed driver APIs); `baracuda-tensorrt` / `baracuda-tensorrt-sys` `shim` (`extern "C"` without `unsafe`, edition 2024). All fixed; no behaviour change in any default build.
+- `scripts/check-feature-coverage.sh` now also fails if `ci.yml` stops running `scripts/check-each-feature.py` (mutation-checked: a comment-only mention does not satisfy it). Stated limit: this type-checks (`cargo check --all-targets`), it does not build kernels or run anything; a feature that truly needs the toolkit must be listed in `NEEDS_TOOLKIT` (currently empty).
+
 ## 0.0.1-alpha.138 - 2026-10-19 (BREAKING: TensorRef/TensorMut fields are private; validated constructors; bias vector bounds)
 
 Workspace alpha.138 (proposed; PM allocates at gate).
