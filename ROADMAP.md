@@ -1550,8 +1550,8 @@ These would tighten the 1.0 surface but aren't blockers.
 
 ### Linalg `cholesky` is 4-6x slower than PyTorch (measured, not investigated)
 
-`CholeskyPlan` wraps cuSOLVER `cusolverDn{S,D}potrf` (`linalg/cholesky.rs`), the library PyTorch's CUDA
-`cholesky` is built on for a single matrix, yet the first Linalg rollup (#213, alpha.141, RTX 4070 Laptop,
+`CholeskyPlan` wraps cuSOLVER `cusolverDn{S,D}potrf` (`linalg/cholesky.rs`); PyTorch's CUDA `cholesky` can
+also be backed by cuSOLVER (which backend it picks at these sizes is NOT verified here), and the first Linalg rollup (#213, alpha.141, RTX 4070 Laptop,
 f32, one `--quick` observation per cell) shows:
 
 | cell | baracuda median | baracuda min | PyTorch (frozen, 2.14.0+cu126) | PyTorch / baracuda |
