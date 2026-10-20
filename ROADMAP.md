@@ -7,7 +7,7 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-`main` is at **v0.0.1-alpha.141** (2026-10-16; `baracuda-cuda-emit` 0.19.0); see
+`main` is at **v0.0.1-alpha.142** (2026-10-16; `baracuda-cuda-emit` 0.19.0); see
 `CHANGELOG.md` for what is published versus merged (merging is not a publish). The per-phase
 write-ups below are a historical log (see the note at the end of this
 paragraph); `CHANGELOG.md` has the release-by-release record. The 6 critical
@@ -1547,6 +1547,33 @@ PM allocates the bump and publishes. Fuel's consumer side
 ## Pre-1.0 nice-to-haves
 
 These would tighten the 1.0 surface but aren't blockers.
+
+### Linalg `cholesky` is 4-6x slower than PyTorch (measured, not investigated)
+
+`CholeskyPlan` wraps cuSOLVER `cusolverDn{S,D}potrf` (`linalg/cholesky.rs`), the library PyTorch's CUDA
+`cholesky` is built on for a single matrix, yet the first Linalg rollup (#213, alpha.141, RTX 4070 Laptop,
+f32, one `--quick` observation per cell) shows:
+
+| cell | baracuda median | baracuda min | PyTorch (frozen, 2.14.0+cu126) | PyTorch / baracuda |
+|---|---|---|---|---|
+| cholesky f32 N256 | 1.65 ms | 1.31 ms | 422 us | 0.26x (0.32x on min) |
+| cholesky f32 N512 | 3.46 ms | 2.75 ms | 578 us | 0.17x (0.21x on min) |
+| lu f32 N256 / N512 (for scale) | 574 us / 1.23 ms | 543 us / 1.17 ms | 404 us / 1.24 ms | 0.70x / ~1.0x |
+
+The run was NOISY (Balanced power plan, GPU at 1605/3105 MHz, other lanes' `cargo` processes; the same run's
+cuBLAS reference cells were 1.77x slower than the previous table), so the ratio is not trustworthy to better
+than ~2x, but the minimum is still 3-5x above PyTorch's median and `lu` through the same cuSOLVER handle path
+is near parity, so the gap is specific to `potrf`, not to the box. Evidence: `crates/baracuda-kernels-bench/BENCHMARKS.md`
+(`### cholesky`), `bench-baselines/pytorch_rtx4070_2.14.0_cu126.json`, `benches/linalg.rs` (restore copy is fenced
+out of the timed region).
+
+**Not yet known (hypotheses to test, none verified):** (a) PyTorch may dispatch small `potrf` to a different
+path (e.g. MAGMA / batched) than the plain `cusolverDn*potrf` used here; (b) per-call overhead in the plan
+(handle/stream binding, the `info` device buffer, `uplo` row-major flip) rather than the factorization;
+(c) a bench artefact in the restore-then-time loop at these sizes. **Next step:** a micro-bench calling
+`cusolverDnSpotrf` directly on the same buffers (same stream, same restore) to split library time from
+plan overhead, on a quiet box (`docs/guides/kernel-bench-reports.md`). Priority: nice-to-have; no caller has
+asked, but a 4-6x gap on a library-backed op is the kind of row the 1.0 perf story is built from.
 
 ### `baracuda-forge` `builder.rs` split (candidate, not scheduled)
 
