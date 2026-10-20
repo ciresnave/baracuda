@@ -7,7 +7,7 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-`main` is at **v0.0.1-alpha.143** (2026-10-16; `baracuda-cuda-emit` 0.19.0); see
+`main` is at **v0.0.1-alpha.144** (2026-10-16; `baracuda-cuda-emit` 0.19.0); see
 `CHANGELOG.md` for what is published versus merged (merging is not a publish). The per-phase
 write-ups below are a historical log (see the note at the end of this
 paragraph); `CHANGELOG.md` has the release-by-release record. The 6 critical
@@ -1548,7 +1548,7 @@ PM allocates the bump and publishes. Fuel's consumer side
 
 These would tighten the 1.0 surface but aren't blockers.
 
-### Linalg `cholesky` vs PyTorch: re-measured at ~1.2-2x slower, cause still unknown
+### Linalg `cholesky` vs PyTorch: re-measured at parity (N256) to ~1.4-2x slower (N512), cause unknown
 
 **Correction of the alpha.141/#213/#214 text:** the first Linalg rollup row (cholesky f32 N256 1.65 ms,
 N512 3.46 ms = 0.26x / 0.17x of PyTorch) was ONE noisy `--quick` observation and is not reproducible: on the same
@@ -1556,8 +1556,8 @@ box, same plan, same cells, a second run under the `gpu-run` lock (alpha.142 tre
 21 samples per cell) gives **N256 540 us (min 465), N512 1.13 ms (min 986)** for `CholeskyPlan::run` with
 CUDA-event timing as in `BENCHMARKS.md` - about 3x faster than the rollup row, with no code change in between.
 Against the frozen PyTorch baseline (422 us / 578 us; 2.14.0+cu126) that is **0.78x / 0.51x**, not 0.26x / 0.17x.
-The claim "4-6x slower" was wrong; the gap that remains (about 1.2-2x) is real but small enough that this box's
-run-to-run spread (see the rollup header) must be settled before it is quoted again.
+The claim "4-6x slower" was wrong; what remains (parity at N256, ~1.4-2x at N512) is real but small enough that
+this box's run-to-run spread (next row) must be settled before it is quoted again.
 
 What the same run shows (f32, lower, medians, `potrf_direct.rs`):
 
@@ -1581,6 +1581,23 @@ What the same run shows (f32, lower, medians, `potrf_direct.rs`):
   algorithm) at this size; **not verified, torch is not installed on this box** (`import torch` fails), so it was
   not re-run in the same session.
 
+**Re-run of the actual `benches/linalg.rs` (13:45 PDT, 4 runs, one `gpu-run` hold, sm89 only):** the harness
+that produced the 1.65 ms does NOT reproduce it. Per-run medians (us), `PyTorch / baracuda` in brackets
+(PyTorch = frozen 422 / 404 / 578 / 1243 us):
+
+| cell | run 1 | run 2 | run 3 | run 4 |
+|---|---|---|---|---|
+| cholesky N256 | 372 [1.14x] | 422 [1.00x] | 516 [0.82x] | 442 [0.96x] |
+| cholesky N512 | 1047 [0.55x] | 956 [0.60x] | 1153 [0.50x] | 784 [0.74x] |
+| lu N256 | 460 [0.88x] | 476 [0.85x] | 496 [0.81x] | 384 [1.05x] |
+| lu N512 | 1009 [1.23x] | 1010 [1.23x] | 1024 [1.21x] | 1015 [1.22x] |
+
+So: cholesky N256 is at parity (0.82-1.14x), cholesky N512 is ~1.4-2x slower (0.50-0.74x), `lu` N512 is ~1.2x
+FASTER than PyTorch and very tight (1009-1024 us). The rollup run's `lu` cells (574 / 1227 us) were also slower
+than all four of these (1.2-1.5x on N256, 1.2x on N512), and its cholesky cells 3.5-3.8x slower than the median
+of these (1650 vs 432 us at N256, 3458 vs ~1000 us at N512): the rollup run was a uniformly slow session, and cholesky (many small host-launched kernels) was hit far
+harder than `lu`.
+
 Box state of the micro-bench run (11:46 PDT): RTX 4070 Laptop, driver 617.42, P0, SM 1605 of 3105 MHz, 0%
 utilisation, no other GPU compute process, Windows power plan Balanced, three other `cargo` processes plus
 `cargo-clippy` running (started 11:44:29-11:44:50). NOT a quiet run.
@@ -1588,6 +1605,44 @@ utilisation, no other GPU compute process, Windows power plan Balanced, three ot
 **Next step:** a quiet-box (High performance plan, idle CPU) pair of runs of `potrf_direct` plus a same-session
 PyTorch `torch.linalg.cholesky` timing (needs torch on the box) to settle the remaining 1.2-2x and the
 run-to-run spread. Priority: nice-to-have; no caller has asked.
+
+### Bench run-to-run spread on this box (measured; cause of the 3x not found)
+
+The same code gave `CholeskyPlan` cells that differ by ~3x between two sessions (rollup run 1.65 ms vs 0.37-0.52 ms
+for the same N256 cell hours later). What was measured to explain it (all on the 4070 Laptop, `gpu-run` lock held,
+Balanced power plan, SM clock 1605 of 3105 MHz in every snapshot, 0% GPU utilisation, other lanes' `cargo` processes
+on the box throughout):
+
+* **Within a session the spread is ~1.3-1.4x:** 12 runs of `potrf_direct` (3 at ambient, 3 with 16 busy-spinner
+  processes added, 3 with 32, 3 at ambient again; plan N256 medians 385-551 us, N512 820-1138 us; per level N256: ambient 385-510, +16 spinners 402-442, +32 407-551, ambient again 386-436) and 4 runs of
+  `benches/linalg.rs` (N256 372-516 us, N512 784-1153 us). Across the two `linalg.rs`-vs-`potrf_direct` binaries
+  the numbers agree, so it is not the harness.
+* **Added CPU load did not explain it:** 16 and 32 spinner processes did not raise system CPU above the ambient
+  41-73% (other lanes already keep it there) and did not move the medians systematically. The one natural data
+  point with a single post-run CPU sample of 99% (`linalg.rs` run 3; the other three samples were 41-77%) was the
+  slowest cholesky N256 run (516 us vs 372-442), ~1.2-1.4x, not 3x; one sample per run, so only suggestive.
+* **GPU clocks / thermals did not differ:** 1605 MHz and 64-73 C in the rollup run and in every later snapshot.
+* **Not tested, so not excluded:** a heavier CPU load than 99% system-wide with normal-priority spinners (an idle
+  box was not obtainable: other lanes were always building); the nvcc cache / build state of the rollup run (a
+  whole-suite build immediately before the benches, which ran sequentially in one hold: a warm-up or heat-soak
+  effect); the rollup's `--features sm89,cudnn` vs `sm89` build; time of day.
+
+**Limits:** no cause for the 3x was found; an idle-box vs loaded-box comparison was NOT done (idle was not
+obtainable and the spinners did not create a heavier-than-ambient load). Treat any single-observation ratio from the
+suite as +-2x until the quiet-box refresh below exists. **Next step:** the quiet-box refresh (below), run twice in
+one session and once on another day, so within- and across-session spread are both on record.
+
+### Whole-suite benchmark refresh on a QUIET box (open; blocked on a quiet box)
+
+`BENCHMARKS.md`'s generated rollup is from one noisy run (alpha.141: Balanced plan, other lanes' builds running); its
+`cholesky` / `lu` rows are known to be superseded (correction note above the block). **Precondition:** a quiet
+box in the sense of `docs/guides/kernel-bench-reports.md`: High performance power plan (only if CireSnave agrees to
+the setting; otherwise the table must state the plan), no other lane building or running GPU work (hold the
+`gpu-run` lock for the whole run, nvcc build first and outside the bench phase), nothing else using the CPU, GPU
+idle ~1 min before. **Procedure:** the documented one (`tools/build_benchmarks_table.py` docstring: clear
+`target/criterion/phase29/*.csv`, 20 CSV-emitting benches with `--features sm89,cudnn`, count the CSVs first), run
+TWICE back to back and keep both CSV sets, so each cell can carry a within-session repeat; record the box state
+(`nvidia-smi` clocks/temperature, power plan, process list) before / mid / after in the PR.
 
 ### `baracuda-forge` `builder.rs` split (candidate, not scheduled)
 
