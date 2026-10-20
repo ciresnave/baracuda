@@ -7,7 +7,7 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-`main` is at **v0.0.1-alpha.140** (2026-10-16; `baracuda-cuda-emit` 0.19.0); see
+`main` is at **v0.0.1-alpha.141** (2026-10-16; `baracuda-cuda-emit` 0.19.0); see
 `CHANGELOG.md` for what is published versus merged (merging is not a publish). The per-phase
 write-ups below are a historical log (see the note at the end of this
 paragraph); `CHANGELOG.md` has the release-by-release record. The 6 critical
@@ -1430,10 +1430,12 @@ not here. Full plan + the remaining work:
   (`OP-MATRIX.md`, 21 categories), ordered by value (Loss, Linalg,
   Quantization, Sort, Segment, Image, FFT, Indexing, then backward
   passes). Needs a PyTorch env on the target GPU box to regenerate
-  refs. **Loss done** (2026-09-05: 4 ops × f32/f16/bf16). **Linalg bench
-  source exists** (`benches/linalg.rs`, wave 2, f32 + f64 — cuSOLVER has no half
-  axis) but no Linalg row is in the `BENCHMARKS.md` rollup at this ref; rolling it
-  up needs a quiet-box run (`docs/guides/kernel-bench-reports.md`). Re-derive the covered/total counts before citing them
+  refs. **Loss done** (2026-09-05: 4 ops × f32/f16/bf16). **Linalg rolled up at alpha.141**
+  (`benches/linalg.rs`, wave 2): the bench times `cholesky` and `lu` at f32,
+  N256 / N512 only (4 cells; the source's f64 / other-op axes are not benched),
+  one `--quick` observation each, vs the frozen PyTorch baseline. NOT a quiet run
+  (Balanced power plan, other lanes' cargo processes, laptop GPU at 1605/3105 MHz);
+  a quiet run (`docs/guides/kernel-bench-reports.md`) is still open. Re-derive the covered/total counts before citing them
   — `grep -c '^### `' crates/baracuda-kernels-bench/BENCHMARKS.md` for
   the numerator; this line no longer carries them because the ones it
   used to carry ("~58 ops", "167 Plan rows") went stale silently.
