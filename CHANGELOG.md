@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.141 - 2026-10-20 (bench rollup regenerated at alpha.140; Linalg (cholesky, lu) added)
+
+Workspace alpha.141 (proposed; PM allocates at gate).
+
+- Regenerated the auto-generated `BENCHMARKS.md` rollup from a fresh whole-suite run (20 CSV-emitting benches, `--quick`, `--features sm89,cudnn`, one continuous `gpu-run` hold): 456 cells, 68 op families (was 452 / 66), 0 families dropped, 4 new cells = Linalg `cholesky` and `lu` at f32 N256 / N512 vs the frozen PyTorch baseline (baracuda 0.26x / 0.17x / 0.70x / 1.01x of PyTorch: `PyTorch_ns / baracuda_ns`). `hyper_connection` emits no rows (needs the `mhc` feature). NOT a quiet run: Balanced power plan, other lanes' cargo processes running, laptop GPU at 1605 of 3105 MHz SM clock; run conditions are in the PR. Across the 452 cells common with the previous table the baracuda column moved by a median 1.275x slower, but the cuBLAS reference cells in the same run moved 1.77x and the cuDNN ones 1.23x slower, so box state, not a kernel change, explains the shift; do not read cross-version deltas from this table. ROADMAP's benchmark row updated.
+
 ## 0.0.1-alpha.140 - 2026-10-19 (BREAKING: MatrixRef/MatrixMut/VectorRef fields are private; validated constructors)
 
 Workspace alpha.140 (proposed; PM allocates at gate).
