@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.144 - 2026-10-20 (ROADMAP: bench run-to-run spread finding; quiet-box suite refresh row)
+
+Workspace alpha.144 (proposed; PM allocates at gate).
+
+- ROADMAP only: (1) the cholesky row now includes four runs of the real `benches/linalg.rs` (cholesky N256 372-516 us, N512 784-1153 us; `lu` N512 1009-1024 us, 1.2x faster than PyTorch): the harness does not reproduce the alpha.141 rollup's 1.65 ms, so that run was a uniformly slow session; cholesky is at parity at N256 and ~1.4-2x slower at N512; (2) new row "Bench run-to-run spread on this box": 1.3-1.4x within a session, 3x vs the rollup run, added CPU load and GPU clocks did not explain it, cause NOT found, idle-vs-loaded comparison not done; (3) new row "Whole-suite benchmark refresh on a QUIET box" with its preconditions and procedure.
+
 ## 0.0.1-alpha.143 - 2026-10-20 (Linalg cholesky: first rollup value retracted; potrf_direct micro-bench)
 
 Workspace alpha.143 (proposed; PM allocates at gate).
