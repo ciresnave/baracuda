@@ -1,5 +1,5 @@
-//! Splits the Linalg `cholesky` gap vs PyTorch (ROADMAP "Linalg `cholesky` is
-//! 4-6x slower than PyTorch") into its parts, on the same box, in the same run:
+//! Splits the Linalg `cholesky` gap vs PyTorch (ROADMAP "Linalg `cholesky` vs PyTorch")
+//! into its parts, on the same box, in the same run:
 //!
 //! * **library vs plan:** `CholeskyPlan::run` against a direct
 //!   `cusolverDnSpotrf` call on the same buffers, stream and handle settings;
@@ -35,6 +35,8 @@ use baracuda_kernels_sys::{
 const INNER: usize = 50;
 /// Samples (batches) per cell.
 const SAMPLES: usize = 21;
+/// Launches per sample in the per-call-events discipline (as `benches/linalg.rs`).
+const EVENT_INNER: u64 = 5;
 
 fn spd_host(n: usize) -> Vec<f32> {
     let mut a = vec![0.5_f32; n * n];
@@ -44,47 +46,56 @@ fn spd_host(n: usize) -> Vec<f32> {
     a
 }
 
-fn pct(sorted: &[f64], p: usize) -> f64 {
-    sorted[(sorted.len() * p / 100).min(sorted.len() - 1)]
-}
-
-fn report(label: &str, mut v: Vec<f64>) {
+/// Print one row: label and median / min / p90 / max in microseconds.
+fn row(label: &str, mut v: Vec<f64>) {
     v.sort_by(f64::total_cmp);
+    let at = |p: usize| v[(v.len() * p / 100).min(v.len() - 1)] / 1e3;
     println!(
-        "    {label:<44} median {:>9.1} us   min {:>9.1}   p90 {:>9.1}   max {:>9.1}   (n={})",
-        pct(&v, 50) / 1e3,
+        "    {label:<50} median {:>9.1} us   min {:>9.1}   p90 {:>9.1}   max {:>9.1}   (n={})",
+        at(50),
         v[0] / 1e3,
-        pct(&v, 90) / 1e3,
+        at(90),
         v[v.len() - 1] / 1e3,
         v.len()
     );
 }
 
-/// Run `batch` `SAMPLES` times; each returns total ns for `INNER` launches.
-fn pipelined(mut batch: impl FnMut() -> f64) -> Vec<f64> {
-    (0..SAMPLES).map(|_| batch() / INNER as f64).collect()
+/// Everything one matrix size needs, so each measurement is a short method.
+struct Rig<'a> {
+    ctx: &'a Context,
+    stream: &'a Stream,
+    n: i32,
+    handle: cusolverDnHandle_t,
+    lwork: i32,
+    ws: DeviceBuffer<f32>,
+    info: RefCell<DeviceBuffer<i32>>,
+    pristine: DeviceBuffer<f32>,
+    /// `INNER` distinct work buffers: potrf is in place, so back-to-back launches
+    /// need distinct data or every call after the first factors a non-SPD matrix.
+    work: Vec<RefCell<DeviceBuffer<f32>>>,
+    plan: CholeskyPlan<f32>,
+    plan_ws: RefCell<DeviceBuffer<u8>>,
 }
 
-fn one_size(ctx: &Context, stream: &Stream, n: i32) {
-    let nu = n as usize;
-    let host = spd_host(nu);
-    println!("\n  cholesky f32 N{n} (lower):");
-
-    // --- direct cuSOLVER handle + workspace ---------------------------------
-    let mut handle: cusolverDnHandle_t = core::ptr::null_mut();
-    assert_eq!(
-        unsafe { cusolverDnCreate(&mut handle) },
-        0,
-        "cusolverDnCreate"
-    );
-    assert_eq!(
-        unsafe { cusolverDnSetStream(handle, stream.as_raw()) },
-        0,
-        "cusolverDnSetStream"
-    );
-    let mut lwork: i32 = 0;
-    assert_eq!(
-        unsafe {
+impl<'a> Rig<'a> {
+    fn new(ctx: &'a Context, stream: &'a Stream, n: i32) -> Self {
+        let host = spd_host(n as usize);
+        let mut handle: cusolverDnHandle_t = core::ptr::null_mut();
+        // SAFETY: `handle` is a valid out-pointer; the handle lives for the whole bench process.
+        assert_eq!(
+            unsafe { cusolverDnCreate(&mut handle) },
+            0,
+            "cusolverDnCreate"
+        );
+        // SAFETY: `handle` was just created and `stream` outlives it.
+        assert_eq!(
+            unsafe { cusolverDnSetStream(handle, stream.as_raw()) },
+            0,
+            "SetStream"
+        );
+        let mut lwork: i32 = 0;
+        // SAFETY: bufferSize only reads `handle`/`n` and writes `lwork`; a null matrix pointer is allowed.
+        let status = unsafe {
             cusolverDnSpotrf_bufferSize(
                 handle,
                 CUBLAS_FILL_MODE_UPPER,
@@ -93,217 +104,175 @@ fn one_size(ctx: &Context, stream: &Stream, n: i32) {
                 n,
                 &mut lwork,
             )
-        },
-        0
-    );
-    let ws: DeviceBuffer<f32> = DeviceBuffer::zeros(ctx, lwork.max(1) as usize).expect("ws");
-    let mut info: DeviceBuffer<i32> = DeviceBuffer::zeros(ctx, 1).expect("info");
-
-    // INNER distinct pristine inputs + INNER work buffers (potrf is in place, so
-    // back-to-back launches need distinct data or every call after the first
-    // would factor a non-SPD matrix and take the failure path).
-    let pristine = DeviceBuffer::from_slice(ctx, &host).expect("pristine");
-    let mut work: Vec<DeviceBuffer<f32>> = (0..INNER)
-        .map(|_| DeviceBuffer::from_slice(ctx, &host).expect("work"))
-        .collect();
-    let single = RefCell::new(DeviceBuffer::from_slice(ctx, &host).expect("single"));
-
-    let restore_all = |work: &Vec<DeviceBuffer<f32>>| {
-        for w in work {
-            pristine.copy_to_device_async(w, stream).expect("restore");
-        }
-        stream.synchronize().expect("sync");
-    };
-
-    // --- the plan -----------------------------------------------------------
-    let desc = CholeskyDescriptor {
-        matrix_size: n,
-        batch_size: 1,
-        lower: true,
-        element: ElementKind::F32,
-    };
-    let plan = CholeskyPlan::<f32>::select(stream, &desc, PlanPreference::default()).expect("plan");
-    let plan_ws_bytes = plan.query_workspace_size(stream).expect("plan ws");
-    let mut plan_ws: DeviceBuffer<u8> =
-        DeviceBuffer::zeros(ctx, plan_ws_bytes.max(1)).expect("pws");
-    let sh = [1, n, n];
-    let st = contiguous_stride(sh);
-
-    // warm both paths
-    for _ in 0..10 {
-        pristine
-            .copy_to_device_async(&single.borrow(), stream)
-            .unwrap();
-        unsafe {
-            cusolverDnSpotrf(
-                handle,
-                CUBLAS_FILL_MODE_UPPER,
-                n,
-                single.borrow().as_raw().0 as *mut f32,
-                n,
-                ws.as_raw().0 as *mut f32,
-                lwork,
-                info.as_raw().0 as *mut i32,
-            );
-        }
-    }
-    stream.synchronize().unwrap();
-
-    // ---- per-call events (what BENCHMARKS.md times) ------------------------
-    let direct_event = |s: &mut Vec<f64>| {
-        let sp = measure_spread_restored(
+        };
+        assert_eq!(status, 0, "bufferSize");
+        let desc = CholeskyDescriptor {
+            matrix_size: n,
+            batch_size: 1,
+            lower: true,
+            element: ElementKind::F32,
+        };
+        let plan =
+            CholeskyPlan::<f32>::select(stream, &desc, PlanPreference::default()).expect("plan");
+        let plan_ws_bytes = plan.query_workspace_size(stream).expect("plan ws").max(1);
+        Self {
             ctx,
             stream,
+            n,
+            handle,
+            lwork,
+            ws: DeviceBuffer::zeros(ctx, lwork.max(1) as usize).expect("ws"),
+            info: RefCell::new(DeviceBuffer::zeros(ctx, 1).expect("info")),
+            pristine: DeviceBuffer::from_slice(ctx, &host).expect("pristine"),
+            work: (0..INNER)
+                .map(|_| RefCell::new(DeviceBuffer::from_slice(ctx, &host).expect("work")))
+                .collect(),
+            plan,
+            plan_ws: RefCell::new(DeviceBuffer::zeros(ctx, plan_ws_bytes).expect("plan ws buf")),
+        }
+    }
+
+    /// The only direct cuSOLVER factorization call: factor `buf` (n x n, f32) in place.
+    fn potrf(&self, buf: &DeviceBuffer<f32>) {
+        let info = self.info.borrow();
+        // SAFETY: `buf` holds n*n f32, `ws` holds `lwork` f32 (from bufferSize), `info` holds one i32,
+        // all live device buffers on `self.stream`, which `handle` is bound to; the data is SPD so
+        // the factorization succeeds, and nothing else touches `buf` until the stream is synchronized.
+        let status = unsafe {
+            cusolverDnSpotrf(
+                self.handle,
+                CUBLAS_FILL_MODE_UPPER,
+                self.n,
+                buf.as_raw().0 as *mut f32,
+                self.n,
+                self.ws.as_raw().0 as *mut f32,
+                self.lwork,
+                info.as_raw().0 as *mut i32,
+            )
+        };
+        assert_eq!(status, 0, "cusolverDnSpotrf");
+    }
+
+    fn plan_run(&self, buf: &mut DeviceBuffer<f32>) {
+        let sh = [1, self.n, self.n];
+        let st = contiguous_stride(sh);
+        let mut info = self.info.borrow_mut();
+        let args = CholeskyArgs::<f32> {
+            a: TensorMut::new(buf.as_slice_mut(), sh, st).unwrap(),
+            info: TensorMut::new(info.as_slice_mut(), [1], [1]).unwrap(),
+        };
+        let mut ws = self.plan_ws.borrow_mut();
+        self.plan
+            .run(self.stream, Workspace::Borrowed(ws.as_slice_mut()), args)
+            .expect("plan run");
+    }
+
+    fn restore_all(&self) {
+        for w in &self.work {
+            self.pristine
+                .copy_to_device_async(&w.borrow(), self.stream)
+                .expect("restore");
+        }
+        self.stream.synchronize().expect("sync");
+    }
+
+    /// Per-call CUDA events with the restore fenced out (the `BENCHMARKS.md` method).
+    /// Returns `[min, median, p90, max]` ns.
+    fn per_call_events(&self, launch: impl FnMut()) -> [f64; 4] {
+        let one = &self.work[0];
+        let sp = measure_spread_restored(
+            self.ctx,
+            self.stream,
             SAMPLES,
-            5,
+            EVENT_INNER,
             || {
-                pristine
-                    .copy_to_device_async(&single.borrow(), stream)
+                self.pristine
+                    .copy_to_device_async(&one.borrow(), self.stream)
                     .expect("restore");
             },
-            || unsafe {
-                cusolverDnSpotrf(
-                    handle,
-                    CUBLAS_FILL_MODE_UPPER,
-                    n,
-                    single.borrow().as_raw().0 as *mut f32,
-                    n,
-                    ws.as_raw().0 as *mut f32,
-                    lwork,
-                    info.as_raw().0 as *mut i32,
-                );
-            },
+            launch,
         );
-        s.extend([sp.min_ns, sp.median_ns, sp.p90_ns, sp.max_ns]);
-    };
-    let mut d = Vec::new();
-    direct_event(&mut d);
-    println!(
-        "    {:<44} median {:>9.1} us   min {:>9.1}   p90 {:>9.1}   max {:>9.1}",
-        "DIRECT potrf, per-call events",
-        d[1] / 1e3,
-        d[0] / 1e3,
-        d[2] / 1e3,
-        d[3] / 1e3
-    );
+        [sp.min_ns, sp.median_ns, sp.p90_ns, sp.max_ns]
+    }
 
-    let sp = measure_spread_restored(
-        ctx,
-        stream,
-        SAMPLES,
-        5,
-        || {
-            pristine
-                .copy_to_device_async(&single.borrow(), stream)
-                .expect("restore");
-        },
-        || {
-            let mut single_m = single.borrow_mut();
-            let args = CholeskyArgs::<f32> {
-                a: TensorMut::new(single_m.as_slice_mut(), sh, st).unwrap(),
-                info: TensorMut::new(info.as_slice_mut(), [1], [1]).unwrap(),
-            };
-            plan.run(stream, Workspace::Borrowed(plan_ws.as_slice_mut()), args)
-                .expect("plan run");
-        },
-    );
-    println!(
-        "    {:<44} median {:>9.1} us   min {:>9.1}   p90 {:>9.1}   max {:>9.1}",
-        "PLAN run, per-call events (= BENCHMARKS.md)",
-        sp.median_ns / 1e3,
-        sp.min_ns / 1e3,
-        sp.p90_ns / 1e3,
-        sp.max_ns / 1e3
-    );
+    /// `SAMPLES` batches; each restores all buffers, then `batch` returns total ns for `INNER` launches.
+    fn pipelined(&self, mut batch: impl FnMut() -> f64) -> Vec<f64> {
+        (0..SAMPLES)
+            .map(|_| {
+                self.restore_all();
+                batch() / INNER as f64
+            })
+            .collect()
+    }
 
-    // ---- pipelined wall-clock (what the PyTorch column times) --------------
-    let v = pipelined(|| {
-        restore_all(&work);
+    /// Wall-clock over `INNER` launches + one sync (the PyTorch-column method).
+    fn wall_clock(&self, mut launch_all: impl FnMut()) -> f64 {
         let t = Instant::now();
-        for w in &work {
-            unsafe {
-                cusolverDnSpotrf(
-                    handle,
-                    CUBLAS_FILL_MODE_UPPER,
-                    n,
-                    w.as_raw().0 as *mut f32,
-                    n,
-                    ws.as_raw().0 as *mut f32,
-                    lwork,
-                    info.as_raw().0 as *mut i32,
-                );
-            }
-        }
-        stream.synchronize().unwrap();
+        launch_all();
+        self.stream.synchronize().unwrap();
         t.elapsed().as_nanos() as f64
-    });
-    report("DIRECT potrf, pipelined wall-clock x50", v);
+    }
 
-    let v = pipelined(|| {
-        restore_all(&work);
-        let t = Instant::now();
-        for w in work.iter_mut() {
-            let args = CholeskyArgs::<f32> {
-                a: TensorMut::new(w.as_slice_mut(), sh, st).unwrap(),
-                info: TensorMut::new(info.as_slice_mut(), [1], [1]).unwrap(),
-            };
-            plan.run(stream, Workspace::Borrowed(plan_ws.as_slice_mut()), args)
-                .expect("plan run");
+    fn warm_up(&self) {
+        for _ in 0..10 {
+            self.pristine
+                .copy_to_device_async(&self.work[0].borrow(), self.stream)
+                .unwrap();
+            self.potrf(&self.work[0].borrow());
         }
-        stream.synchronize().unwrap();
-        t.elapsed().as_nanos() as f64
-    });
-    report("PLAN run, pipelined wall-clock x50 (= PyTorch's)", v);
+        self.stream.synchronize().unwrap();
+    }
 
-    // ---- host launch cost alone (enqueue only, no sync inside the span) ----
-    let v = pipelined(|| {
-        restore_all(&work);
-        let t = Instant::now();
-        for w in &work {
-            unsafe {
-                cusolverDnSpotrf(
-                    handle,
-                    CUBLAS_FILL_MODE_UPPER,
-                    n,
-                    w.as_raw().0 as *mut f32,
-                    n,
-                    ws.as_raw().0 as *mut f32,
-                    lwork,
-                    info.as_raw().0 as *mut i32,
-                );
-            }
-        }
-        let enqueue = t.elapsed().as_nanos() as f64;
-        stream.synchronize().unwrap();
-        enqueue
-    });
-    report("DIRECT potrf, host enqueue time only x50", v);
+    fn print_events(&self, label: &str, e: [f64; 4]) {
+        println!(
+            "    {label:<50} median {:>9.1} us   min {:>9.1}   p90 {:>9.1}   max {:>9.1}",
+            e[1] / 1e3,
+            e[0] / 1e3,
+            e[2] / 1e3,
+            e[3] / 1e3
+        );
+    }
 
-    // One more control: the same event-pair discipline around the 50-launch batch.
-    let start = Event::new(ctx).unwrap();
-    let end = Event::new(ctx).unwrap();
-    let v = pipelined(|| {
-        restore_all(&work);
-        start.record(stream).unwrap();
-        for w in &work {
-            unsafe {
-                cusolverDnSpotrf(
-                    handle,
-                    CUBLAS_FILL_MODE_UPPER,
-                    n,
-                    w.as_raw().0 as *mut f32,
-                    n,
-                    ws.as_raw().0 as *mut f32,
-                    lwork,
-                    info.as_raw().0 as *mut i32,
-                );
-            }
-        }
-        end.record(stream).unwrap();
-        end.synchronize().unwrap();
-        f64::from(Event::elapsed_time_ms(&start, &end).unwrap()) * 1e6
-    });
-    report("DIRECT potrf, GPU-event span x50 (device time)", v);
+    fn report(&self) {
+        println!("\n  cholesky f32 N{} (lower):", self.n);
+        self.warm_up();
+        let one = &self.work[0];
+        let e = self.per_call_events(|| self.potrf(&one.borrow()));
+        self.print_events("DIRECT potrf, per-call events", e);
+        let e = self.per_call_events(|| self.plan_run(&mut one.borrow_mut()));
+        self.print_events("PLAN run, per-call events (= BENCHMARKS.md)", e);
+        self.report_pipelined();
+    }
+
+    fn report_pipelined(&self) {
+        let direct_all = || self.work.iter().for_each(|w| self.potrf(&w.borrow()));
+        let v = self.pipelined(|| self.wall_clock(direct_all));
+        row("DIRECT potrf, pipelined wall-clock x50", v);
+        let plan_all = || {
+            self.work
+                .iter()
+                .for_each(|w| self.plan_run(&mut w.borrow_mut()))
+        };
+        let v = self.pipelined(|| self.wall_clock(plan_all));
+        row("PLAN run, pipelined wall-clock x50 (= PyTorch's)", v);
+        let v = self.pipelined(|| {
+            let t = Instant::now();
+            direct_all();
+            let enqueue = t.elapsed().as_nanos() as f64;
+            self.stream.synchronize().unwrap();
+            enqueue
+        });
+        row("DIRECT potrf, host enqueue time only x50", v);
+        let (start, end) = (Event::new(self.ctx).unwrap(), Event::new(self.ctx).unwrap());
+        let v = self.pipelined(|| {
+            start.record(self.stream).unwrap();
+            direct_all();
+            end.record(self.stream).unwrap();
+            end.synchronize().unwrap();
+            f64::from(Event::elapsed_time_ms(&start, &end).unwrap()) * 1e6
+        });
+        row("DIRECT potrf, GPU-event span x50 (device time)", v);
+    }
 }
 
 fn main() {
@@ -312,6 +281,6 @@ fn main() {
     let stream = Stream::new(&ctx).expect("stream");
     println!("potrf_direct: library-vs-plan and discipline split (see file header)");
     for n in [256, 512] {
-        one_size(&ctx, &stream, n);
+        Rig::new(&ctx, &stream, n).report();
     }
 }
