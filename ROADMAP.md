@@ -7,7 +7,7 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-`main` is at **v0.0.1-alpha.142** (2026-10-16; `baracuda-cuda-emit` 0.19.0); see
+`main` is at **v0.0.1-alpha.143** (2026-10-16; `baracuda-cuda-emit` 0.19.0); see
 `CHANGELOG.md` for what is published versus merged (merging is not a publish). The per-phase
 write-ups below are a historical log (see the note at the end of this
 paragraph); `CHANGELOG.md` has the release-by-release record. The 6 critical
@@ -1430,7 +1430,7 @@ not here. Full plan + the remaining work:
   (`OP-MATRIX.md`, 21 categories), ordered by value (Loss, Linalg,
   Quantization, Sort, Segment, Image, FFT, Indexing, then backward
   passes). Needs a PyTorch env on the target GPU box to regenerate
-  refs. **Loss done** (2026-09-05: 4 ops × f32/f16/bf16). **Linalg rolled up at alpha.141**
+  refs. **Loss done** (2026-09-05: 4 ops × f32/f16/bf16). **Linalg rolled up at alpha.141 (cholesky values superseded at alpha.143, see the cholesky row)**
   (`benches/linalg.rs`, wave 2): the bench times `cholesky` and `lu` at f32,
   N256 / N512 only (4 cells; the source's f64 / other-op axes are not benched),
   one `--quick` observation each, vs the frozen PyTorch baseline. NOT a quiet run
@@ -1548,32 +1548,46 @@ PM allocates the bump and publishes. Fuel's consumer side
 
 These would tighten the 1.0 surface but aren't blockers.
 
-### Linalg `cholesky` is 4-6x slower than PyTorch (measured, not investigated)
+### Linalg `cholesky` vs PyTorch: re-measured at ~1.2-2x slower, cause still unknown
 
-`CholeskyPlan` wraps cuSOLVER `cusolverDn{S,D}potrf` (`linalg/cholesky.rs`); PyTorch's CUDA `cholesky` can
-also be backed by cuSOLVER (which backend it picks at these sizes is NOT verified here), and the first Linalg rollup (#213, alpha.141, RTX 4070 Laptop,
-f32, one `--quick` observation per cell) shows:
+**Correction of the alpha.141/#213/#214 text:** the first Linalg rollup row (cholesky f32 N256 1.65 ms,
+N512 3.46 ms = 0.26x / 0.17x of PyTorch) was ONE noisy `--quick` observation and is not reproducible: on the same
+box, same plan, same cells, a second run under the `gpu-run` lock (alpha.142 tree, `benches/potrf_direct.rs`,
+21 samples per cell) gives **N256 540 us (min 465), N512 1.13 ms (min 986)** for `CholeskyPlan::run` with
+CUDA-event timing as in `BENCHMARKS.md` - about 3x faster than the rollup row, with no code change in between.
+Against the frozen PyTorch baseline (422 us / 578 us; 2.14.0+cu126) that is **0.78x / 0.51x**, not 0.26x / 0.17x.
+The claim "4-6x slower" was wrong; the gap that remains (about 1.2-2x) is real but small enough that this box's
+run-to-run spread (see the rollup header) must be settled before it is quoted again.
 
-| cell | baracuda median | baracuda min | PyTorch (frozen, 2.14.0+cu126) | PyTorch / baracuda |
-|---|---|---|---|---|
-| cholesky f32 N256 | 1.65 ms | 1.31 ms | 422 us | 0.26x (0.32x on min) |
-| cholesky f32 N512 | 3.46 ms | 2.75 ms | 578 us | 0.17x (0.21x on min) |
-| lu f32 N256 / N512 (for scale) | 574 us / 1.23 ms | 543 us / 1.17 ms | 404 us / 1.24 ms | 0.70x / ~1.0x |
+What the same run shows (f32, lower, medians, `potrf_direct.rs`):
 
-The run was NOISY (Balanced power plan, GPU at 1605/3105 MHz, other lanes' `cargo` processes; the same run's
-cuBLAS reference cells were 1.77x slower than the previous table), so the ratio is not trustworthy to better
-than ~2x, but the minimum is still 3-5x above PyTorch's median and `lu` through the same cuSOLVER handle path
-is near parity, so the gap is specific to `potrf`, not to the box. Evidence: `crates/baracuda-kernels-bench/BENCHMARKS.md`
-(`### cholesky`), `bench-baselines/pytorch_rtx4070_2.14.0_cu126.json`, `benches/linalg.rs` (restore copy is fenced
-out of the timed region).
+| | N256 | N512 |
+|---|---|---|
+| `cusolverDnSpotrf` direct, per-call events | 509 us | 1048 us |
+| `CholeskyPlan::run`, per-call events (= BENCHMARKS.md method) | 540 us | 1128 us |
+| direct, 50 back-to-back launches, wall-clock / 50 (= PyTorch column method) | 509 us | 1030 us |
+| plan, same pipelined method | 491 us | 1058 us |
+| direct, host time to ENQUEUE 50 launches / 50 | 506 us | 1019 us |
+| direct, GPU event span over 50 launches / 50 | 501 us | 1010 us |
 
-**Not yet known (hypotheses to test, none verified):** (a) PyTorch may dispatch small `potrf` to a different
-path (e.g. MAGMA / batched) than the plain `cusolverDn*potrf` used here; (b) per-call overhead in the plan
-(handle/stream binding, the `info` device buffer, `uplo` row-major flip) rather than the factorization;
-(c) a bench artefact in the restore-then-time loop at these sizes. **Next step:** a micro-bench calling
-`cusolverDnSpotrf` directly on the same buffers (same stream, same restore) to split library time from
-plan overhead, on a quiet box (`docs/guides/kernel-bench-reports.md`). Priority: nice-to-have; no caller has
-asked, but a 4-6x gap on a library-backed op is the kind of row the 1.0 perf story is built from.
+* **Plan overhead is not the gap:** plan vs direct differ by <= 7% (inside the p90 spread of ~10%), per-call and
+  pipelined.
+* **Measurement discipline is not the gap:** per-call-events and pipelined wall-clock agree within ~5%.
+* **The op is host-launch-bound:** host enqueue time ~= device time ~= total, so nothing overlaps; a loaded CPU
+  (other lanes' `cargo` processes were running in both runs) is a candidate for the 3x run-to-run difference
+  between this run and the rollup run, but that is untested.
+* **What remains unexplained:** cuSOLVER `potrf` itself takes ~1.0 ms at N512 here while PyTorch's frozen number
+  is 578 us, so PyTorch's `cholesky` is probably not calling plain `cusolverDnSpotrf` (or not the same
+  algorithm) at this size; **not verified, torch is not installed on this box** (`import torch` fails), so it was
+  not re-run in the same session.
+
+Box state of the micro-bench run (11:46 PDT): RTX 4070 Laptop, driver 617.42, P0, SM 1605 of 3105 MHz, 0%
+utilisation, no other GPU compute process, Windows power plan Balanced, three other `cargo` processes plus
+`cargo-clippy` running (started 11:44:29-11:44:50). NOT a quiet run.
+
+**Next step:** a quiet-box (High performance plan, idle CPU) pair of runs of `potrf_direct` plus a same-session
+PyTorch `torch.linalg.cholesky` timing (needs torch on the box) to settle the remaining 1.2-2x and the
+run-to-run spread. Priority: nice-to-have; no caller has asked.
 
 ### `baracuda-forge` `builder.rs` split (candidate, not scheduled)
 

@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-kernels-bench"
-version = "0.0.1-alpha.142"
+version = "0.0.1-alpha.143"
 description = "Benchmark harness for baracuda-kernels — CUDA-event-timed throughput sweeps across GEMM, Flash Attention, and Conv2d at LLM-typical / ResNet-typical shapes. Phase 10 Milestone 10.1 of the baracuda CUDA stack."
 edition.workspace = true
 license.workspace = true
@@ -76,6 +76,8 @@ ozimmu = ["dep:baracuda-ozimmu"]
 # src/machine_state.rs for the capture code that produces them.
 baracuda-bench-stats = { workspace = true }
 baracuda-kernels = { workspace = true }
+# potrf_direct.rs calls cusolverDnSpotrf directly to split library time from plan overhead.
+baracuda-kernels-sys = { workspace = true }
 baracuda-kernels-types = { workspace = true }
 baracuda-driver = { workspace = true }
 baracuda-cutlass = { workspace = true }
@@ -255,4 +257,8 @@ workspace = true
 
 [[bench]]
 name = "linalg"
+harness = false
+
+[[bench]]
+name = "potrf_direct"
 harness = false
