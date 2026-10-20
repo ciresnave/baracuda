@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.143 - 2026-10-20 (Linalg cholesky: first rollup value retracted; potrf_direct micro-bench)
+
+Workspace alpha.143 (proposed; PM allocates at gate).
+
+- **Correction:** the alpha.141 rollup's `cholesky` row (f32 N256 1.65 ms, N512 3.46 ms; 0.26x / 0.17x of PyTorch) and the alpha.142 ROADMAP row built on it ("4-6x slower") were one noisy observation and are retracted: the same plan on the same box measures N256 540 us / N512 1.13 ms (0.78x / 0.51x). New `benches/potrf_direct.rs` (publish=false bench crate, now depends on baracuda-kernels-sys) times `CholeskyPlan::run` against a direct `cusolverDnSpotrf`, per-call events vs pipelined wall-clock: plan vs direct <= 7%, discipline <= 5%, the op is host-launch-bound; the remaining 1.2-2x vs the frozen PyTorch number is unexplained (torch is not installed on the box, so PyTorch was not re-run in session). ROADMAP row rewritten; a correction note added above the generated rollup in BENCHMARKS.md. Run was NOT quiet (Balanced plan, GPU at 1605/3105 MHz, other lanes' cargo processes).
+
 ## 0.0.1-alpha.142 - 2026-10-20 (ROADMAP: Linalg cholesky perf row (measured, uninvestigated))
 
 Workspace alpha.142 (proposed; PM allocates at gate).
