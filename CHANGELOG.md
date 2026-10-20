@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.142 - 2026-10-20 (ROADMAP: Linalg cholesky perf row (measured, uninvestigated))
+
+Workspace alpha.142 (proposed; PM allocates at gate).
+
+- ROADMAP: new perf row for `CholeskyPlan` at 0.17-0.26x of PyTorch (alpha.141 rollup, noisy box, single observation per cell), with the evidence, the min-vs-median check, the three untested hypotheses and the next step. Docs only.
+
 ## 0.0.1-alpha.141 - 2026-10-20 (bench rollup regenerated at alpha.140; Linalg (cholesky, lu) added)
 
 Workspace alpha.141 (proposed; PM allocates at gate).
