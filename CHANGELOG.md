@@ -16,6 +16,13 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.145 - 2026-10-21 (cuda-emit: top-1 with indices no longer panics; unpopped 0.20.13)
+
+Workspace alpha.145 (proposed; PM allocates at gate). `baracuda-cuda-emit` 0.20.1 -> 0.20.2 (its own PATCH counter; builds against unpopped 0.20.13).
+
+- **Fix:** `baracuda-cuda-emit` panicked generating a top-1 with indices (`row_sort_indices` / `row_topk`, outputs `[R,1]`) at the RowSort `Both` backstop (`oi.bcast.is_empty()` on out_idx, two sites). `OperandKey.bcast` is the FRAME mask: a `[R,1]` output against the `[R,K]` frame sets its bit while `contig` stays `Contig`. The check now uses `contig == Contig && !flipped` (as the Im2Col output check already did). Red-first test `topk_both_k_out_1_generates_for_the_size_1_out_axis`; the generated top-1 kernel was also run on an RTX 4070 against a host argmax (64 rows, 0 mismatches, tie resolves to the lower index).
+- **Deps:** `unpopped`, `unpopped-vocab`, `unpopped-cpu-c`, `unpopped-slang` 0.20.1 -> 0.20.13 (the repro needs it: on 0.20.1 unpopped's own `plan.rs` check rejects the shape first).
+
 ## 0.0.1-alpha.144 - 2026-10-20 (ROADMAP: bench run-to-run spread finding; quiet-box suite refresh row)
 
 Workspace alpha.144 (proposed; PM allocates at gate).
