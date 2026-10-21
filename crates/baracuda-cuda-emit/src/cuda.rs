@@ -6381,10 +6381,13 @@ fn emit_row_sort_impl(plan: &KernelPlan<'_>, ctype: &str, bitonic: bool) -> Gene
              n_inputs+2 operands (in0, out_val, out_idx)"
         );
         let oi = plan.key.operands[n_inputs + 1];
+        // `contig == Contig` already excludes a real OWN-axis broadcast; the key's
+        // `bcast` is the FRAME mask, set for a size-1 out axis against the `[R,K]`
+        // frame (top-1: out is `[R,1]`), so it is not checked here (as in Im2Col).
         assert!(
-            oi.bcast.is_empty() && oi.contig == Contiguity::Contig && !oi.flipped,
+            oi.contig == Contiguity::Contig && !oi.flipped,
             "cuda backend: RowSort Both out_idx (operand 2) must be forward-dense \
-             contiguous (empty bcast, not flipped); width may be < input for a TopK cap"
+             contiguous (not flipped); width may be < input for a TopK cap"
         );
     }
 
@@ -6794,10 +6797,13 @@ fn emit_row_sort_partial(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel 
              n_inputs+2 operands (in0, out_val, out_idx)"
         );
         let oi = plan.key.operands[n_inputs + 1];
+        // `contig == Contig` already excludes a real OWN-axis broadcast; the key's
+        // `bcast` is the FRAME mask, set for a size-1 out axis against the `[R,K]`
+        // frame (top-1: out is `[R,1]`), so it is not checked here (as in Im2Col).
         assert!(
-            oi.bcast.is_empty() && oi.contig == Contiguity::Contig && !oi.flipped,
+            oi.contig == Contiguity::Contig && !oi.flipped,
             "cuda backend: RowSort Both out_idx (operand 2) must be forward-dense \
-             contiguous (empty bcast, not flipped); width may be < input for a TopK cap"
+             contiguous (not flipped); width may be < input for a TopK cap"
         );
     }
 
@@ -16805,6 +16811,33 @@ mod sort_tests {
         let oi = OperandDesc::new(2, &[256, k_out], &[k_out, 1], ElementKind::I32, 256);
         structure_key(OpCategory::UnaryElementwise, &[a, ov, oi], ArchSku::Sm89)
     }
+    #[test]
+    fn topk_both_k_out_1_generates_for_the_size_1_out_axis() {
+        // top-1 with indices: out is `[R,1]`. The 1-extent out axis against the
+        // `[R,K]` frame sets the FRAME broadcast mask bit on out_idx (and out_val),
+        // while `contig` stays `Contig` (no real own-axis broadcast). The Both
+        // backstop must not read that frame bit as an aliasing broadcast: top-2
+        // generates, top-1 panicked on `oi.bcast.is_empty()`.
+        let key = topk_both_key(ElementKind::F32, 1);
+        assert!(
+            !key.operands[2].bcast.is_empty()
+                && key.operands[2].contig == unpopped_vocab::Contiguity::Contig,
+            "precondition: top-1 out_idx carries a frame bcast bit yet is Contig"
+        );
+        for variant in generate_variants(&OpDef::row_topk("topk", ElementKind::F32), &key, &Cuda) {
+            assert!(
+                variant.kernels[0].source.contains("k_out"),
+                "{}",
+                variant.tag
+            );
+        }
+        let k = generate(&OpDef::row_topk("topk", ElementKind::F32), &key, &Cuda);
+        assert_eq!(
+            k.name,
+            "baracuda_gen_topk_f32_rowsort_desc_stable_both_topk"
+        );
+    }
+
     // A single-output (Values) key with a narrower output — the free TopK+Values path.
     fn topk_values_key(dt: ElementKind, k_out: i64) -> StructureKey {
         let a = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
