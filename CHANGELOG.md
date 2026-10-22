@@ -16,6 +16,14 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.147 - 2026-10-22 (AWQ padded-layout tests; Marlin repack advisory)
+
+Workspace alpha.147 (proposed; PM allocates at gate). `baracuda-cuda-emit` stays 0.20.2. Tests and docs only; no API change.
+
+- **Advisory (Marlin):** `gptq_to_marlin_repack` produced a buffer that is NOT in Marlin's layout in every release from `0.0.1-alpha.64` (Phase 48, which introduced it) through `0.0.1-alpha.145`; it was fixed in alpha.146 (#218). Any weights repacked by those versions and fed to `Int4MarlinGemmPlan` give wrong results (measured: ~75% of output cells wrong at M=1, N=K=4096). Repack them again with alpha.146 or later. No crash or error signalled it. Whether any shipped consumer called it is not known to us.
+- **Tests:** `awq_reference` now also covers group size 64, `IC/group_size % 8 != 0` (the kernel's padded `zeros`/`scales` rows) and `M > 128`, each with the corrupted-scale control. 7 of 7 pass on the RTX 4070 (sm_89).
+- **Docs:** `Int4AwqGemmArgs` documents the padded OC-major layout formula.
+
 ## 0.0.1-alpha.146 - 2026-10-22 (BREAKING: Marlin packer is real; Marlin/AWQ tested numerically)
 
 Workspace alpha.146 (proposed; PM allocates at gate). `baracuda-cuda-emit` stays 0.20.2.

@@ -160,12 +160,18 @@ pub struct Int4AwqGemmArgs<'a, T: AwqActivation> {
     /// Per-group scales `[IC/group_size, OC]` in `T`.
     ///
     /// ⚠️ Memory layout: the shape label is `[IC/group_size, OC]`, but the
-    /// vendored kernel READS `scales` OC-major, `scales[oc * (IC/group_size) + g]`,
-    /// and `zeros` as `zeros[oc * ((IC/group_size)/8) + g/8]`, nibble `g % 8`
+    /// vendored kernel READS `scales` OC-major, `scales[oc * 8*zeros_w + g]`,
+    /// and `zeros` as `zeros[oc * zeros_w + g/8]`, nibble `g % 8` (`g` = group
+    /// index, `zeros_w` below)
     /// (verified against a dequantise-then-GEMM reference by
-    /// `tests/awq_reference.rs`). The kernel pads these rows when
-    /// `IC/group_size` is not a multiple of 8; that case is untested here, so
-    /// keep `IC/group_size % 8 == 0` (e.g. `IC = 4096` with `group_size = 128`).
+    /// `tests/awq_reference.rs`, including group 64, `IC/group_size % 8 != 0`
+    /// and `M > 128`). With `groups = IC/group_size` and
+    /// `mult = 128/group_size`, each OC row of `zeros` holds
+    /// `zeros_w = ceil(ceil(groups/8)/mult) * mult` words and each row of
+    /// `scales` holds `8 * zeros_w` entries; the tail beyond `groups` is
+    /// padding the kernel never reads as data. The allocation must cover those
+    /// padded rows, so it can exceed the `[IC/group_size, OC]` label's element
+    /// count when `groups % 8 != 0` (or at group 64 with odd `ceil(groups/8)`).
     /// A buffer laid out row-major as the label reads (e.g. a HuggingFace
     /// `*-AWQ` `scales` / `qzeros`) must be transposed first.
     pub scales: TensorRef<'a, T, 2>,
