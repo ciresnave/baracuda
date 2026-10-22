@@ -109,19 +109,50 @@ fn reference(case: &Case, m: usize, ic: usize, oc: usize, group: usize) -> (Vec<
     (out, abs)
 }
 
-fn run_kernel(
-    ctx: &Context,
-    stream: &Stream,
-    case: &Case,
-    packed: (&[i32], &[i32], &[f16]),
-    (m, ic, oc, group): (usize, usize, usize, usize),
-) -> Vec<f16> {
+/// Problem shape: `[M, IC] x [IC, OC]`, quantised in groups of `group` along IC.
+#[derive(Clone, Copy)]
+struct Shape {
+    m: usize,
+    ic: usize,
+    oc: usize,
+    group: usize,
+}
+
+/// An initialised device, context and stream.
+struct Gpu {
+    ctx: Context,
+    stream: Stream,
+}
+
+impl Gpu {
+    fn new(dev: &Device) -> Self {
+        let ctx = Context::new(dev).expect("context");
+        let stream = Stream::new(&ctx).expect("stream");
+        Self { ctx, stream }
+    }
+}
+
+/// Kernel-native packed buffers: weights, zeros, scales.
+#[derive(Clone)]
+struct Packed {
+    w: Vec<i32>,
+    z: Vec<i32>,
+    s: Vec<f16>,
+}
+
+fn tref(d: &DeviceBuffer<i32>, shape: [i32; 2]) -> TensorRef<'_, i32, 2> {
+    TensorRef::new(d.as_slice(), shape, contiguous_stride(shape)).unwrap()
+}
+
+fn run_kernel(gpu: &Gpu, case: &Case, packed: &Packed, shape: Shape) -> Vec<f16> {
+    let (ctx, stream) = (&gpu.ctx, &gpu.stream);
+    let Shape { m, ic, oc, group } = shape;
     let split_k_iters = 8i32;
     let (mi, ici, oci, g) = (m as i32, ic as i32, oc as i32, group as i32);
     let dev_a = DeviceBuffer::from_slice(ctx, &case.a).expect("upload A");
-    let dev_w = DeviceBuffer::from_slice(ctx, packed.0).expect("upload W");
-    let dev_z = DeviceBuffer::from_slice(ctx, packed.1).expect("upload Z");
-    let dev_s = DeviceBuffer::from_slice(ctx, packed.2).expect("upload S");
+    let dev_w = DeviceBuffer::from_slice(ctx, &packed.w).expect("upload W");
+    let dev_z = DeviceBuffer::from_slice(ctx, &packed.z).expect("upload Z");
+    let dev_s = DeviceBuffer::from_slice(ctx, &packed.s).expect("upload S");
     let mut dev_c: DeviceBuffer<f16> = DeviceBuffer::zeros(ctx, m * oc).expect("alloc C");
     let desc = Int4AwqGemmDescriptor::new(mi, ici, oci)
         .with_group_size(g)
@@ -135,24 +166,14 @@ fn run_kernel(
     let args = Int4AwqGemmArgs::<f16> {
         activation: TensorRef::new(dev_a.as_slice(), [mi, ici], contiguous_stride([mi, ici]))
             .unwrap(),
-        weight_packed: TensorRef::new(
-            dev_w.as_slice(),
-            [oci, ici / 8],
-            contiguous_stride([oci, ici / 8]),
-        )
-        .unwrap(),
+        weight_packed: tref(&dev_w, [oci, ici / 8]),
         scales: TensorRef::new(
             dev_s.as_slice(),
             [ici / g, oci],
             contiguous_stride([ici / g, oci]),
         )
         .unwrap(),
-        zeros: TensorRef::new(
-            dev_z.as_slice(),
-            [ici / g, oci / 8],
-            contiguous_stride([ici / g, oci / 8]),
-        )
-        .unwrap(),
+        zeros: tref(&dev_z, [ici / g, oci / 8]),
         output: TensorMut::new(
             dev_c.as_slice_mut(),
             [mi, oci],
@@ -180,24 +201,73 @@ fn mismatches(got: &[f16], want: &[f64], abs: &[f64], oc: usize) -> Vec<(usize, 
         .collect()
 }
 
-fn check_shape(m: usize, ic: usize, oc: usize, group: usize) {
-    init().expect("driver init");
-    let dev = require!(Device::get(0), "a CUDA device (AWQ reference test)");
-    let ctx = Context::new(&dev).expect("context");
-    let stream = Stream::new(&ctx).expect("stream");
+/// Everything a comparison needs: inputs, packed device buffers and the
+/// reference output.
+struct Fixture {
+    case: Case,
+    packed: Packed,
+    want: Vec<f64>,
+    abs: Vec<f64>,
+    shape: Shape,
+}
 
+impl Fixture {
+    fn run(&self, gpu: &Gpu, packed: &Packed) -> Vec<f16> {
+        run_kernel(gpu, &self.case, packed, self.shape)
+    }
+
+    fn mismatches(&self, got: &[f16]) -> Vec<(usize, usize)> {
+        mismatches(got, &self.want, &self.abs, self.shape.oc)
+    }
+}
+
+/// Build the case with one group-0 scale tagged (`probe_col`, `probe_val`, a
+/// value outside the generated range) so its packed slot can be found by value.
+fn build_fixture(shape: Shape, probe_col: usize, probe_val: f16) -> Fixture {
+    let Shape { m, ic, oc, group } = shape;
     let mut case = make_case(m, ic, oc, group);
-    // Tag one group-0 scale with a value outside the generated range so its
-    // packed slot can be found by value.
-    let probe_col = oc / 2 + 3;
-    let probe_val = f16::from_f32(0.0777);
     case.scales[probe_col] = probe_val;
     let (w, z, s) = pack(&case, ic, oc, group);
     let (want, abs) = reference(&case, m, ic, oc, group);
-    let cfg = (m, ic, oc, group);
+    Fixture {
+        case,
+        packed: Packed { w, z, s },
+        want,
+        abs,
+        shape,
+    }
+}
 
-    let got = run_kernel(&ctx, &stream, &case, (&w, &z, &s), cfg);
-    let bad = mismatches(&got, &want, &abs, oc);
+/// Known-bad control: scale the tagged scale by 16 (a x2 error in one of 32
+/// groups can hide inside the 1% bound through sign cancellation). Only the
+/// tagged column, group 0, is affected.
+fn check_corruption_is_detected(gpu: &Gpu, fx: &Fixture, probe_col: usize, probe_val: f16) {
+    let Shape { m, ic, oc, group } = fx.shape;
+    assert_eq!(fx.packed.s.iter().filter(|&&x| x == probe_val).count(), 1);
+    let slot = fx.packed.s.iter().position(|&x| x == probe_val).unwrap();
+    let mut corrupted = fx.packed.clone();
+    corrupted.s[slot] = f16::from_f32(corrupted.s[slot].to_f32() * 16.0);
+    let bad_cells = fx.mismatches(&fx.run(gpu, &corrupted));
+    assert!(
+        !bad_cells.is_empty(),
+        "M={m} IC={ic} OC={oc} G={group}: corrupting a scale did NOT change the result beyond tolerance;          the comparison cannot detect a wrong answer"
+    );
+    assert!(
+        bad_cells.iter().all(|&(_, c)| c == probe_col),
+        "M={m} IC={ic} OC={oc} G={group}: corruption leaked outside column {probe_col}: {:?}",
+        &bad_cells[..bad_cells.len().min(8)]
+    );
+}
+
+fn check_shape(m: usize, ic: usize, oc: usize, group: usize) {
+    init().expect("driver init");
+    let dev = require!(Device::get(0), "a CUDA device (AWQ reference test)");
+    let gpu = Gpu::new(&dev);
+    let shape = Shape { m, ic, oc, group };
+    let (probe_col, probe_val) = (oc / 2 + 3, f16::from_f32(0.0777));
+    let fx = build_fixture(shape, probe_col, probe_val);
+
+    let bad = fx.mismatches(&fx.run(&gpu, &fx.packed));
     assert!(
         bad.is_empty(),
         "M={m} IC={ic} OC={oc} G={group}: {} of {} cells mismatch the dequant+GEMM reference; first {:?}",
@@ -205,26 +275,7 @@ fn check_shape(m: usize, ic: usize, oc: usize, group: usize) {
         m * oc,
         &bad[..bad.len().min(8)]
     );
-
-    // Known-bad control: scale the tagged scale by 16 (a x2 error in one of 32
-    // groups can hide inside the 1% bound through sign cancellation). Only the
-    // tagged column, group 0, is affected.
-    assert_eq!(s.iter().filter(|&&x| x == probe_val).count(), 1);
-    let slot = s.iter().position(|&x| x == probe_val).unwrap();
-    let mut corrupted = s.clone();
-    corrupted[slot] = f16::from_f32(corrupted[slot].to_f32() * 16.0);
-    let got_bad = run_kernel(&ctx, &stream, &case, (&w, &z, &corrupted), cfg);
-    let bad_cells = mismatches(&got_bad, &want, &abs, oc);
-    assert!(
-        !bad_cells.is_empty(),
-        "M={m} IC={ic} OC={oc} G={group}: corrupting a scale did NOT change the result beyond tolerance; \
-         the comparison cannot detect a wrong answer"
-    );
-    assert!(
-        bad_cells.iter().all(|&(_, c)| c == probe_col),
-        "M={m} IC={ic} OC={oc} G={group}: corruption leaked outside column {probe_col}: {:?}",
-        &bad_cells[..bad_cells.len().min(8)]
-    );
+    check_corruption_is_detected(&gpu, &fx, probe_col, probe_val);
 }
 
 #[test]

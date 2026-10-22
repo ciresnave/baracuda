@@ -94,15 +94,39 @@ fn reference(case: &Case, m: usize, n: usize, k: usize, group: usize) -> (Vec<f6
     (out, abs)
 }
 
+/// Problem shape: `[M, K] x [K, N]`, quantised in groups of `group` along K.
+#[derive(Clone, Copy)]
+struct Shape {
+    m: usize,
+    n: usize,
+    k: usize,
+    group: usize,
+}
+
+/// An initialised device, context and stream.
+struct Gpu {
+    ctx: Context,
+    stream: Stream,
+}
+
+impl Gpu {
+    fn new(dev: &Device) -> Self {
+        let ctx = Context::new(dev).expect("context");
+        let stream = Stream::new(&ctx).expect("stream");
+        Self { ctx, stream }
+    }
+}
+
 /// Run the kernel on `scales_dev` (already Marlin-permuted) and return `[M, N]`.
 fn run_kernel(
-    ctx: &Context,
-    stream: &Stream,
+    gpu: &Gpu,
     case: &Case,
     packed: &[i32],
     scales_dev: &[f16],
-    (m, n, k, group): (usize, usize, usize, usize),
+    shape: Shape,
 ) -> Vec<f16> {
+    let (ctx, stream) = (&gpu.ctx, &gpu.stream);
+    let Shape { m, n, k, group } = shape;
     let max_par = 16i32;
     let dev_a = DeviceBuffer::from_slice(ctx, &case.a).expect("upload A");
     let dev_b = DeviceBuffer::from_slice(ctx, packed).expect("upload B");
@@ -150,17 +174,33 @@ fn mismatches(got: &[f16], want: &[f64], abs: &[f64], n: usize) -> Vec<(usize, u
         .collect()
 }
 
-fn check_shape(m: usize, n: usize, k: usize, group: usize) {
-    init().expect("driver init");
-    let dev = require!(Device::get(0), "a CUDA device (Marlin reference test)");
-    let ctx = Context::new(&dev).expect("context");
-    let stream = Stream::new(&ctx).expect("stream");
+/// Everything a comparison needs: inputs, the repacked device buffers and the
+/// reference output.
+struct Fixture {
+    case: Case,
+    packed: Vec<i32>,
+    scales_dev: Vec<f16>,
+    want: Vec<f64>,
+    abs: Vec<f64>,
+    shape: Shape,
+}
 
+impl Fixture {
+    fn run(&self, gpu: &Gpu, scales: &[f16]) -> Vec<f16> {
+        run_kernel(gpu, &self.case, &self.packed, scales, self.shape)
+    }
+
+    fn mismatches(&self, got: &[f16]) -> Vec<(usize, usize)> {
+        mismatches(got, &self.want, &self.abs, self.shape.n)
+    }
+}
+
+/// Build the case with one group-0 scale tagged (`probe_col`, `probe_val`, a
+/// value outside the generated range) so its permuted slot can be found by
+/// value, without re-deriving the permutation; repack it; compute the reference.
+fn build_fixture(shape: Shape, probe_col: usize, probe_val: f16) -> Fixture {
+    let Shape { m, n, k, group } = shape;
     let mut case = make_case(m, n, k, group);
-    // Tag one group-0 scale with a value outside the generated range so its
-    // permuted slot can be found by value, without re-deriving the permutation.
-    let probe_col = n / 2 + 3;
-    let probe_val = f16::from_f32(0.0777);
     case.scales[probe_col] = probe_val;
     let (qweight, scales_f32, qzeros) = gptq_of(&case, n, k, group);
     let marlin = gptq_to_marlin_repack(&GptqWeights {
@@ -173,20 +213,54 @@ fn check_shape(m: usize, n: usize, k: usize, group: usize) {
         group_size: group,
     })
     .expect("repack");
-    let scales_dev: Vec<f16> = marlin.scales.iter().map(|&s| f16::from_f32(s)).collect();
+    let scales_dev = marlin.scales.iter().map(|&s| f16::from_f32(s)).collect();
     let (want, abs) = reference(&case, m, n, k, group);
-    let cfg = (m, n, k, group);
+    Fixture {
+        case,
+        packed: marlin.weight_packed,
+        scales_dev,
+        want,
+        abs,
+        shape,
+    }
+}
+
+/// Known-bad control: scale the tagged device-side scale by 16 (a x2 error in
+/// one of 32 groups can hide inside the 1% bound through sign cancellation).
+/// The reference is unchanged, so the comparison must now fail, and only in the
+/// tagged column (group 0 is the only group holding that scale).
+fn check_corruption_is_detected(gpu: &Gpu, fx: &Fixture, probe_col: usize, probe_val: f16) {
+    let Shape { m, n, k, group } = fx.shape;
+    let slot = fx
+        .scales_dev
+        .iter()
+        .position(|&s| s == probe_val)
+        .expect("tagged scale present exactly once after repack");
+    assert_eq!(fx.scales_dev.iter().filter(|&&s| s == probe_val).count(), 1);
+    let mut corrupted = fx.scales_dev.clone();
+    corrupted[slot] = f16::from_f32(corrupted[slot].to_f32() * 16.0);
+    let bad_cells = fx.mismatches(&fx.run(gpu, &corrupted));
+    assert!(
+        !bad_cells.is_empty(),
+        "M={m} N={n} K={k} G={group}: corrupting a scale did NOT change the result beyond tolerance;          the comparison cannot detect a wrong answer"
+    );
+    assert!(
+        bad_cells.iter().all(|&(_, c)| c == probe_col),
+        "M={m} N={n} K={k} G={group}: corruption leaked outside column {probe_col}: {:?}",
+        &bad_cells[..bad_cells.len().min(8)]
+    );
+}
+
+fn check_shape(m: usize, n: usize, k: usize, group: usize) {
+    init().expect("driver init");
+    let dev = require!(Device::get(0), "a CUDA device (Marlin reference test)");
+    let gpu = Gpu::new(&dev);
+    let shape = Shape { m, n, k, group };
+    let (probe_col, probe_val) = (n / 2 + 3, f16::from_f32(0.0777));
+    let fx = build_fixture(shape, probe_col, probe_val);
 
     // Real run: must match everywhere.
-    let got = run_kernel(
-        &ctx,
-        &stream,
-        &case,
-        &marlin.weight_packed,
-        &scales_dev,
-        cfg,
-    );
-    let bad = mismatches(&got, &want, &abs, n);
+    let bad = fx.mismatches(&fx.run(&gpu, &fx.scales_dev));
     assert!(
         bad.is_empty(),
         "M={m} N={n} K={k} G={group}: {} of {} cells mismatch the dequant+GEMM reference; first {:?}",
@@ -194,30 +268,7 @@ fn check_shape(m: usize, n: usize, k: usize, group: usize) {
         m * n,
         &bad[..bad.len().min(8)]
     );
-
-    // Known-bad control: scale the tagged device-side scale by 16 (a x2 error in one of 32 groups
-    // can hide inside the 1% bound through sign cancellation). The reference is
-    // unchanged, so the comparison must now fail, and only in the tagged
-    // column (group 0 is the only group holding that scale).
-    let slot = scales_dev
-        .iter()
-        .position(|&s| s == probe_val)
-        .expect("tagged scale present exactly once after repack");
-    assert_eq!(scales_dev.iter().filter(|&&s| s == probe_val).count(), 1);
-    let mut corrupted = scales_dev.clone();
-    corrupted[slot] = f16::from_f32(corrupted[slot].to_f32() * 16.0);
-    let got_bad = run_kernel(&ctx, &stream, &case, &marlin.weight_packed, &corrupted, cfg);
-    let bad_cells = mismatches(&got_bad, &want, &abs, n);
-    assert!(
-        !bad_cells.is_empty(),
-        "M={m} N={n} K={k} G={group}: corrupting a scale did NOT change the result beyond tolerance; \
-         the comparison cannot detect a wrong answer"
-    );
-    assert!(
-        bad_cells.iter().all(|&(_, c)| c == probe_col),
-        "M={m} N={n} K={k} G={group}: corruption leaked outside column {probe_col}: {:?}",
-        &bad_cells[..bad_cells.len().min(8)]
-    );
+    check_corruption_is_detected(&gpu, &fx, probe_col, probe_val);
 }
 
 #[test]
