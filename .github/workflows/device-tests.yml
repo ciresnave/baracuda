@@ -43,6 +43,13 @@ jobs:
         env:
           BARACUDA_RESULTS_FILE: device-test-results-kernels.json
         run: cargo gpu-test -p baracuda-kernels --features device-tests
+      # marlin / awq are off by default, so the step above compiles their tests to
+      # empty binaries; this one enables them. Scoped to the quantised-GEMM tests.
+      - name: cargo gpu-test (baracuda-kernels, marlin + awq, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-kernels-quant.json
+        run: cargo gpu-test -p baracuda-kernels --features marlin,awq,device-tests --test marlin_reference --test awq_reference --test marlin_smoke --test awq_smoke --test gptq_to_marlin_smoke
       - name: cargo gpu-test (baracuda-cutlass, device-tests)
         shell: bash
         env:
@@ -206,6 +213,7 @@ jobs:
           path: |
             device-test-results.json
             device-test-results-kernels.json
+            device-test-results-kernels-quant.json
             device-test-results-cutlass.json
             device-test-results-flashinfer.json
             device-test-results-ozimmu.json

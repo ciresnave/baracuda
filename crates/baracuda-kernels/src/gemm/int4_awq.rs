@@ -158,6 +158,16 @@ pub struct Int4AwqGemmArgs<'a, T: AwqActivation> {
     /// reshaping from a flat HF checkpoint buffer.
     pub weight_packed: TensorRef<'a, i32, 2>,
     /// Per-group scales `[IC/group_size, OC]` in `T`.
+    ///
+    /// ⚠️ Memory layout: the shape label is `[IC/group_size, OC]`, but the
+    /// vendored kernel READS `scales` OC-major, `scales[oc * (IC/group_size) + g]`,
+    /// and `zeros` as `zeros[oc * ((IC/group_size)/8) + g/8]`, nibble `g % 8`
+    /// (verified against a dequantise-then-GEMM reference by
+    /// `tests/awq_reference.rs`). The kernel pads these rows when
+    /// `IC/group_size` is not a multiple of 8; that case is untested here, so
+    /// keep `IC/group_size % 8 == 0` (e.g. `IC = 4096` with `group_size = 128`).
+    /// A buffer laid out row-major as the label reads (e.g. a HuggingFace
+    /// `*-AWQ` `scales` / `qzeros`) must be transposed first.
     pub scales: TensorRef<'a, T, 2>,
     /// Per-group packed int4 zero-points. Shape `[IC/group_size, OC/8]`
     /// of `i32` storage (8 zero-points per int32 word).

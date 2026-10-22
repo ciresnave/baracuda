@@ -358,6 +358,10 @@ jobs:
         run: cargo check --locked -p baracuda-kernels --tests --features ${{ matrix.arch }}
       - name: cargo check baracuda-kernels --tests (device-tests on)
         run: cargo check --locked -p baracuda-kernels --tests --features ${{ matrix.arch }},device-tests
+      # marlin / awq are off by default, so the two blocks above never compiled
+      # tests/{marlin,awq}_*.rs; a view-field privatisation broke them unseen.
+      - name: cargo check baracuda-kernels --tests (marlin + awq + device-tests)
+        run: cargo check --locked -p baracuda-kernels --tests --features ${{ matrix.arch }},marlin,awq,device-tests
       # baracuda-cutlass's device tests are gated the same way; its features are sm80/sm90a
       # only (no sm89), so type-check the default build once, on the sm80 leg.
       - name: cargo check baracuda-cutlass --tests (device-tests off)
