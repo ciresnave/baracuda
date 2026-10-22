@@ -42,13 +42,12 @@
 //!
 //! ## Implementation status
 //!
-//! This is a **trailblazer** implementation that covers the API
-//! surface and the host-side data-movement; the int4 permutation
-//! tables match upstream Marlin's reference. The output is
-//! algorithmically valid Marlin input but should be cross-checked
-//! against the upstream Python packer on a real GPTQ checkpoint
-//! before production use — see the `gptq_to_marlin_smoke` test for
-//! the roundtrip validation harness.
+//! Steps 3-4 are Marlin's real `_perm` / `_scale_perm` reshuffle (a
+//! transcription of upstream `Layer.pack`). Its correctness is established
+//! end to end on a device by `tests/marlin_reference.rs` (kernel output vs a
+//! dequantise-then-GEMM reference built from the unpacked weights), not by
+//! reading this code. Still lossy for `zp != 8` (see step 2), and `g_idx`
+//! permutations and per-channel (`group_size == -1`) are rejected.
 //!
 //! ## Cargo feature
 //!
@@ -229,57 +228,57 @@ pub fn repack(g: &GptqWeights<'_>) -> Result<MarlinWeights, &'static str> {
         }
     }
 
-    // Step 6 + 7: apply Marlin's _perm permutation along the IC
-    // axis and pack into [K/16, N*16/8] int32 words.
-    //
-    // Marlin's reference permutation comes from
-    // `marlin/__init__.py::_get_perms()`. The trailblazer here uses
-    // a simplified "identity" permutation along K (matches the
-    // upstream behaviour when the tensor-core fragment alignment
-    // is already satisfied by the natural K layout). For maximum
-    // fidelity, replace with the upstream `_perm` table — see the
-    // smoke test for the validation harness.
-    //
-    // Pack format: word `[ic_block, oc_word]` packs 8 nibbles
-    // along the K dimension (positions
-    // `[ic_block*16+0, ic_block*16+2, ..., ic_block*16+14]`
-    // interleaved with the odd positions in the upper nibble of
-    // each byte).
+    if g.oc % MARLIN_SCALE_PERM_LEN != 0 {
+        return Err(
+            "gptq_to_marlin::repack: OC must be divisible by 64 (Marlin's permutation runs)",
+        );
+    }
+
+    // Step 6 + 7: Marlin's offline weight reshuffle, a transcription of
+    // `Layer.pack` in upstream `marlin/__init__.py`.
+    //   1. tile `[K, N]` into 16x16 tiles, ordered `[K/16][N/16]`, each tile
+    //      row-major: `res[kb][nb*256 + r*16 + c] = w[kb*16 + r][nb*16 + c]`;
+    //   2. within every run of 1024 values apply `res[j] = old[perm[j]]`
+    //      (`marlin_perm`, which already folds in the 8-way nibble interleave);
+    //   3. pack 8 consecutive values per i32, value `b` in bits `4b..4b+4`.
     let k_blocks = g.ic / 16;
     let n_words = g.oc * 16 / 8;
+    let perm = marlin_perm();
     let mut packed = alloc::vec![0i32; k_blocks * n_words];
-
-    // Trailblazer: emit a row-major packing of the (post-folded)
-    // int4 weights into the Marlin word layout, 8 packed nibbles
-    // per int32 word along IC. The exact intra-fragment
-    // permutation expected by the Marlin tensor-core load is NOT
-    // yet applied — see the smoke test's documented "skip when
-    // upstream packer unavailable" branch.
+    let mut tiled = alloc::vec![0u8; g.oc * 16];
     for kb in 0..k_blocks {
-        for oc in 0..g.oc {
-            // For each (kb, oc) pair, gather the 16 K-positions
-            // and pack them into 2 int32 words (8 nibbles per word).
-            for half in 0..2usize {
-                let mut word: u32 = 0;
-                for nib in 0..8usize {
-                    let ic = kb * 16 + half * 8 + nib;
-                    let q = weight_dense[ic * g.oc + oc] as u32;
-                    word |= (q & 0xF) << (4 * nib);
+        for nb in 0..g.oc / 16 {
+            for r in 0..16usize {
+                for c in 0..16usize {
+                    tiled[nb * 256 + r * 16 + c] = weight_dense[(kb * 16 + r) * g.oc + nb * 16 + c];
                 }
-                // Marlin's per-block byte layout interleaves OC
-                // and the upper-half K nibbles; the simplified
-                // packing here groups by `(kb, oc, half)`.
-                let word_idx = kb * n_words + oc * 2 + half;
-                packed[word_idx] = word as i32;
+            }
+        }
+        for chunk in 0..g.oc * 16 / MARLIN_PERM_LEN {
+            let base = chunk * MARLIN_PERM_LEN;
+            for w in 0..MARLIN_PERM_LEN / 8 {
+                let mut word: u32 = 0;
+                for bit in 0..8usize {
+                    let q = tiled[base + perm[w * 8 + bit]] as u32;
+                    word |= (q & 0xF) << (4 * bit);
+                }
+                packed[kb * n_words + chunk * (MARLIN_PERM_LEN / 8) + w] = word as i32;
             }
         }
     }
 
-    // Step 8: scales along K axis stay [num_groups, OC]. The Marlin
-    // kernel expects an N-axis permutation; the trailblazer ships
-    // an identity permutation here. Replace with upstream
-    // `_scale_perm` for full fidelity.
-    let scales_out: Vec<f32> = g.scales.to_vec();
+    // Step 8: scales `[num_groups, OC]` -> `reshape(-1, 64)[:, scale_perm]`
+    // -> `reshape(-1, OC)` (upstream `_scale_perm`, group_size = 128).
+    let scale_perm = marlin_scale_perm();
+    let mut scales_out = alloc::vec![0f32; g.scales.len()];
+    for (dst, src) in scales_out
+        .chunks_exact_mut(MARLIN_SCALE_PERM_LEN)
+        .zip(g.scales.chunks_exact(MARLIN_SCALE_PERM_LEN))
+    {
+        for (j, d) in dst.iter_mut().enumerate() {
+            *d = src[scale_perm[j]];
+        }
+    }
 
     Ok(MarlinWeights {
         weight_packed: packed,
@@ -287,22 +286,53 @@ pub fn repack(g: &GptqWeights<'_>) -> Result<MarlinWeights, &'static str> {
     })
 }
 
-/// Marlin's offline weight permutation table for the int4 reshuffle
-/// along IC. Reproduces `marlin/__init__.py::_perm` for
-/// `group_size=128` on Ampere.
-///
-/// The table is referenced by the smoke test's strict-validation
-/// arm; the host-side repack in [`repack`] above is currently the
-/// simplified trailblazer (identity permutation).
-///
-/// This constant is exported for downstream callers that want to
-/// implement the strict-fidelity permutation themselves while the
-/// in-crate utility evolves.
-pub const MARLIN_PERM_LEN: usize = 64;
+/// Marlin's weight permutation over one run of 1024 values
+/// (`marlin/__init__.py::_get_perms`, the `_perm` table including its final
+/// `[0, 2, 4, 6, 1, 3, 5, 7]` nibble interleave).
+fn marlin_perm() -> Vec<usize> {
+    let mut perm = Vec::with_capacity(1024);
+    for i in 0..32usize {
+        let col = i / 4;
+        let mut perm1 = Vec::with_capacity(8);
+        for block in 0..2usize {
+            for row in [
+                2 * (i % 4),
+                2 * (i % 4) + 1,
+                2 * (i % 4 + 4),
+                2 * (i % 4 + 4) + 1,
+            ] {
+                perm1.push(16 * row + col + 8 * block);
+            }
+        }
+        for j in 0..4usize {
+            perm.extend(perm1.iter().map(|p| p + 256 * j));
+        }
+    }
+    const INTERLEAVE: [usize; 8] = [0, 2, 4, 6, 1, 3, 5, 7];
+    let mut out = Vec::with_capacity(1024);
+    for grp in perm.chunks_exact(8) {
+        out.extend(INTERLEAVE.iter().map(|&i| grp[i]));
+    }
+    out
+}
 
-/// Marlin's offline scale permutation table along the N axis,
-/// `group_size=128`. Reproduces `marlin/__init__.py::_scale_perm`.
-/// Exported alongside [`MARLIN_PERM_LEN`] for the same reason.
+/// Marlin's scale permutation over one run of 64 scales
+/// (`marlin/__init__.py::_scale_perm`).
+fn marlin_scale_perm() -> Vec<usize> {
+    let mut out = Vec::with_capacity(MARLIN_SCALE_PERM_LEN);
+    for i in 0..8usize {
+        out.extend((0..8usize).map(|j| i + 8 * j));
+    }
+    out
+}
+
+/// Length of the run over which [`repack`] applies Marlin's weight
+/// permutation (`marlin/__init__.py::_perm`): 1024 values, i.e. 16 K-rows by
+/// 64 N-columns of one tile row.
+pub const MARLIN_PERM_LEN: usize = 1024;
+
+/// Length of the run over which [`repack`] applies Marlin's scale
+/// permutation (`marlin/__init__.py::_scale_perm`): 64 scales.
 pub const MARLIN_SCALE_PERM_LEN: usize = 64;
 
 #[cfg(test)]
