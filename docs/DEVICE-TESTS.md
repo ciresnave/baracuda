@@ -16,6 +16,8 @@ things keep that from being a way to hide them:
 3. **A stale or missing run is red.** `.github/workflows/device-tests-detector.yml` fails if the
    last successful device run is older than 7 days or absent.
 
+**Status (2026-10-22): the device lane is not running.** No self-hosted runner is registered for this public repo (ephemeral runners for public repos need a re-registration source; CireSnave board item 241), so the `DEVICE_RUNNER_ENABLED` gate is false and every device job is `skipped`. Measured: `device-tests.yml` (push 08:36Z, schedule 08:41Z) and the first `workflow_dispatch` of `device-tests-kernel-features.yml` (run 39751578145 at `20445e3b`) all concluded `skipped`. Nothing in the device lane has run since the runner went away, so the kernel feature sets in that workflow are UNVERIFIED on CI, and a green CI check says nothing about on-device behaviour. Results obtained by running `cargo gpu-test` locally under `gpu-run` are **LOCAL-ONLY**: label them so, and do not cite them as CI evidence.
+
 Both workflows are gated on the repository variable `DEVICE_RUNNER_ENABLED == 'true'` and are
 inert until the runner is registered and that variable is set.
 
