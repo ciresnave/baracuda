@@ -9,8 +9,11 @@
 //! Buffer layout is the one the vendored kernel indexes
 //! (`gemm_cuda_gen.cu`: `B_ptr`, `zeros_ptr`, `scaling_factors_ptr`), all
 //! OC-major: weights `[OC, IC/8]` (nibble `ic % 8` of word `ic / 8`), zeros
-//! `[OC, zeros_w]` (nibble `g % 8` of word `g / 8`), scales `[OC, 8*zeros_w]`.
-//! With `IC / group_size` a multiple of 8, `zeros_w = IC / group_size / 8`.
+//! `[OC, zeros_w]` (nibble `g % 8` of word `g / 8`), scales `[OC, 8*zeros_w]`,
+//! where `g` is the group index and, with `groups = IC / group_size` and
+//! `mult = 128 / group_size`, `zeros_w = ceil(ceil(groups / 8) / mult) * mult`
+//! (the kernel pads each row; padding is never read as data). The shapes
+//! include `groups % 8 != 0` (padded rows), group size 64, and `M > 128`.
 //!
 //! Device test (feature `device-tests`, not `#[ignore]`): run via
 //! `cargo gpu-test -p baracuda-kernels --features sm89,awq,device-tests --test awq_reference`.
@@ -60,20 +63,23 @@ fn make_case(m: usize, ic: usize, oc: usize, group: usize) -> Case {
     }
 }
 
-/// Kernel-native packed buffers `(weights, zeros)`; scales are `[OC, groups]`.
+/// Kernel-native packed buffers `(weights, zeros, scales)`, with the kernel's
+/// row padding (see the module docs).
 fn pack(case: &Case, ic: usize, oc: usize, group: usize) -> (Vec<i32>, Vec<i32>, Vec<f16>) {
     let groups = ic / group;
-    let zeros_w = groups / 8;
+    let mult = 128 / group;
+    let zeros_w = groups.div_ceil(8).div_ceil(mult) * mult;
+    let sf_w = zeros_w * 8;
     let mut w = vec![0u32; oc * ic / 8];
     let mut z = vec![0u32; oc * zeros_w];
-    let mut s = vec![f16::ZERO; oc * groups];
+    let mut s = vec![f16::ZERO; oc * sf_w];
     for o in 0..oc {
         for i in 0..ic {
             w[o * (ic / 8) + i / 8] |= (case.q[i * oc + o] as u32) << (4 * (i % 8));
         }
         for g in 0..groups {
             z[o * zeros_w + g / 8] |= (case.z[g * oc + o] as u32) << (4 * (g % 8));
-            s[o * groups + g] = case.scales[g * oc + o];
+            s[o * sf_w + g] = case.scales[g * oc + o];
         }
     }
     (
@@ -291,4 +297,27 @@ fn awq_matches_dequant_gemm_m16() {
 #[test]
 fn awq_matches_dequant_gemm_small() {
     check_shape(16, 1024, 1024, 128);
+}
+
+#[test]
+fn awq_matches_dequant_gemm_group64() {
+    check_shape(16, 4096, 4096, 64);
+}
+
+/// `IC / group_size = 10`, not a multiple of 8: the kernel's padded rows.
+#[test]
+fn awq_matches_dequant_gemm_padded_groups_g128() {
+    check_shape(16, 1280, 1024, 128);
+}
+
+/// `IC / group_size = 20` at group 64: padded rows with the doubled multiplier.
+#[test]
+fn awq_matches_dequant_gemm_padded_groups_g64() {
+    check_shape(16, 1280, 1024, 64);
+}
+
+/// `M > 128`: more than one kernel row block (and the padded split-k staging).
+#[test]
+fn awq_matches_dequant_gemm_m_over_128() {
+    check_shape(130, 1024, 1024, 128);
 }
