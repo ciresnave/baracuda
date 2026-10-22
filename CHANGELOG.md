@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.149 - 2026-10-22 (docs: device lane is not running)
+
+Workspace alpha.149 (proposed; PM allocates at gate). `baracuda-cuda-emit` stays 0.20.2. Docs only; no crate source changed, non-breaking.
+
+- **Docs:** `docs/DEVICE-TESTS.md` states that no self-hosted runner exists for this public repo, every device job is skipped, and nothing in the device lane has run since the runner went away; local `gpu-run` results are LOCAL-ONLY.
+
 ## 0.0.1-alpha.148 - 2026-10-22 (CI: feature-gated kernel device tests)
 
 Workspace alpha.148 (proposed; PM allocates at gate). `baracuda-cuda-emit` stays 0.20.2. CI only; no crate source changed, non-breaking.
