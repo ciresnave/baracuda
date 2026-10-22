@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.150 - 2026-10-22 (sys/types: drop false #![no_std])
+
+Workspace alpha.150 (PM-allocated). `baracuda-cuda-emit` stays 0.20.2. Non-breaking.
+
+- **Fix (#143, #144):** removed `#![no_std]` from `baracuda-ozimmu-sys`, `baracuda-transformer-engine-sys`, `baracuda-flashinfer` and `baracuda-types`. Each depends on a std crate (`baracuda-cuda-sys`/libloading, `baracuda-kernels`, `unpopped-vocab`), so the attribute never held on a no_std-only target. No code used anything std-only; `cutlass-sys`, `cutlass-kernels-sys`, `kernels-sys` and `flashinfer-sys` have no std deps and keep it.
+
 ## 0.0.1-alpha.149 - 2026-10-22 (docs: device lane is not running)
 
 Workspace alpha.149 (proposed; PM allocates at gate). `baracuda-cuda-emit` stays 0.20.2. Docs only; no crate source changed, non-breaking.
