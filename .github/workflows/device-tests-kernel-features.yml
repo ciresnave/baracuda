@@ -1,0 +1,97 @@
+name: Device tests, kernel feature sets (self-hosted)
+
+# The main device-tests.yml step builds baracuda-kernels with the default features
+# plus device-tests, so every test file gated on another feature (sm89, cudnn, mamba,
+# flashinfer, fa2_backward, bnb_nf4, xformers_*, ring_attention, mhc) compiles to an
+# EMPTY binary there and silently proves nothing. This workflow builds each feature
+# set and runs exactly those test binaries. marlin/awq have their own step in
+# device-tests.yml. Same security posture: no pull_request trigger, inert until
+# DEVICE_RUNNER_ENABLED. Weekly rather than per-push: each feature set is a full
+# nvcc rebuild (fa2_backward alone is ~1h).
+on:
+  schedule:
+    - cron: "41 2 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  kernel-features:
+    name: baracuda-kernels feature-gated on-device tests
+    if: vars.DEVICE_RUNNER_ENABLED == 'true'
+    runs-on: [self-hosted, windows, gpu, baracuda]
+    timeout-minutes: 480
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+      - name: cargo gpu-test (baracuda-kernels, bnb_nf4, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-kernels-bnb-nf4.json
+        run: cargo gpu-test -p baracuda-kernels --features bnb_nf4,device-tests --test nf4_gemv_smoke --test nf4_multim_smoke --test nf4_dequant_smoke
+      - name: cargo gpu-test (baracuda-kernels, cudnn, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-kernels-cudnn.json
+        run: cargo gpu-test -p baracuda-kernels --features cudnn,device-tests --test adaptive_avg_pool2d_smoke --test adaptive_pool_bitexact_smoke --test avg_pool1d_smoke --test avg_pool3d_smoke --test conv1d_smoke --test conv2d_depthwise_smoke --test conv2d_smoke --test conv3d_smoke --test conv_cudnn_ffi_smoke --test conv_transpose2d_smoke --test ctc_loss_cudnn_smoke --test fractional_max_pool_smoke --test im2col_smoke --test lp_pool_smoke --test max_pool1d_smoke --test max_pool3d_smoke --test pool2d_smoke --test pool_cudnn_ffi_smoke --test pool_extras_smoke
+      - name: cargo gpu-test (baracuda-kernels, fa2_backward, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-kernels-fa2-backward.json
+        run: cargo gpu-test -p baracuda-kernels --features fa2_backward,device-tests --test fa2_fw_bw_saved_tensor_smoke --test fa2_backward_smoke --test fa2_varlen_smoke
+      - name: cargo gpu-test (baracuda-kernels, flashinfer, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-kernels-flashinfer.json
+        run: cargo gpu-test -p baracuda-kernels --features flashinfer,device-tests --test cascade_attn_smoke --test paged_decode_smoke --test topk_sampling_smoke --test paged_kv_append_smoke
+      - name: cargo gpu-test (baracuda-kernels, mamba, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-kernels-mamba.json
+        run: cargo gpu-test -p baracuda-kernels --features mamba,device-tests --test causal_conv1d_bw_smoke --test causal_conv1d_smoke --test mamba1_block_smoke --test mamba2_block_smoke --test selective_scan_bw_smoke --test selective_scan_smoke --test ssd_chunk_scan_bw_smoke --test ssd_chunk_scan_smoke
+      - name: cargo gpu-test (baracuda-kernels, mhc, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-kernels-mhc.json
+        run: cargo gpu-test -p baracuda-kernels --features mhc,device-tests --test hyper_connection_smoke
+      - name: cargo gpu-test (baracuda-kernels, ring_attention, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-kernels-ring-attention.json
+        run: cargo gpu-test -p baracuda-kernels --features ring_attention,device-tests --test ring_attention_smoke
+      - name: cargo gpu-test (baracuda-kernels, sm89, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-kernels-sm89.json
+        run: cargo gpu-test -p baracuda-kernels --features sm89,device-tests --test bin_rrr_smoke --test bin_smoke --test flash_sdpa_sm89_smoke --test flash_sdpa_sm89_strided_smoke --test fp8_bias_smoke --test fp8_e4m3_rcr_smoke --test fp8_e4m3_rrr_smoke --test fp8_e5m2_rcr_smoke --test fp8_e5m2_rrr_smoke --test int4_bias_smoke --test int4_rrr_smoke --test s4_rcr_smoke --test u4_rcr_smoke
+      - name: cargo gpu-test (baracuda-kernels, xformers_blocksparse, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-kernels-xformers-blocksparse.json
+        run: cargo gpu-test -p baracuda-kernels --features xformers_blocksparse,device-tests --test sdpa_block_sparse_smoke
+      - name: cargo gpu-test (baracuda-kernels, xformers_sparse24, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-kernels-xformers-sparse24.json
+        run: cargo gpu-test -p baracuda-kernels --features xformers_sparse24,device-tests --test gemm_sparse24_smoke --test sparse24_throughput_smoke
+      - name: Upload run record
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: device-test-results-kernel-features
+          path: |
+            device-test-results-kernels-bnb-nf4.json
+            device-test-results-kernels-cudnn.json
+            device-test-results-kernels-fa2-backward.json
+            device-test-results-kernels-flashinfer.json
+            device-test-results-kernels-mamba.json
+            device-test-results-kernels-mhc.json
+            device-test-results-kernels-ring-attention.json
+            device-test-results-kernels-sm89.json
+            device-test-results-kernels-xformers-blocksparse.json
+            device-test-results-kernels-xformers-sparse24.json
