@@ -89,8 +89,6 @@
 //! # }
 //! ```
 
-#![no_std]
-
 pub mod attention;
 pub mod sampling;
 

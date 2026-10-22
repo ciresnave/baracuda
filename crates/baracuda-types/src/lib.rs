@@ -65,7 +65,6 @@
 //! assert_kernel_safe::<[u8; 16]>();
 //! ```
 
-#![no_std]
 #![warn(missing_debug_implementations)]
 
 pub mod device_repr;

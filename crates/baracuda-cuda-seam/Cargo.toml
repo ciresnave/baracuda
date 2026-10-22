@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-cuda-seam"
-version = "0.0.1-alpha.149"
+version = "0.0.1-alpha.150"
 description = "The Fuel kernel-seam `Synthesizer` implementation (`BaracudaSynthesizer`) over the CUDA backend in `baracuda-cuda-emit`. NOT PUBLISHED: it depends on `fuel-kernel-seam{,-types}` by git rev (fuel's board #106 Step A `JitRequest::target` is unreleased), which crates.io rejects."
 edition.workspace = true
 # No `rust-version.workspace = true`: no MSRV CI job builds this crate under 1.85
