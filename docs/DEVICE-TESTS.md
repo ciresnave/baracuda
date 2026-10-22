@@ -38,3 +38,7 @@ start/finish times, `skipped_declared`, and `skips_by_reason` (from `require_opt
 uploads it as an artifact and prints the counts in the job summary.
 
 What cannot run even on that box is listed, by name, in [`UNVERIFIED-HARDWARE.md`](UNVERIFIED-HARDWARE.md).
+
+## Feature-gated kernel tests
+
+`device-tests.yml` builds `baracuda-kernels` with default features (sm80, fa2), so test files gated on any other feature compile to empty binaries there. `device-tests-kernel-features.yml` (weekly + manual) builds each feature set (sm89, cudnn, mamba, flashinfer, fa2_backward, bnb_nf4, xformers_sparse24, xformers_blocksparse, ring_attention, mhc) and runs exactly those binaries; marlin/awq stay in `device-tests.yml`. Static census at 34477f16: 55 binaries, 257 `#[test]` fns. Unverified: whether each feature set builds on the runner (not run).
