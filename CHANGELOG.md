@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.148 - 2026-10-22 (CI: feature-gated kernel device tests)
+
+Workspace alpha.148 (proposed; PM allocates at gate). `baracuda-cuda-emit` stays 0.20.2. CI only; no crate source changed, non-breaking.
+
+- **CI:** new `device-tests-kernel-features.yml` runs the feature-gated `baracuda-kernels` device tests that previously compiled empty (10 feature sets, 55 test binaries, 257 tests by static census). Its first `workflow_dispatch` result is not yet verified.
+
 ## 0.0.1-alpha.147 - 2026-10-22 (AWQ padded-layout tests; Marlin repack advisory)
 
 Workspace alpha.147 (proposed; PM allocates at gate). `baracuda-cuda-emit` stays 0.20.2. Tests and docs only; no API change.
