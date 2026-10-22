@@ -37,7 +37,6 @@
 //! first-class baracuda code. See `ATTRIBUTION.md` at the crate
 //! root for the full story.
 
-#![no_std]
 #![deny(missing_docs)]
 
 use core::ffi::c_int;

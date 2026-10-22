@@ -84,7 +84,6 @@
 //! See `ATTRIBUTION.md` at the crate root for full license + scope
 //! provenance.
 
-#![no_std]
 #![deny(missing_docs)]
 
 use core::ffi::c_void;
