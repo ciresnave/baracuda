@@ -16,6 +16,13 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## Unreleased (version PM-allocated at gate): Marlin packer is real; Marlin/AWQ tested numerically
+
+- **Fix:** `gptq_to_marlin_repack` was a stub. It packed nibbles row-major with an identity permutation and an identity scale permutation, so its output was not Marlin's layout. It now applies upstream's `_perm` / `_scale_perm` reshuffle (`Layer.pack` in `marlin/__init__.py`). Measured on the RTX 4070 (sm_89): with the old packer the new reference test mismatches 3100 of 4096 cells at M=1, N=K=4096; with the new one all three shapes match in every cell. `repack` now also rejects `OC % 64 != 0`. `MARLIN_PERM_LEN` is now 1024 (was a placeholder 64).
+- **Tests:** `tests/marlin_reference.rs` and `tests/awq_reference.rs` compare kernel output with a dequantise-then-GEMM reference built from the unpacked weights (M=1/16, N=K=4096 and 1024, group 128; AWQ with random zero-points), plus a corrupted-scale control per shape. The old finite/zero-weight smokes are removed. Before this, `marlin`/`awq` were off in every CI and device-runner build, so these tests compiled to empty binaries.
+- **CI:** the self-hosted `device-tests.yml` now runs the Marlin/AWQ tests with `--features marlin,awq,device-tests`; `ci.yml` type-checks them on every PR.
+- **Docs:** `Int4AwqGemmArgs` now states the OC-major memory layout the kernel reads for `scales` / `zeros` (the `[IC/group_size, OC]` shape label does not describe it). API unchanged.
+
 ## 0.0.1-alpha.145 - 2026-10-21 (cuda-emit: top-1 with indices no longer panics; unpopped 0.20.13)
 
 Workspace alpha.145 (proposed; PM allocates at gate). `baracuda-cuda-emit` 0.20.1 -> 0.20.2 (its own PATCH counter; builds against unpopped 0.20.13).
