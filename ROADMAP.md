@@ -1534,15 +1534,14 @@ plumbing pattern as the cuDNN work above.
 established, and rounds out the "no `Contiguize` copies on library-
 backed paths" 1.0 story.
 
-### `baracuda-cuda-seam` publishability â€” WAITING on fuel (since 2026-10-14)
+### `baracuda-cuda-seam` publishability — UNBLOCKED (alpha.151, 2026-10-23)
 
-The crate is `publish = false`: it git-pins `fuel-kernel-seam{,-types}` at `c02da348`,
-because the registry latest (0.11.2) has `arch: ArchSku` only, with no `JitRequest::target` /
-`::new()`. **Blocked on fuel publishing its board #106 Step A seam crates** (no date from fuel;
-fuel lane notified 2026-10-14). Then: swap both git pins for versions, drop `publish = false`,
-PM allocates the bump and publishes. Fuel's consumer side
-(`fuel-dispatch/Cargo.toml:70`, cuda-emit `features=["seam","nvrtc"]`) must move to
-`baracuda-cuda-seam` â€” the `seam` feature is gone since cuda-emit 0.16.1.
+Fuel published `fuel-kernel-seam{,-types}` 0.22.4 (has `JitRequest::target` and
+`OpAttrs::region_key()`), so the crate now depends on registry versions only; the git pins
+are gone. `publish = false` is kept until the PM decides to publish it. To publish: drop that
+line, PM allocates the bump. Fuel's consumer side (`fuel-dispatch/Cargo.toml:70`, cuda-emit
+`features=["seam","nvrtc"]`) must move to `baracuda-cuda-seam` — the `seam` feature is gone
+since cuda-emit 0.16.1.
 
 ## Pre-1.0 nice-to-haves
 

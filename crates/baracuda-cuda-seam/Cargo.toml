@@ -1,7 +1,7 @@
 [package]
 name = "baracuda-cuda-seam"
-version = "0.0.1-alpha.150"
-description = "The Fuel kernel-seam `Synthesizer` implementation (`BaracudaSynthesizer`) over the CUDA backend in `baracuda-cuda-emit`. NOT PUBLISHED: it depends on `fuel-kernel-seam{,-types}` by git rev (fuel's board #106 Step A `JitRequest::target` is unreleased), which crates.io rejects."
+version = "0.0.1-alpha.151"
+description = "The Fuel kernel-seam `Synthesizer` implementation (`BaracudaSynthesizer`) over the CUDA backend in `baracuda-cuda-emit`. Not published: no consumer has asked, and the registry-only dependencies would now allow it."
 edition.workspace = true
 # No `rust-version.workspace = true`: no MSRV CI job builds this crate under 1.85
 # (it is `publish = false`, and fuel's seam crates' own floor is unmeasured), so
@@ -10,11 +10,7 @@ license.workspace = true
 authors.workspace = true
 repository.workspace = true
 homepage.workspace = true
-# crates.io rejects any crate with a git dependency, optional or not (verified
-# 2026-10-12: publishing baracuda-cuda-emit 0.16.0 failed with "dependency
-# `fuel-kernel-seam` does not specify a version"). This is why the Fuel seam
-# lives here and not behind a `seam` feature of baracuda-cuda-emit. Drop this
-# line when the two fuel deps below are registry versions.
+# Kept unpublished: nothing consumes it from crates.io yet.
 publish = false
 
 [features]
@@ -32,20 +28,12 @@ device-tests = []
 baracuda-cuda-emit = { workspace = true }
 unpopped = { workspace = true }
 unpopped-vocab = { workspace = true }
-# The §5 shared wire grammar + live-call envelope Fuel calls. Pinned by git rev
-# to fuel `main` at c02da348 because board #106 Step A (`JitRequest::target:
-# TargetId`, `#[non_exhaustive]`, `::new()`) is not on crates.io: the latest
-# registry release is 0.11.2, which has `arch: ArchSku` only. Switch both lines
-# to a plain `version = "..."` once fuel publishes it (its "0.13.0 wave"), then
-# remove `publish = false` above.
-#
-# BOTH crates carry the SAME rev: fuel's own workspace resolves
-# fuel-kernel-seam's dependency on fuel-kernel-seam-types through a path, so a
-# git dependency on fuel-kernel-seam alone already pulls a git-sourced
-# fuel-kernel-seam-types. A registry `fuel-kernel-seam-types` here would be a
-# second, type-incompatible copy of the same crate name in the graph.
-fuel-kernel-seam-types = { git = "https://github.com/ciresnave/fuel", rev = "c02da3489a01ba77889e6f5a17443f510247d694" }
-fuel-kernel-seam = { git = "https://github.com/ciresnave/fuel", rev = "c02da3489a01ba77889e6f5a17443f510247d694" }
+# The §5 shared wire grammar + live-call envelope Fuel calls: registry versions
+# (standing rule: no git deps). 0.22 carries `JitRequest::target` and
+# `OpAttrs::region_key()`. Both crates must be the SAME version so the graph holds
+# one copy of `fuel-kernel-seam-types`.
+fuel-kernel-seam-types = "0.22.4"
+fuel-kernel-seam = "0.22.4"
 
 [lints]
 workspace = true
