@@ -20,7 +20,7 @@ at alpha.82.
 
 Workspace alpha.155 (PM to confirm at gate). Stacked on #226 (alpha.154). No code change.
 
-- **CI:** new `portfolio` job in `ci.yml` calling `ciresnave/coderipper/.github/workflows/portfolio.yml@c665210a` (pinned SHA, CodeRipper 0.8.19). Advisory and non-blocking per CireSnave 2026-10-23; not a required context, no rule silenced.
+- **CI:** new `portfolio` job in `ci.yml` calling `ciresnave/coderipper/.github/workflows/portfolio.yml@789b0122` (pinned SHA, coderipper#125). Advisory and non-blocking per CireSnave 2026-10-23; not a required context, no rule silenced.
 
 ## 0.0.1-alpha.154 - 2026-10-23 (dependency pass #130: libloading 0.9, MSRV floor 1.88)
 
