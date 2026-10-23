@@ -194,9 +194,10 @@ pub mod callback {
     impl Drop for Subscriber {
         fn drop(&mut self) {
             if let Ok(c) = cupti()
-                && let Ok(cu) = c.cupti_unsubscribe() {
-                    let _ = unsafe { cu(self.handle) };
-                }
+                && let Ok(cu) = c.cupti_unsubscribe()
+            {
+                let _ = unsafe { cu(self.handle) };
+            }
         }
     }
 }
@@ -299,9 +300,10 @@ pub mod event {
     impl Drop for Group {
         fn drop(&mut self) {
             if let Ok(c) = cupti()
-                && let Ok(cu) = c.cupti_event_group_destroy() {
-                    let _ = unsafe { cu(self.raw) };
-                }
+                && let Ok(cu) = c.cupti_event_group_destroy()
+            {
+                let _ = unsafe { cu(self.raw) };
+            }
         }
     }
 }

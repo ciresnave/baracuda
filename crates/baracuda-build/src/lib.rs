@@ -70,9 +70,10 @@ pub fn detect_cuda() -> Option<CudaInstall> {
         "CUDA_TOOLKIT_ROOT_DIR",
     ] {
         if let Ok(raw) = std::env::var(var)
-            && let Some(install) = probe_root(&PathBuf::from(raw)) {
-                return Some(install);
-            }
+            && let Some(install) = probe_root(&PathBuf::from(raw))
+        {
+            return Some(install);
+        }
     }
 
     let candidates: &[&str] = if cfg!(target_os = "linux") {
@@ -203,9 +204,10 @@ pub fn find_nvcc() -> Option<PathBuf> {
     }
 
     if let Some(install) = detect_cuda()
-        && let Some(nvcc) = install.nvcc {
-            return Some(nvcc);
-        }
+        && let Some(nvcc) = install.nvcc
+    {
+        return Some(nvcc);
+    }
 
     let exe = if cfg!(target_os = "windows") {
         "nvcc.exe"

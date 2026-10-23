@@ -334,9 +334,10 @@ impl Drop for Context {
             return;
         }
         if let Ok(n) = nvshmem()
-            && let Ok(cu) = n.nvshmem_finalize() {
-                unsafe { cu() };
-            }
+            && let Ok(cu) = n.nvshmem_finalize()
+        {
+            unsafe { cu() };
+        }
     }
 }
 
@@ -505,9 +506,10 @@ impl<T: DeviceRepr> Drop for SymmetricBuffer<T> {
             return;
         }
         if let Ok(n) = nvshmem()
-            && let Ok(cu) = n.nvshmem_free() {
-                unsafe { cu(self.ptr) };
-            }
+            && let Ok(cu) = n.nvshmem_free()
+        {
+            unsafe { cu(self.ptr) };
+        }
     }
 }
 

@@ -233,10 +233,11 @@ fn current_ref_matches(dep_dir: &Path, target: &Target) -> bool {
             .current_dir(dep_dir)
             .output();
         if let Ok(out) = tag_resolved
-            && out.status.success() {
-                let resolved = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                return resolved == head;
-            }
+            && out.status.success()
+        {
+            let resolved = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            return resolved == head;
+        }
     }
 
     false
@@ -361,14 +362,15 @@ fn cleanup_git_locks(dep_dir: &Path) {
         let lock = git_dir.join(name);
         if let Ok(meta) = lock.metadata()
             && let Ok(modified) = meta.modified()
-                && let Ok(elapsed) = modified.elapsed()
-                    && elapsed.as_secs() > 600 {
-                        println!(
-                            "cargo:warning=baracuda-cutlass-sys: removing stale git lock {}",
-                            lock.display()
-                        );
-                        let _ = fs::remove_file(&lock);
-                    }
+            && let Ok(elapsed) = modified.elapsed()
+            && elapsed.as_secs() > 600
+        {
+            println!(
+                "cargo:warning=baracuda-cutlass-sys: removing stale git lock {}",
+                lock.display()
+            );
+            let _ = fs::remove_file(&lock);
+        }
     }
 }
 
