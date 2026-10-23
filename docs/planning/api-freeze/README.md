@@ -164,7 +164,8 @@ are unaffected, §4.4):
    version; the lockstep crate version is not an ABI promise, because crates move on every pushed
    change (CLAUDE.md §9) and the C ABI must not.
 4. **Deprecation path.** A symbol is marked deprecated (doc comment on the `extern` declaration and a
-   `CHANGELOG.md` entry; Rust-side wrappers get `#[deprecated(since, note)]`), kept through the rest of
+   `CHANGELOG.md` entry; the doc comment's first deprecation line is exactly `/// Deprecated since <version>: <replacement or reason>`,
+   which `scripts/check-abi-manifest.py` records in the fifth column of `abi/abi-manifest.tsv` (deprecating is not an ABI break); Rust-side wrappers get `#[deprecated(since, note)]`), kept through the rest of
    that major, and removed only in the next major. §4.5's "one breaking version" is the *minimum*;
    from 1.0 it is *the remainder of the major*.
 5. **`baracuda_kernels_abi_version()` becomes the loader's check.** It returns the C-ABI major, not
@@ -296,6 +297,38 @@ decision: `baracuda_kernels::ROPE_DEFAULT_BASE` had become `doc(hidden)` because
 (for the removed `map_status_pub`) directly above it. Fixed at alpha.132; with the fix the census matches the committed
 TSVs on every column except line numbers (compared with `cut -f1,4-8 | sort`). The committed TSVs are not rewritten for
 line-number drift alone.
+
+### 7.3 R2 decision: which descriptors actually grew (measured 2026-10-23, `origin/main` 405bf7fc-era)
+
+**Ruled (PM, 2026-10-23):** R2(b). Only descriptors whose pub fields have *actually grown* become
+`#[non_exhaustive]` + `new()` + `with_*`; the rest are **declared frozen-as-is, in writing, here**. The
+edit is breaking, so it ships in the single beta.0 window with R3 and R5, not before.
+
+**Method** (`tool/r2growth.py.txt`, output `r2-growth.tsv`): for each of the 257 kernels `*Descriptor`
+structs in `r2-worklist.tsv`, walk the history of the file that holds it (oldest first, `git log --reverse`),
+read the struct's `pub` field names at every revision that touches the file, and count revisions where a name
+appeared that the previous revision lacked.
+
+**Result: 3 of 257 grew (1.2%)**, each by one field:
+
+| struct | field added | fields now |
+|---|---|---:|
+| `BatchPagedPrefillDescriptor` | `enable_kv_split` | 7 |
+| `FlashDecodingDescriptor` | `num_kv_heads` | 7 |
+| `GgufMmvqDescriptor` | `w_start_byte_offset` | 4 |
+
+Those three are the beta.0 R2 retrofit list. The other **254 are frozen as-is**: their field sets have not changed
+over the measured history, and they stay literal-constructible (this avoids a breaking pass over 453 test files
+and 182 source/bench/example files, about 2 017 `XDescriptor {` sites, for a surface Fuel uses 0 of, section 7.1).
+If one of the 254 gains a field before 1.0 it joins the retrofit list; after 1.0 it is a breaking change.
+
+**Controls:** the three positives are real additions (cross-checked: `git log -L :Name:file` shows 2 to 3 commits
+touching each, and a `+ pub` field line in the diff); `AffineDescriptor`, `SdpaDescriptor` and `UnaryDescriptor`
+read 0 growth and `git log -L` shows only their creation plus one non-field edit (checked for `AffineDescriptor`).
+**Limits:** the history is 800 squashed commits starting at `e36466e6` ("Initial commit: baracuda v0.1.0"), so
+anything that grew before that is invisible; a struct moved between files reads as "first seen"; one squash commit
+that adds several fields counts once; a renamed field reads as one addition. "Has not grown" is a statement about
+this history, not a prediction.
 
 ## 8. What this slice does not decide
 

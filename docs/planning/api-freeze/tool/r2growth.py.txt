@@ -1,0 +1,73 @@
+#!/usr/bin/env python3
+"""R2 measurement: which kernels *Descriptor structs have GROWN pub fields over git history.
+
+For each (file, struct) in r2-worklist.tsv whose name ends in `Descriptor` and whose crate is
+baracuda-kernels, walk the file's history on REF (oldest first), extract the struct's `pub` field
+names at every revision that touches the file, and count revisions where a field name appeared that
+the previous revision did not have. Output: TSV on stdout.
+
+Limits (stated in the PR): a struct moved to another file loses its earlier history here (we follow
+the file, not the symbol, so a move reads as "first seen"); squash-merged history means one commit
+can bundle several additions (counted once); a renamed field reads as one addition + one removal.
+"""
+import re
+import subprocess
+import sys
+
+REF = sys.argv[1]
+WORKLIST = sys.argv[2]
+
+
+def git(*a):
+    return subprocess.run(["git", *a], capture_output=True, text=True, errors="replace")
+
+
+def strip(s):
+    s = re.sub(r"/\*.*?\*/", " ", s, flags=re.S)
+    return re.sub(r"//[^\n]*", "", s)
+
+
+def fields(src, name):
+    m = re.search(r"pub\s+struct\s+" + re.escape(name) + r"\b[^{;]*\{", src)
+    if not m:
+        return None
+    depth, i = 1, m.end()
+    while i < len(src) and depth:
+        depth += {"{": 1, "}": -1}.get(src[i], 0)
+        i += 1
+    body = src[m.end():i - 1]
+    return set(re.findall(r"\bpub\s+(\w+)\s*:", body))
+
+
+def main():
+    rows = [l.rstrip("\n").split("\t") for l in git("show", f"{REF}:{WORKLIST}").stdout.splitlines()[1:]]
+    want = [(r[1], r[3]) for r in rows if r[0] == "baracuda-kernels" and r[3].endswith("Descriptor")]
+    by_file = {}
+    for f, n in want:
+        by_file.setdefault(f, []).append(n)
+    print("file\tstruct\tfields_now\tfirst_fields\trevisions_seen\tgrew_events\tadded_names")
+    for f, names in sorted(by_file.items()):
+        revs = git("log", "--format=%H", "--reverse", REF, "--", f).stdout.split()
+        cache = {}
+        for sha in revs:
+            r = git("show", f"{sha}:{f}")
+            cache[sha] = strip(r.stdout) if r.returncode == 0 else None
+        for n in names:
+            prev, seen, grew, added, first = None, 0, 0, [], None
+            for sha in revs:
+                src = cache[sha]
+                cur = fields(src, n) if src else None
+                if cur is None:
+                    continue
+                seen += 1
+                if first is None:
+                    first = len(cur)
+                if prev is not None and (cur - prev):
+                    grew += 1
+                    added += sorted(cur - prev)
+                prev = cur
+            now = len(prev) if prev is not None else -1
+            print(f"{f}\t{n}\t{now}\t{first if first is not None else -1}\t{seen}\t{grew}\t{','.join(added)}")
+
+
+main()
