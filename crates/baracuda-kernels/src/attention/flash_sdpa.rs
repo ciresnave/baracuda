@@ -1331,7 +1331,11 @@ impl<T: Element> FlashSdpaPlan<T> {
 /// override (returns Bespoke on mismatch). Falls back to the
 /// heuristic when no override is supplied.
 fn pick_backend<T: Element>(
-    #[cfg_attr(not(feature = "fa2"), allow(unused_variables))] desc: &FlashSdpaDescriptor,
+    #[cfg_attr(
+        not(feature = "fa2"),
+        allow(unused_variables, reason = "desc is read only by the fa2-gated body")
+    )]
+    desc: &FlashSdpaDescriptor,
     pref: PlanPreference,
 ) -> BackendChoice {
     match pref.prefer_backend {

@@ -901,7 +901,13 @@ impl<T: Element> FlashSdpaBackwardPlan<T> {
 
 /// Internal: pick backend for the BW descriptor + preference.
 fn pick_backend<T: Element>(
-    #[cfg_attr(not(feature = "fa2_backward"), allow(unused_variables))]
+    #[cfg_attr(
+        not(feature = "fa2_backward"),
+        allow(
+            unused_variables,
+            reason = "desc is read only by the fa2_backward-gated body"
+        )
+    )]
     desc: &FlashSdpaBackwardDescriptor,
     pref: PlanPreference,
 ) -> BackendChoice {

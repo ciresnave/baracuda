@@ -3404,7 +3404,13 @@ fn should_use_cublas_for_fp(desc: &GemmDescriptor, element: ElementKind) -> bool
 ///
 /// When the `ozimmu` cargo feature is off, every request is rejected
 /// with a message pointing at the gate.
-#[cfg_attr(not(feature = "ozimmu"), allow(unused_variables))]
+#[cfg_attr(
+    not(feature = "ozimmu"),
+    allow(
+        unused_variables,
+        reason = "desc, element and slices are read only by the ozimmu-gated body"
+    )
+)]
 fn validate_ozaki_request(desc: &GemmDescriptor, element: ElementKind, slices: u8) -> Result<()> {
     #[cfg(not(feature = "ozimmu"))]
     {
