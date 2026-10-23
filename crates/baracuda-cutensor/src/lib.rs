@@ -467,11 +467,10 @@ impl<'h> ComputeDescriptor<'h> {
 
 impl Drop for ComputeDescriptor<'_> {
     fn drop(&mut self) {
-        if let Ok(c) = cutensor() {
-            if let Ok(cu) = c.cutensor_destroy_compute_descriptor() {
+        if let Ok(c) = cutensor()
+            && let Ok(cu) = c.cutensor_destroy_compute_descriptor() {
                 let _ = unsafe { cu(self.desc) };
             }
-        }
     }
 }
 
@@ -539,11 +538,10 @@ impl<'h> BlockSparseTensorDescriptor<'h> {
 
 impl Drop for BlockSparseTensorDescriptor<'_> {
     fn drop(&mut self) {
-        if let Ok(c) = cutensor() {
-            if let Ok(cu) = c.cutensor_destroy_block_sparse_tensor_descriptor() {
+        if let Ok(c) = cutensor()
+            && let Ok(cu) = c.cutensor_destroy_block_sparse_tensor_descriptor() {
                 let _ = unsafe { cu(self.desc) };
             }
-        }
     }
 }
 
@@ -660,11 +658,10 @@ impl TrinaryContraction {
 
 impl Drop for Handle {
     fn drop(&mut self) {
-        if let Ok(c) = cutensor() {
-            if let Ok(cu) = c.cutensor_destroy() {
+        if let Ok(c) = cutensor()
+            && let Ok(cu) = c.cutensor_destroy() {
                 let _ = unsafe { cu(self.handle) };
             }
-        }
     }
 }
 
@@ -736,11 +733,10 @@ impl<'h> TensorDescriptor<'h> {
 
 impl Drop for TensorDescriptor<'_> {
     fn drop(&mut self) {
-        if let Ok(c) = cutensor() {
-            if let Ok(cu) = c.cutensor_destroy_tensor_descriptor() {
+        if let Ok(c) = cutensor()
+            && let Ok(cu) = c.cutensor_destroy_tensor_descriptor() {
                 let _ = unsafe { cu(self.desc) };
             }
-        }
     }
 }
 
@@ -862,11 +858,10 @@ impl<'h> OperationDescriptor<'h> {
 
 impl Drop for OperationDescriptor<'_> {
     fn drop(&mut self) {
-        if let Ok(c) = cutensor() {
-            if let Ok(cu) = c.cutensor_destroy_operation_descriptor() {
+        if let Ok(c) = cutensor()
+            && let Ok(cu) = c.cutensor_destroy_operation_descriptor() {
                 let _ = unsafe { cu(self.desc) };
             }
-        }
     }
 }
 
@@ -1225,11 +1220,10 @@ impl<'h> PlanPreference<'h> {
 
 impl Drop for PlanPreference<'_> {
     fn drop(&mut self) {
-        if let Ok(c) = cutensor() {
-            if let Ok(cu) = c.cutensor_destroy_plan_preference() {
+        if let Ok(c) = cutensor()
+            && let Ok(cu) = c.cutensor_destroy_plan_preference() {
                 let _ = unsafe { cu(self.pref) };
             }
-        }
     }
 }
 
@@ -1555,10 +1549,9 @@ impl<'h> Plan<'h> {
 
 impl Drop for Plan<'_> {
     fn drop(&mut self) {
-        if let Ok(c) = cutensor() {
-            if let Ok(cu) = c.cutensor_destroy_plan() {
+        if let Ok(c) = cutensor()
+            && let Ok(cu) = c.cutensor_destroy_plan() {
                 let _ = unsafe { cu(self.plan) };
             }
-        }
     }
 }
