@@ -1547,6 +1547,16 @@ since cuda-emit 0.16.1.
 
 On `main` (read 2026-10-23) `bindgen 0.73`, `syn 3`, `criterion 0.8`, `sha2 0.11` and the kiss-ref family `0.4.0` are current. Only `libloading` (0.8, latest 0.9.0) is stale. Its blocker is the one CireSnave lifted on 2026-10-08 (*"Feel free to raise the minimum Rust version on any project."*): 0.9 needs Rust 1.88, so `baracuda-core`'s declared floor goes 1.85 -> 1.88. One change, per the 2026-09-17 PM order: bump `libloading`, raise the floor, rename the CI job `MSRV 1.85 (driver-free surface)` -> `MSRV (driver-free surface)`, and drop the 22 unused `libloading` declarations in the `-sys` crates. **The rename waits for an admin to change the required status context first** (it is one of 7 on `main`; renaming first would leave `main` waiting on a check that never reports; owner decision item 31). Code: `loader.rs:49` needs `*candidate`; changelog note for the reshaped `LoaderError::Libloading`.
 
+### CodeRipper portfolio baseline (advisory; first sweep 2026-10-23, PR #227 head e0cb2329, CodeRipper `789b0122`)
+
+Source: the `portfolio` job's log (run 40013917052, job 120620977814). Advisory, not a required check; one row per failing rule, none silenced.
+
+- **`version-consistency` (4 High): already waived**, no work. `baracuda-cuda-emit` / `baracuda-cuda-parse` follow Unpopped (CHANGELOG 'Versioning exception'); `baracuda-examples` and `xtask` are `publish = false` at 0.0.0. Waivers live in `.coderipper.toml`.
+- **`SUP-004` (4 Medium): a path outside the crate.** `crates/baracuda-nvjitlink/tests/gpu_smoke.rs:11`, `crates/baracuda/examples/graph_capture.rs:16`, `crates/baracuda/examples/hello_kernel.rs:12` read `../../baracuda-driver/tests/kernels/vector_add.ptx`; `crates/baracuda/examples/hello_runtime.rs:17` reads `../../baracuda-runtime/tests/kernels/vector_add.ptx`. A packaged crate does not contain the sibling crate's file. Fix: vendor a copy into each crate (or generate it), then re-run. Not started.
+- **`lint-suppression` (3 Low): `allow(unused_variables)` with no reason.** `crates/baracuda-cutlass/src/plan.rs:3407`, `crates/baracuda-kernels/src/attention/flash_sdpa.rs:1334`, `crates/baracuda-kernels/src/attention/flash_sdpa_backward.rs:904` (each a `cfg_attr(not(feature = ..), allow(unused_variables))`). Fix: add a `reason = "..."`. Mechanical. Not started.
+- **`licence` (3 Medium), needs a CireSnave/PM ruling before any edit:** `LICENSE-MIT` names a person as the copyright holder; 1253 of 1254 source files carry no `SPDX-License-Identifier` in their first 15 lines (first hit `crates/baracuda-bench-stats/src/lib.rs:1`); 1 file names a person in a copyright line (`crates/baracuda-kernels/src/attention/flash_decoding.rs:1`, `SPDX-FileCopyrightText`). Whether those are findings to fix or the intended holder is a decision, not a lane edit; provenance and credit stay (portfolio rule, EXPECTATIONS 6.4a).
+- **Tool limit, not a finding:** `reachability`, `unused-return-values` and `unused-parameters` did not run: this repo's root is a virtual workspace, and CodeRipper wants `--project <member directory>` (job exit 3, 'check error'). The reusable workflow passes `--project .`; it needs a CodeRipper-side fix or a per-member input. Until then those three rules assert nothing for baracuda.
+
 ## Pre-1.0 nice-to-haves
 
 These would tighten the 1.0 surface but aren't blockers.

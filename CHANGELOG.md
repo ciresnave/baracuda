@@ -16,6 +16,10 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.156 - 2026-10-23 (docs: CodeRipper baseline rows)
+
+Workspace alpha.156 (PM to confirm at gate). Docs only: ROADMAP rows for the first advisory CodeRipper sweep (SUP-004, lint-suppression, licence, and the three rules that could not run). No code change.
+
 ## 0.0.1-alpha.155 - 2026-10-23 (CI: advisory CodeRipper portfolio check)
 
 Workspace alpha.155 (PM to confirm at gate). Stacked on #226 (alpha.154). No code change.
