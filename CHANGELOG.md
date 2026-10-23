@@ -16,6 +16,14 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.153 - 2026-10-23 (cuda-emit / cuda-parse 0.22.0: track Unpopped 0.22.0)
+
+Workspace alpha.153 (PM to confirm at gate). `baracuda-cuda-emit` 0.21.0 -> 0.22.0 and `baracuda-cuda-parse` 0.21.0 -> 0.22.0, matching the Unpopped release they work with. Breaking (0.n is the major pre-1.0).
+
+- **Change:** `unpopped`, `unpopped-vocab`, `unpopped-cpu-c`, `unpopped-slang` 0.21.0 -> 0.22.0 (workspace, cuda-emit dev-deps, `tools/kiss-ref-diff` incl. its lock).
+- **Adapted:** `Cuda::supports_dtype` returns `DtypeSupport` instead of `bool`. Both former `false` cases (U32, the index-load-only dtype, and any dtype with no `scalar_ctype`) are `Unsupported`, this backend's own scope; Cuda reads no target vocabulary here, so it never answers `NotExpressible`. Its test now asserts `.is_supported()` for the spellable set and `== Unsupported` for U32. `baracuda-cuda-parse` needs no source change.
+- **Publish note (`scripts/publish.ps1`):** a dev-dependency that carries a version must be on the index too. `baracuda-nvrtc` dev-depends on `baracuda-driver` (-> `baracuda-cuda-sys`), so publishing `baracuda-cuda-emit` at a new lockstep version needs types-derive, types, core, build, nvrtc-sys, cuda-sys, driver, nvrtc first (found when alpha.152 was published for emit 0.21.0).
+
 ## 0.0.1-alpha.152 - 2026-10-23 (cuda-emit / cuda-parse 0.21.0: track Unpopped 0.21.0)
 
 Workspace alpha.152 (PM to confirm at gate). `baracuda-cuda-emit` 0.20.2 -> 0.21.0 and `baracuda-cuda-parse` 0.20.1 -> 0.21.0, matching the Unpopped release they work with. Breaking (0.n is the major pre-1.0).

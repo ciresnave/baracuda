@@ -11,8 +11,8 @@ use crate::cfamily_shadow::{
     store_expr_of,
 };
 use unpopped::backend::{
-    Backend, Decline, DeclinedOp, GeneratedKernel, LowerError, Lowering, Spelling, Variant,
-    VariantFidelity, lower_dag, lower_dag_all, lower_dag_multi, lower_expr,
+    Backend, Decline, DeclinedOp, DtypeSupport, GeneratedKernel, LowerError, Lowering, Spelling,
+    Variant, VariantFidelity, lower_dag, lower_dag_all, lower_dag_multi, lower_expr,
 };
 use unpopped::cfamily::{
     assert_no_int_div_or_const, binary_f32, binary_f64, binary_int, dtype_tag, param_args,
@@ -85,7 +85,11 @@ impl Backend for Cuda {
         }
     }
 
-    fn supports_dtype(&self, dtype: ElementKind, _target: unpopped_vocab::TargetId) -> bool {
+    fn supports_dtype(
+        &self,
+        dtype: ElementKind,
+        _target: unpopped_vocab::TargetId,
+    ) -> DtypeSupport {
         // `target` is the 0.2.0 third-state hook (Backend::supports_dtype gained a
         // TargetId so a backend WITH capability data can arch-condition). Cuda's
         // answer here is deliberately target-INDEPENDENT: this gate is "can we spell
@@ -112,7 +116,15 @@ impl Backend for Cuda {
         // backstop), so exclude it — mirroring the 0b index-only-dtype pattern.
         // (A valid gather keys `plan.dtype` = the DATA dtype; U32 rides
         // `read_index`/`write_index`, never `plan.dtype`.)
-        !matches!(dtype, ElementKind::U32) && scalar_ctype(dtype).is_some()
+        //
+        // Both declines are this backend's own scope (`Unsupported`), never
+        // `NotExpressible`: Cuda consults no target vocabulary here, so there is
+        // no vocabulary silence to report.
+        if !matches!(dtype, ElementKind::U32) && scalar_ctype(dtype).is_some() {
+            DtypeSupport::Supported
+        } else {
+            DtypeSupport::Unsupported
+        }
     }
 
     fn lower_variants(&self, plan: &KernelPlan<'_>) -> Result<Vec<Variant>, LowerError> {
@@ -12624,7 +12636,7 @@ got:
 
     #[test]
     fn int_compute_dtypes_are_supported_after_the_0c_audit() {
-        use unpopped::backend::Backend;
+        use unpopped::backend::{Backend, DtypeSupport};
         // Increment 0c replaced the 0b uniform-u8 hold: U8 and S8 are audited
         // COMPUTE dtypes now (wrapping semantics + the int-only op set), so
         // supports_dtype says yes — and the per-OP legality lives in
@@ -12643,7 +12655,8 @@ got:
             ElementKind::Bool, // 0.2.0: spellable (uint8_t); arith/logical split is the plan gate's
         ] {
             assert!(
-                Cuda.supports_dtype(dt, unpopped_vocab::ArchSku::Sm89.into()),
+                Cuda.supports_dtype(dt, unpopped_vocab::ArchSku::Sm89.into())
+                    .is_supported(),
                 "{dt:?} is spellable (supports_dtype is storage, not op legality)"
             );
         }
@@ -12666,7 +12679,8 @@ got:
         )]
         for dt in [ElementKind::U32] {
             assert!(
-                !Cuda.supports_dtype(dt, unpopped_vocab::ArchSku::Sm89.into()),
+                Cuda.supports_dtype(dt, unpopped_vocab::ArchSku::Sm89.into())
+                    == DtypeSupport::Unsupported,
                 "{dt:?} must keep declining (index-load-only, Cuda-excluded)"
             );
         }
