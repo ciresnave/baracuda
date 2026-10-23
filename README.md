@@ -526,7 +526,7 @@ Requirements:
   12.x and 13.x.
 - **cuDNN 9.x** (only if you enable the `cudnn` feature) — separate
   NVIDIA download, not bundled with the toolkit.
-- **A working Rust toolchain ≥ 1.85** (workspace MSRV pinned in
+- **A working Rust toolchain ≥ 1.88** (workspace MSRV pinned in
   `rust-toolchain.toml`).
 - **Windows users**: `lld-link.exe` somewhere on `PATH`. The CUDA `nvcc`
   invocation links through it; the install location is typically

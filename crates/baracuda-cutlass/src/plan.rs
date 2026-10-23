@@ -3056,12 +3056,12 @@ fn check_args<T: CutlassElement>(desc: &GemmDescriptor, args: &GemmArgs<'_, T>) 
             "D shape doesn't match descriptor (M, N)",
         ));
     }
-    if let Some(c) = &args.c {
-        if c.rows() != desc.m || c.cols() != desc.n {
-            return Err(Error::InvalidProblem(
-                "C shape doesn't match descriptor (M, N)",
-            ));
-        }
+    if let Some(c) = &args.c
+        && (c.rows() != desc.m || c.cols() != desc.n)
+    {
+        return Err(Error::InvalidProblem(
+            "C shape doesn't match descriptor (M, N)",
+        ));
     }
     // A is row-major in both Rcr and Rrr — leading dim along the K axis.
     if args.a.ld() < desc.k as i64 {
@@ -3083,10 +3083,10 @@ fn check_args<T: CutlassElement>(desc: &GemmDescriptor, args: &GemmArgs<'_, T>) 
     if args.d.ld() < desc.n as i64 {
         return Err(Error::InvalidProblem("D leading dimension must be >= N"));
     }
-    if let Some(c) = &args.c {
-        if c.ld() < desc.n as i64 {
-            return Err(Error::InvalidProblem("C leading dimension must be >= N"));
-        }
+    if let Some(c) = &args.c
+        && c.ld() < desc.n as i64
+    {
+        return Err(Error::InvalidProblem("C leading dimension must be >= N"));
     }
 
     let need_a = min_elements_row_major(args.a.rows(), args.a.cols(), args.a.ld())
@@ -4585,12 +4585,12 @@ fn check_batched_args<T: CutlassElement>(
             "D shape doesn't match descriptor (M, N)",
         ));
     }
-    if let Some(c) = &args.c {
-        if c.rows() != desc.m || c.cols() != desc.n {
-            return Err(Error::InvalidProblem(
-                "C shape doesn't match descriptor (M, N)",
-            ));
-        }
+    if let Some(c) = &args.c
+        && (c.rows() != desc.m || c.cols() != desc.n)
+    {
+        return Err(Error::InvalidProblem(
+            "C shape doesn't match descriptor (M, N)",
+        ));
     }
     if args.a.ld() < desc.k as i64 {
         return Err(Error::InvalidProblem("A leading dimension must be >= K"));
@@ -4607,10 +4607,10 @@ fn check_batched_args<T: CutlassElement>(
     if args.d.ld() < desc.n as i64 {
         return Err(Error::InvalidProblem("D leading dimension must be >= N"));
     }
-    if let Some(c) = &args.c {
-        if c.ld() < desc.n as i64 {
-            return Err(Error::InvalidProblem("C leading dimension must be >= N"));
-        }
+    if let Some(c) = &args.c
+        && c.ld() < desc.n as i64
+    {
+        return Err(Error::InvalidProblem("C leading dimension must be >= N"));
     }
 
     // Per-batch element footprint = single-batch min + (batch - 1) * stride.
@@ -5166,10 +5166,10 @@ impl<T: CutlassElement> GroupedGemmPlan<T> {
             if g.d.rows() != g.m || g.d.cols() != g.n {
                 return Err(Error::InvalidProblem("group D shape doesn't match (M, N)"));
             }
-            if let Some(c) = &g.c {
-                if c.rows() != g.m || c.cols() != g.n {
-                    return Err(Error::InvalidProblem("group C shape doesn't match (M, N)"));
-                }
+            if let Some(c) = &g.c
+                && (c.rows() != g.m || c.cols() != g.n)
+            {
+                return Err(Error::InvalidProblem("group C shape doesn't match (M, N)"));
             }
             if g.a.ld() < g.k as i64 || g.b.ld() < g.k as i64 || g.d.ld() < g.n as i64 {
                 return Err(Error::InvalidProblem("group leading dimension too small"));
@@ -5926,12 +5926,12 @@ fn check_int_args<T: IntElement, BT: BiasElement>(
             "D shape doesn't match descriptor (M, N)",
         ));
     }
-    if let Some(c) = &args.c {
-        if c.rows() != desc.m || c.cols() != desc.n {
-            return Err(Error::InvalidProblem(
-                "C shape doesn't match descriptor (M, N)",
-            ));
-        }
+    if let Some(c) = &args.c
+        && (c.rows() != desc.m || c.cols() != desc.n)
+    {
+        return Err(Error::InvalidProblem(
+            "C shape doesn't match descriptor (M, N)",
+        ));
     }
     if args.a.ld() < desc.k as i64 {
         return Err(Error::InvalidProblem("A leading dimension must be >= K"));
@@ -5949,10 +5949,10 @@ fn check_int_args<T: IntElement, BT: BiasElement>(
     if args.d.ld() < desc.n as i64 {
         return Err(Error::InvalidProblem("D leading dimension must be >= N"));
     }
-    if let Some(c) = &args.c {
-        if c.ld() < desc.n as i64 {
-            return Err(Error::InvalidProblem("C leading dimension must be >= N"));
-        }
+    if let Some(c) = &args.c
+        && c.ld() < desc.n as i64
+    {
+        return Err(Error::InvalidProblem("C leading dimension must be >= N"));
     }
     let need_a = min_elements_row_major(args.a.rows(), args.a.cols(), args.a.ld())
         .ok_or(Error::InvalidProblem("A storage size overflow"))?;

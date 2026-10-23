@@ -232,11 +232,11 @@ fn current_ref_matches(dep_dir: &Path, target: &Target) -> bool {
             .args(["rev-list", "-n", "1", &want])
             .current_dir(dep_dir)
             .output();
-        if let Ok(out) = tag_resolved {
-            if out.status.success() {
-                let resolved = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                return resolved == head;
-            }
+        if let Ok(out) = tag_resolved
+            && out.status.success()
+        {
+            let resolved = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            return resolved == head;
         }
     }
 
@@ -360,18 +360,16 @@ fn cleanup_git_locks(dep_dir: &Path) {
     let git_dir = dep_dir.join(".git");
     for name in ["index.lock", "HEAD.lock", "config.lock"] {
         let lock = git_dir.join(name);
-        if let Ok(meta) = lock.metadata() {
-            if let Ok(modified) = meta.modified() {
-                if let Ok(elapsed) = modified.elapsed() {
-                    if elapsed.as_secs() > 600 {
-                        println!(
-                            "cargo:warning=baracuda-cutlass-sys: removing stale git lock {}",
-                            lock.display()
-                        );
-                        let _ = fs::remove_file(&lock);
-                    }
-                }
-            }
+        if let Ok(meta) = lock.metadata()
+            && let Ok(modified) = meta.modified()
+            && let Ok(elapsed) = modified.elapsed()
+            && elapsed.as_secs() > 600
+        {
+            println!(
+                "cargo:warning=baracuda-cutlass-sys: removing stale git lock {}",
+                lock.display()
+            );
+            let _ = fs::remove_file(&lock);
         }
     }
 }

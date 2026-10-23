@@ -7786,7 +7786,7 @@ fn cuda_binary(
     // arithmetic yields one operand's BYTES (at most a sign-bit edit) — so it
     // must never cross the float bridge, whose demote canonicalizes NaN. Routed
     // on `unpopped`'s shared `is_bit_or_sign_move`, never a local re-derivation.
-    // (`if bit_move && let ..` would be a let-chain — Rust 1.88, above the 1.85 MSRV.)
+    // (`if bit_move && let ..` would be a let-chain, stable in Rust 1.88 — now within the MSRV; kept nested to leave the code unchanged.)
     let bit_casts = if bit_move {
         narrow_bit_casts(dtype)
     } else {
