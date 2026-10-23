@@ -468,3 +468,13 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - name: cargo check every (crate, feature)
         run: python3 scripts/check-each-feature.py --shard ${{ matrix.shard }}/4
+
+  # ADVISORY portfolio check (CireSnave 2026-10-23: "Roll out advisory-only, non-blocking CodeRipper
+  # checks everywhere."). NOT a required status context and no rule is silenced here: the rule list is
+  # fixed by the `portfolio` profile inside the reusable workflow. It builds the crates (build.rs runs),
+  # so the SHA below is pinned; move it only to adopt a newer CodeRipper.
+  portfolio:
+    name: Portfolio checks (advisory)
+    permissions:
+      contents: read
+    uses: ciresnave/coderipper/.github/workflows/portfolio.yml@c665210ad0972cf3ddb7bc81bdd7800c3248a938
