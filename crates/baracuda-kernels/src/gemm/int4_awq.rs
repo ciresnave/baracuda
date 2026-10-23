@@ -451,6 +451,10 @@ unsafe fn dispatch_awq<T: AwqActivation>(
 #[inline]
 // `T` is unused in this feature-off stub but must match the `awq` variant's
 // signature: call sites use turbofish (`dispatch_awq::<T>`).
+#[allow(
+    clippy::extra_unused_type_parameters,
+    reason = "T keeps this feature-off stub's signature identical to the cfg-gated real variant (call sites use turbofish)"
+)]
 unsafe fn dispatch_awq<T: AwqActivation>(
     _: i32,
     _: i32,

@@ -654,6 +654,10 @@ unsafe fn dispatch_dequant<T: Nf4Activation>(
 #[inline]
 // `T` is unused in this feature-off stub but must match the `bnb_nf4` variant's
 // signature: call sites use turbofish (`dispatch_dequant::<T>`).
+#[allow(
+    clippy::extra_unused_type_parameters,
+    reason = "T keeps this feature-off stub's signature identical to the cfg-gated real variant (call sites use turbofish)"
+)]
 unsafe fn dispatch_dequant<T: Nf4Activation>(
     _: i32,
     _: i32,
@@ -703,6 +707,10 @@ unsafe fn dispatch_gemv_m1<T: Nf4Activation>(
 #[inline]
 // `T` is unused in this feature-off stub but must match the `bnb_nf4` variant's
 // signature: call sites use turbofish (`dispatch_gemv_m1::<T>`).
+#[allow(
+    clippy::extra_unused_type_parameters,
+    reason = "T keeps this feature-off stub's signature identical to the cfg-gated real variant (call sites use turbofish)"
+)]
 unsafe fn dispatch_gemv_m1<T: Nf4Activation>(
     _: i32,
     _: i32,
@@ -783,6 +791,10 @@ unsafe fn dispatch_gemv_multim<T: Nf4Activation>(
 #[inline]
 // `T` is unused in this feature-off stub but must match the `bnb_nf4` variant's
 // signature: call sites use turbofish (`dispatch_gemv_multim::<T>`).
+#[allow(
+    clippy::extra_unused_type_parameters,
+    reason = "T keeps this feature-off stub's signature identical to the cfg-gated real variant (call sites use turbofish)"
+)]
 unsafe fn dispatch_gemv_multim<T: Nf4Activation>(
     _: i32,
     _: i32,
@@ -860,8 +872,11 @@ pub fn nf4_pack_weight(
 ) -> (alloc::vec::Vec<u8>, alloc::vec::Vec<f32>) {
     use alloc::vec;
     use alloc::vec::Vec;
-    assert!(n % 2 == 0, "N must be even");
-    assert!(k % block_size == 0, "K must be a multiple of block_size");
+    assert!(n.is_multiple_of(2), "N must be even");
+    assert!(
+        k.is_multiple_of(block_size),
+        "K must be a multiple of block_size"
+    );
     assert_eq!(weight_fp.len(), n * k);
 
     let blocks_per_row = k / block_size;

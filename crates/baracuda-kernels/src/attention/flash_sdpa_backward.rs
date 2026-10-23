@@ -900,6 +900,13 @@ impl<T: Element> FlashSdpaBackwardPlan<T> {
 }
 
 /// Internal: pick backend for the BW descriptor + preference.
+#[cfg_attr(
+    not(feature = "fa2_backward"),
+    allow(
+        clippy::extra_unused_type_parameters,
+        reason = "T is used only by the fa2_backward-gated arm"
+    )
+)]
 fn pick_backend<T: Element>(
     #[cfg_attr(
         not(feature = "fa2_backward"),

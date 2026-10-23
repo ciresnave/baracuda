@@ -140,7 +140,7 @@ pub(crate) fn check_fits_at<T: baracuda_types::DeviceRepr + Copy + 'static, cons
             "tensor view is not addressable (negative extent)",
         ));
     }
-    if view.shape().iter().any(|&d| d == 0) {
+    if view.shape().contains(&0) {
         return Ok(());
     }
     let (mut lo, mut hi) = (offset as i128, offset as i128);

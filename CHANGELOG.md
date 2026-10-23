@@ -16,6 +16,13 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.159 - 2026-10-23 (clippy burn-down: baracuda-kernels lib is clean and gated)
+
+Workspace alpha.159 (PM to confirm at gate). No behaviour change.
+
+- **Clippy:** `baracuda-kernels` lib (default features) went from 40 errors to 0: 20 `collapsible_if` and 8 `manual_is_multiple_of` (machine-applied, plus the same lints in feature-gated code and `baracuda-kernels-sys/build.rs`), `chunks_exact*` -> `as_chunks*` (hand-written: clippy's own suggestion for the `_mut` case does not compile), 6 `extra_unused_type_parameters` kept with a stated `reason` (they are feature-off stubs or feature-gated arms whose signature must match), `contains`, a needless `return`, a doc indent. The CI step `clippy nvcc crates` now includes `baracuda-kernels`.
+- **Honesty note on the alpha.158 dangling-pointer fix:** the existing device suite `affine_strided_smoke` (stride-2 in/out) reaches the strided path and passes on the OLD code too: the dead stack temporary is not overwritten, so no on-device test can discriminate old from fixed, and none was written. The evidence for the bug is the rustc lint `dangling_pointers_from_temporaries` (4 sites -> 0) and the host read in `baracuda_affine.cuh::launch_affine_strided`.
+
 ## 0.0.1-alpha.158 - 2026-10-23 (fix: dangling host pointers in affine/sdpa strided paths; clippy on the nvcc -sys crates)
 
 Workspace alpha.158 (PM to confirm at gate). Stacked on #229 (alpha.157).

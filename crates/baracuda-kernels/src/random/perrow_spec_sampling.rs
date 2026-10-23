@@ -161,33 +161,33 @@ impl PerRowSamplingPlan {
                 "PerRowSamplingPlan: min_p_arr required",
             ));
         }
-        if let Some(t) = &args.top_k_arr {
-            if t.shape() != [b] {
-                return Err(Error::InvalidProblem(
-                    "PerRowSamplingPlan: top_k_arr must be [batch]",
-                ));
-            }
+        if let Some(t) = &args.top_k_arr
+            && t.shape() != [b]
+        {
+            return Err(Error::InvalidProblem(
+                "PerRowSamplingPlan: top_k_arr must be [batch]",
+            ));
         }
-        if let Some(t) = &args.top_p_arr {
-            if t.shape() != [b] {
-                return Err(Error::InvalidProblem(
-                    "PerRowSamplingPlan: top_p_arr must be [batch]",
-                ));
-            }
+        if let Some(t) = &args.top_p_arr
+            && t.shape() != [b]
+        {
+            return Err(Error::InvalidProblem(
+                "PerRowSamplingPlan: top_p_arr must be [batch]",
+            ));
         }
-        if let Some(t) = &args.min_p_arr {
-            if t.shape() != [b] {
-                return Err(Error::InvalidProblem(
-                    "PerRowSamplingPlan: min_p_arr must be [batch]",
-                ));
-            }
+        if let Some(t) = &args.min_p_arr
+            && t.shape() != [b]
+        {
+            return Err(Error::InvalidProblem(
+                "PerRowSamplingPlan: min_p_arr must be [batch]",
+            ));
         }
-        if let Some(v) = &args.valid {
-            if v.shape() != [b] {
-                return Err(Error::InvalidProblem(
-                    "PerRowSamplingPlan: valid must be [batch]",
-                ));
-            }
+        if let Some(v) = &args.valid
+            && v.shape() != [b]
+        {
+            return Err(Error::InvalidProblem(
+                "PerRowSamplingPlan: valid must be [batch]",
+            ));
         }
         if !args.probs.is_contiguous() || !args.output.is_contiguous() {
             return Err(Error::Unsupported(

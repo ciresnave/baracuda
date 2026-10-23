@@ -360,12 +360,12 @@ impl<T: Element> BatchedSvdaPlan<T> {
                 "baracuda-kernels::BatchedSvdaPlan: info shape != [batch]",
             ));
         }
-        if let Some(r) = args.residuals.as_ref() {
-            if r.len() != b as usize {
-                return Err(Error::InvalidProblem(
-                    "baracuda-kernels::BatchedSvdaPlan: residuals len != batch",
-                ));
-            }
+        if let Some(r) = args.residuals.as_ref()
+            && r.len() != b as usize
+        {
+            return Err(Error::InvalidProblem(
+                "baracuda-kernels::BatchedSvdaPlan: residuals len != batch",
+            ));
         }
         Ok(())
     }

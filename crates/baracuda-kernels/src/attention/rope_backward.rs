@@ -161,12 +161,12 @@ impl<T: Element> RopeBackwardPlan<T> {
                  (RoPE rotates adjacent pairs)",
             ));
         }
-        if let Some(ref p) = args.positions {
-            if p.shape() != [self.desc.seq_len] {
-                return Err(Error::InvalidProblem(
-                    "baracuda-kernels::RopeBackwardPlan: positions shape must be [seq_len]",
-                ));
-            }
+        if let Some(ref p) = args.positions
+            && p.shape() != [self.desc.seq_len]
+        {
+            return Err(Error::InvalidProblem(
+                "baracuda-kernels::RopeBackwardPlan: positions shape must be [seq_len]",
+            ));
         }
         // Buffer-size check only for contig — strided views are caller-owned.
         if args.dy.is_contiguous() && args.dx.is_contiguous() {

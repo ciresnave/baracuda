@@ -384,19 +384,19 @@ impl<T: Element> FusedLinearCrossEntropyPlan<T> {
                  [BT] for None or [1] for Mean/Sum)",
             ));
         }
-        if let Some(ref gi) = args.grad_input {
-            if gi.shape() != [bt, h] {
-                return Err(Error::InvalidProblem(
-                    "baracuda-kernels::FusedLinearCrossEntropyPlan: grad_input shape != [bt, h]",
-                ));
-            }
+        if let Some(ref gi) = args.grad_input
+            && gi.shape() != [bt, h]
+        {
+            return Err(Error::InvalidProblem(
+                "baracuda-kernels::FusedLinearCrossEntropyPlan: grad_input shape != [bt, h]",
+            ));
         }
-        if let Some(ref gw) = args.grad_weight {
-            if gw.shape() != [v, h] {
-                return Err(Error::InvalidProblem(
-                    "baracuda-kernels::FusedLinearCrossEntropyPlan: grad_weight shape != [v, h]",
-                ));
-            }
+        if let Some(ref gw) = args.grad_weight
+            && gw.shape() != [v, h]
+        {
+            return Err(Error::InvalidProblem(
+                "baracuda-kernels::FusedLinearCrossEntropyPlan: grad_weight shape != [v, h]",
+            ));
         }
 
         if bt == 0 {

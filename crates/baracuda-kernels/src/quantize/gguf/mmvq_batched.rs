@@ -306,12 +306,12 @@ impl<T: GgufMmvqBatchedActivation> GgufMmvqBatchedPlan<T> {
                 "GgufMmvqBatchedPlan: expert_offsets.shape[0] != n_experts + 1",
             ));
         }
-        if let Some(ref tw) = args.topk_weights {
-            if tw.shape()[0] != self.desc.m_total {
-                return Err(Error::InvalidProblem(
-                    "GgufMmvqBatchedPlan: topk_weights.shape[0] != m_total",
-                ));
-            }
+        if let Some(ref tw) = args.topk_weights
+            && tw.shape()[0] != self.desc.m_total
+        {
+            return Err(Error::InvalidProblem(
+                "GgufMmvqBatchedPlan: topk_weights.shape[0] != m_total",
+            ));
         }
         // Weight byte size check.
         let expected_weight_bytes: i64 = match self.desc.format {

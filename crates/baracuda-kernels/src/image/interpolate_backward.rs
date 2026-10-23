@@ -170,19 +170,19 @@ impl<T: Element> InterpolateBackwardPlan<T> {
                 "baracuda-kernels::InterpolateBackwardPlan: only `f32`, `f64`, `f16`, `bf16` wired",
             ));
         }
-        if let Some(s) = desc.scale_h {
-            if !s.is_finite() || s <= 0.0 {
-                return Err(Error::InvalidProblem(
-                    "baracuda-kernels::InterpolateBackwardPlan: scale_h must be positive and finite",
-                ));
-            }
+        if let Some(s) = desc.scale_h
+            && (!s.is_finite() || s <= 0.0)
+        {
+            return Err(Error::InvalidProblem(
+                "baracuda-kernels::InterpolateBackwardPlan: scale_h must be positive and finite",
+            ));
         }
-        if let Some(s) = desc.scale_w {
-            if !s.is_finite() || s <= 0.0 {
-                return Err(Error::InvalidProblem(
-                    "baracuda-kernels::InterpolateBackwardPlan: scale_w must be positive and finite",
-                ));
-            }
+        if let Some(s) = desc.scale_w
+            && (!s.is_finite() || s <= 0.0)
+        {
+            return Err(Error::InvalidProblem(
+                "baracuda-kernels::InterpolateBackwardPlan: scale_w must be positive and finite",
+            ));
         }
         let precision_guarantee = PrecisionGuarantee {
             math_precision: if T::KIND == ElementKind::F64 {

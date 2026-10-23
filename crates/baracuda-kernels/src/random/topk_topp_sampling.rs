@@ -212,12 +212,12 @@ impl TopKTopPSamplingPlan {
                 "TopKTopPSamplingPlan: output shape must be [batch_size]",
             ));
         }
-        if let Some(v) = &args.valid {
-            if v.shape() != [self.desc.batch_size] {
-                return Err(Error::InvalidProblem(
-                    "TopKTopPSamplingPlan: valid shape must be [batch_size]",
-                ));
-            }
+        if let Some(v) = &args.valid
+            && v.shape() != [self.desc.batch_size]
+        {
+            return Err(Error::InvalidProblem(
+                "TopKTopPSamplingPlan: valid shape must be [batch_size]",
+            ));
         }
         if !args.probs.is_contiguous() || !args.output.is_contiguous() {
             return Err(Error::Unsupported(

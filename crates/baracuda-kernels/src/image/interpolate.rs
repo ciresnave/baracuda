@@ -230,19 +230,19 @@ impl<T: Element> InterpolatePlan<T> {
             ));
         }
         // Validate scale factors (positive, finite) when present.
-        if let Some(s) = desc.scale_h {
-            if !s.is_finite() || s <= 0.0 {
-                return Err(Error::InvalidProblem(
-                    "baracuda-kernels::InterpolatePlan: scale_h must be positive and finite",
-                ));
-            }
+        if let Some(s) = desc.scale_h
+            && (!s.is_finite() || s <= 0.0)
+        {
+            return Err(Error::InvalidProblem(
+                "baracuda-kernels::InterpolatePlan: scale_h must be positive and finite",
+            ));
         }
-        if let Some(s) = desc.scale_w {
-            if !s.is_finite() || s <= 0.0 {
-                return Err(Error::InvalidProblem(
-                    "baracuda-kernels::InterpolatePlan: scale_w must be positive and finite",
-                ));
-            }
+        if let Some(s) = desc.scale_w
+            && (!s.is_finite() || s <= 0.0)
+        {
+            return Err(Error::InvalidProblem(
+                "baracuda-kernels::InterpolatePlan: scale_w must be positive and finite",
+            ));
         }
         let precision_guarantee = PrecisionGuarantee {
             math_precision: if T::KIND == ElementKind::F64 {

@@ -56,10 +56,10 @@ fn locate_cudnn_lib_dir() -> Option<String> {
     #[cfg(target_os = "windows")]
     {
         let std_root = PathBuf::from(r"C:\Program Files\NVIDIA\CUDNN");
-        if std_root.is_dir() {
-            if let Some(dir) = probe_windows_versioned_root(&std_root) {
-                return Some(dir);
-            }
+        if std_root.is_dir()
+            && let Some(dir) = probe_windows_versioned_root(&std_root)
+        {
+            return Some(dir);
         }
     }
 

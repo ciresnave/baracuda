@@ -109,7 +109,7 @@ impl<T: Element, const N: usize> GroupNormPlan<T, N> {
             ));
         }
         let c = desc.num_channels();
-        if c <= 0 || (c as u32) % desc.num_groups != 0 {
+        if c <= 0 || !(c as u32).is_multiple_of(desc.num_groups) {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::GroupNormPlan: num_groups must divide num_channels",
             ));
@@ -179,19 +179,19 @@ impl<T: Element, const N: usize> GroupNormPlan<T, N> {
                 "baracuda-kernels::GroupNormPlan: saved buffers length != N * num_groups",
             ));
         }
-        if let Some(gm) = &args.gamma {
-            if gm.shape()[0] as i64 != c {
-                return Err(Error::InvalidProblem(
-                    "baracuda-kernels::GroupNormPlan: gamma length != C",
-                ));
-            }
+        if let Some(gm) = &args.gamma
+            && gm.shape()[0] as i64 != c
+        {
+            return Err(Error::InvalidProblem(
+                "baracuda-kernels::GroupNormPlan: gamma length != C",
+            ));
         }
-        if let Some(bt) = &args.beta {
-            if bt.shape()[0] as i64 != c {
-                return Err(Error::InvalidProblem(
-                    "baracuda-kernels::GroupNormPlan: beta length != C",
-                ));
-            }
+        if let Some(bt) = &args.beta
+            && bt.shape()[0] as i64 != c
+        {
+            return Err(Error::InvalidProblem(
+                "baracuda-kernels::GroupNormPlan: beta length != C",
+            ));
         }
         match (
             args.gamma.is_some(),
