@@ -16,6 +16,10 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.163 - 2026-10-23 (cuda-emit: the 5 reachability helpers decided)
+
+Workspace alpha.163 (PM to confirm at gate). Docs only. Decision on the `baracuda-cuda-emit` helpers CodeRipper reported: `emit_coord_unravel_helper`, `emit_dtype_promote_helper`, `emit_cast_helper` are KEPT as public API (re-exported at the crate root, exhaustively tested, and their output is what Unpopped's `ondevice` validation compiles; the design is `docs/design/ir-translation-hub.md` phases 1 and 2c); `emit_unravel_offset_fn` and `CAST_MATRIX_DTYPES` are private and reached only through them. Nothing removed. The three now say so in their docs.
+
 ## 0.0.1-alpha.162 - 2026-10-23 (docs: second CodeRipper sweep rows)
 
 Workspace alpha.162 (PM to confirm at gate). Docs only: ROADMAP rows for the sweep that now covers every workspace member (reachability 753, did-not-run crates). No code change.
