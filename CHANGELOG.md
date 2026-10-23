@@ -16,6 +16,16 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.154 - 2026-10-23 (dependency pass #130: libloading 0.9, MSRV floor 1.88)
+
+Workspace alpha.154 (PM to confirm at gate). `baracuda-cuda-emit` / `baracuda-cuda-parse` stay at 0.22.0.
+
+- **Change:** `libloading` 0.8 -> 0.9 (`baracuda-core` is its only real user); `loader.rs` passes `*candidate` for the `AsFilename` bound. `libloading::Error` is reshaped upstream, so `LoaderError::Libloading` wraps a different error type (source-compatible for `?`/`#[from]` callers; matching on the inner error's variants is not). 0.8.9 remains in the lock only through `clang-sys` <- `bindgen` (build tooling).
+- **Breaking (MSRV):** the declared floor `rust-version` 1.85 -> 1.88 (libloading 0.9 requires it; CireSnave 2026-10-08 permits raising it). Applies to baracuda-{build, core, cuda-emit, cuda-vocab, types, types-derive}.
+- **Removed:** the unused `libloading` declaration from 23 `-sys` crates (each mentioned it only in comments; 0 `libloading` uses in their `src`/`build.rs`).
+- **CI:** the MSRV job now builds under 1.88.0 and reports under two names from one matrix job: `MSRV (driver-free surface)` (new) and `MSRV 1.85 (driver-free surface)` (the still-required context, transitional until an admin swaps the required context; then delete the old matrix entry).
+- **Checked:** `cargo +1.88.0 build --locked` on those 6 crates; `DOCS_RS=1 cargo check --locked --workspace` excluding baracuda-kernels{,-sys}.
+
 ## 0.0.1-alpha.153 - 2026-10-23 (cuda-emit / cuda-parse 0.22.0: track Unpopped 0.22.0)
 
 Workspace alpha.153 (PM to confirm at gate). `baracuda-cuda-emit` 0.21.0 -> 0.22.0 and `baracuda-cuda-parse` 0.21.0 -> 0.22.0, matching the Unpopped release they work with. Breaking (0.n is the major pre-1.0).

@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-cusparse-sys"
-version = "0.0.1-alpha.153"
+version = "0.0.1-alpha.154"
 description = "Raw FFI bindings and dynamic loader for NVIDIA cuSPARSE."
 edition.workspace = true
 license.workspace = true
@@ -18,7 +18,6 @@ bindgen = ["baracuda-build/bindgen"]
 baracuda-core.workspace = true
 baracuda-types.workspace = true
 baracuda-cuda-sys.workspace = true
-libloading.workspace = true
 
 [build-dependencies]
 baracuda-build.workspace = true

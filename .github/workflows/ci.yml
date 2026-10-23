@@ -274,21 +274,31 @@ jobs:
           cargo clippy --locked -p baracuda-runtime --tests --features device-tests -- -D warnings
 
   msrv-driver-free:
-    name: MSRV 1.85 (driver-free surface)
-    # The declared `rust-version = 1.85` is inherited by exactly the driver-free
+    name: ${{ matrix.name }}
+    # TRANSITIONAL (#130): the required status context on `main` is still the old name
+    # "MSRV 1.85 (driver-free surface)", which only an admin can rename. Both names report from
+    # this one job (same build, now 1.88) so nothing blocks; once the PM makes the new name
+    # required and drops the old one, delete the old matrix entry.
+    strategy:
+      fail-fast: false
+      matrix:
+        name:
+          - MSRV (driver-free surface)
+          - MSRV 1.85 (driver-free surface)
+    # The declared `rust-version = 1.88` is inherited by exactly the driver-free
     # crates (see the scoping note in [workspace.package], root Cargo.toml). This
-    # job EXERCISES that floor by building those crates under 1.85.0 — an MSRV
+    # job EXERCISES that floor by building those crates under 1.88.0 — an MSRV
     # nothing builds under is a promise with no gate behind it. The CUDA crates
     # deliberately declare NO floor (unbuildable without the CUDA toolkit; this
     # repo has no CUDA runner), so they are absent here by design, not omission.
-    # `+1.85.0` overrides the repo's rust-toolchain.toml pin (1.98.0);
-    # dtolnay/rust-toolchain@1.85.0 installs the toolchain that `+1.85.0` selects.
+    # `+1.88.0` overrides the repo's rust-toolchain.toml pin (1.98.0);
+    # dtolnay/rust-toolchain@1.88.0 installs the toolchain that `+1.88.0` selects.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: dtolnay/rust-toolchain@69084b241933c14c2fa24234c4596f11a2655339 # 1.85.0
+      - uses: dtolnay/rust-toolchain@360a4e93673de6630fac2478bc9e35244b01a759 # 1.88.0
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - name: MSRV — build exactly the crates that declare rust-version=1.85, under 1.85.0
+      - name: MSRV — build exactly the crates that declare rust-version=1.88, under 1.88.0
         shell: bash
         # Derive the set to build from `cargo metadata` (the per-crate Cargo.toml
         # declarations are the source of truth), assert it is non-empty AND equals
@@ -297,17 +307,17 @@ jobs:
         # its floor stops being tested while this job still passes green. Here a
         # deletion from EITHER side reds — the gate discriminates on its own
         # configuration, not only on code. (metadata, not a glob, is what caught
-        # xtask slipping into the 1.85 set in the first place.)
+        # xtask slipping into the 1.88 set in the first place.)
         run: |
           expected="baracuda-build baracuda-core baracuda-cuda-emit baracuda-cuda-vocab baracuda-types baracuda-types-derive"
           exp=$(printf '%s\n' $expected | sort | tr '\n' ' '); exp="${exp% }"
-          names=$(cargo +1.85.0 metadata --locked --no-deps --format-version 1 \
-            | python3 -c "import json,sys; print(' '.join(sorted(p['name'] for p in json.load(sys.stdin)['packages'] if p.get('rust_version')=='1.85')))")
-          echo "crates declaring rust-version=1.85: [$names]"
-          [ -n "$names" ] || { echo "GUARD BROKEN: no crate declares rust-version=1.85 — this job would build nothing."; exit 2; }
-          [ "$names" = "$exp" ] || { echo "MSRV DRIFT: {declares 1.85}=[$names] != {expected}=[$exp]. A crate gained or lost its 1.85 floor, or the 'expected' list was edited — reconcile the Cargo.toml declarations with the list in this step."; exit 1; }
+          names=$(cargo +1.88.0 metadata --locked --no-deps --format-version 1 \
+            | python3 -c "import json,sys; print(' '.join(sorted(p['name'] for p in json.load(sys.stdin)['packages'] if p.get('rust_version')=='1.88')))")
+          echo "crates declaring rust-version=1.88: [$names]"
+          [ -n "$names" ] || { echo "GUARD BROKEN: no crate declares rust-version=1.88 — this job would build nothing."; exit 2; }
+          [ "$names" = "$exp" ] || { echo "MSRV DRIFT: {declares 1.88}=[$names] != {expected}=[$exp]. A crate gained or lost its 1.88 floor, or the 'expected' list was edited — reconcile the Cargo.toml declarations with the list in this step."; exit 1; }
           args=(); for n in $names; do args+=(-p "$n"); done
-          cargo +1.85.0 build --locked "${args[@]}"
+          cargo +1.88.0 build --locked "${args[@]}"
 
   arch-gated-check:
     name: Arch-gated Rust surface (DOCS_RS check, no CUDA)

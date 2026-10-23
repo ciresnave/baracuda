@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-cuda-vocab"
-version = "0.0.1-alpha.153"
+version = "0.0.1-alpha.154"
 description = "Owner source for the `cuda:` KISS §6.8 namespace vocabulary: the closed sm-token set (sm80/sm89/sm90/sm90a), their base|`a` classes, and the two admission relations (§cuda-3.1 `≤`, §cuda-3.2 `==`). The reference implementation the §6.8-0003 registry points at, and the source a generated §6.8-0008 machine annex + owner drift-gate build on. Driver-free: consumes `unpopped-vocab`'s `ArchSku` codec as the byte source of truth for token spellings, and owns the class + admission content the spec annex `spec/namespaces/cuda.md` states in prose."
 edition.workspace = true
 # Driver-free (an enum + a comparison — no CUDA toolkit), and a CI job builds it
@@ -21,7 +21,7 @@ homepage.workspace = true
 # dual-ownership window — the exact drift this crate exists to prevent.)
 unpopped-vocab = { workspace = true }
 # JSON emission for the §6.8-0008 machine manifest. Pure-Rust, driver-free, and
-# well below the 1.85 floor — the crate stays driver-free/MSRV-honest. Both are
+# well below the 1.88 floor — the crate stays driver-free/MSRV-honest. Both are
 # normal (library) deps: serde derives the manifest structs, and serde_json's
 # `to_string_pretty` runs in `Manifest::to_json()` (lib code) — the self-tests
 # also use serde_json's parser, but the lib use is what makes it a normal dep.

@@ -46,7 +46,7 @@ impl Library {
 
         // Phase 1: try each candidate name bare (OS handles the search).
         for candidate in candidates {
-            if let Ok(lib) = unsafe { libloading::Library::new(candidate) } {
+            if let Ok(lib) = unsafe { libloading::Library::new(*candidate) } {
                 return Ok(Self {
                     name,
                     lib,
