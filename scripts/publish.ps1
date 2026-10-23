@@ -14,6 +14,10 @@
 # single-crate publish doesn't enforce dev-dep availability, which lets
 # types-derive publish before types.
 #
+# Dev-deps count: cargo package needs a versioned dev-dependency on the index too
+# (baracuda-nvrtc dev-depends on baracuda-driver -> baracuda-cuda-sys), so a
+# publish set computed from normal deps alone is short.
+#
 # Why no explicit topo order: the loop is RESILIENT — it defers a crate whose
 # dependency isn't on the index yet and retries it on a later pass, so the
 # dependency ordering resolves itself across passes. It also retries transient
