@@ -13,7 +13,7 @@ use std::time::Instant;
 
 use baracuda::driver::{CaptureMode, Context, Device, DeviceBuffer, Module, Stream};
 
-const PTX: &str = include_str!("../../baracuda-driver/tests/kernels/vector_add.ptx");
+const PTX: &str = include_str!("kernels/vector_add.ptx");
 
 fn main() -> baracuda::driver::Result<()> {
     baracuda::driver::init()?;

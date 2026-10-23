@@ -16,6 +16,13 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.157 - 2026-10-23 (CodeRipper baseline: SUP-004 and lint-suppression)
+
+Workspace alpha.157 (PM to confirm at gate). No behaviour change.
+
+- **SUP-004:** the 4 `include_str!` sites that reached into a sibling crate's `tests/kernels/vector_add.ptx` now read a copy inside their own crate (nvjitlink test; 3 `baracuda` examples), so a packaged crate builds them. Copies are byte-identical to `baracuda-driver` / `baracuda-runtime`'s files.
+- **lint-suppression:** `reason = ...` on the 3 `cfg_attr(.., allow(unused_variables))` sites (cutlass `plan.rs`, `flash_sdpa.rs`, `flash_sdpa_backward.rs`).
+
 ## 0.0.1-alpha.156 - 2026-10-23 (docs: CodeRipper baseline rows)
 
 Workspace alpha.156 (PM to confirm at gate). Docs only: ROADMAP rows for the first advisory CodeRipper sweep (SUP-004, lint-suppression, licence, and the three rules that could not run). No code change.

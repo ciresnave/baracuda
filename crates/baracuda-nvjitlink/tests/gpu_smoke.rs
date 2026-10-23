@@ -8,7 +8,7 @@ use baracuda_nvjitlink::version;
 use baracuda_nvjitlink::{InputType, Linker};
 
 #[cfg(feature = "device-tests")]
-const VECTOR_ADD_PTX: &str = include_str!("../../baracuda-driver/tests/kernels/vector_add.ptx");
+const VECTOR_ADD_PTX: &str = include_str!("kernels/vector_add.ptx");
 
 #[test]
 fn nvjitlink_loads() {

@@ -14,7 +14,7 @@
 
 use baracuda::runtime::{Device, DeviceBuffer, Library, Stream};
 
-const PTX: &str = include_str!("../../baracuda-runtime/tests/kernels/vector_add.ptx");
+const PTX: &str = include_str!("kernels/vector_add_runtime.ptx");
 
 fn main() -> baracuda::runtime::Result<()> {
     let runtime = baracuda::runtime::runtime_version()?;
