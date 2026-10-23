@@ -16,6 +16,14 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.164 - 2026-10-23 (C-ABI version integer and manifest guard; API-freeze R4)
+
+Workspace alpha.164 (PM to confirm at gate). Additive.
+
+- **Added:** `baracuda_kernels_abi_version()` (exported from `kernels/abi_version.cu`), `BARACUDA_KERNELS_ABI_VERSION` in `kernels/include/baracuda_abi.h` (a C consumer compares it with what the loaded library returns), Rust `baracuda_kernels_sys::{ABI_VERSION, abi_version(), check_abi(), AbiMismatch}`. The ABI version is an independent integer (SONAME-style, now `1`), bumped by hand only when the C/FFI ABI of `baracuda-kernels-sys` or `baracuda-cutlass-kernels-sys` breaks; it is not the crate version, which moves every release.
+- **Guard:** `abi/abi-manifest.tsv` (5717 exported `baracuda_*` symbols with a signature hash) and `scripts/check-abi-manifest.py`, run in CI: Rust constant == header value; manifest == sources; with the base commit, no symbol removed/changed unless `ABI_VERSION` rose. Negative controls run in a throwaway repo: edited signature (manifest stale, then updated without a bump: both FAIL; with a bump: PASS), removed symbol without/with a bump (FAIL/PASS), added symbol (PASS, no bump), const != header (FAIL). Limit: it sees signature text, not a changed documented contract (aliasing, stride meaning, workspace formula); those still need a human bump.
+- **Not done:** `check_abi()` is not yet called automatically by `baracuda-kernels` (the Rust crates link the library statically, so a mismatch can only occur for a C consumer or a separately built library); the symbol was compiled with nvcc and read back (`1 == header`) but `cargo test` of the full kernels-sys link was not run.
+
 ## 0.0.1-alpha.163 - 2026-10-23 (cuda-emit: the 5 reachability helpers decided)
 
 Workspace alpha.163 (PM to confirm at gate). Docs only. Decision on the `baracuda-cuda-emit` helpers CodeRipper reported: `emit_coord_unravel_helper`, `emit_dtype_promote_helper`, `emit_cast_helper` are KEPT as public API (re-exported at the crate root, exhaustively tested, and their output is what Unpopped's `ondevice` validation compiles; the design is `docs/design/ir-translation-hub.md` phases 1 and 2c); `emit_unravel_offset_fn` and `CAST_MATRIX_DTYPES` are private and reached only through them. Nothing removed. The three now say so in their docs.

@@ -753,6 +753,8 @@ fn collect_kernel_files() -> Vec<&'static str> {
         // pointwise compute (no tensor cores) so the same set ships
         // across every arch feature.
         for f in &[
+            // C-ABI version symbol (`baracuda_kernels_abi_version`); value in include/baracuda_abi.h.
+            "abi_version.cu",
             "elementwise/binary_add_fp.cu",
             "elementwise/binary_sub_fp.cu",
             "elementwise/binary_mul_fp.cu",

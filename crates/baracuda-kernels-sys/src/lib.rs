@@ -36,6 +36,61 @@
 
 use core::ffi::c_void;
 
+/// The C-ABI version this crate's Rust side was built against: an independent integer
+/// (SONAME-style), not the crate version. It must equal `BARACUDA_KERNELS_ABI_VERSION` in
+/// `kernels/include/baracuda_abi.h` (the value the compiled library returns from
+/// [`baracuda_kernels_abi_version`]); `scripts/check-abi-manifest.py` asserts both, and that
+/// it is bumped whenever an exported signature, `#[repr(C)]` layout or constant changes.
+/// Covers `baracuda-kernels-sys` and `baracuda-cutlass-kernels-sys`.
+pub const ABI_VERSION: u32 = 1;
+
+/// The loaded library's C-ABI version differs from the one this crate was built against.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AbiMismatch {
+    /// [`ABI_VERSION`], what the Rust side expects.
+    pub expected: u32,
+    /// What `baracuda_kernels_abi_version()` returned.
+    pub found: u32,
+}
+
+impl core::fmt::Display for AbiMismatch {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            f,
+            "baracuda kernels C-ABI mismatch: built against version {}, library reports {}",
+            self.expected, self.found
+        )
+    }
+}
+
+/// The C-ABI version of the linked kernels library.
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+pub fn abi_version() -> u32 {
+    // SAFETY: a pure function with no arguments, defined in `kernels/abi_version.cu`.
+    unsafe { baracuda_kernels_abi_version() }
+}
+
+/// Fails if the linked library's C-ABI version is not [`ABI_VERSION`]. Call once before
+/// the first kernel launch when the library may come from a different build than this crate.
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+pub fn check_abi() -> Result<(), AbiMismatch> {
+    let found = abi_version();
+    if found == ABI_VERSION {
+        Ok(())
+    } else {
+        Err(AbiMismatch {
+            expected: ABI_VERSION,
+            found,
+        })
+    }
+}
+
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+unsafe extern "C" {
+    /// The C-ABI version compiled into the library (`kernels/include/baracuda_abi.h`).
+    pub fn baracuda_kernels_abi_version() -> u32;
+}
+
 // `fa2_backward` requires `fa2` (it exposes BW `extern "C"` decls whose
 // `.cu` sources build.rs only compiles under `fa2`). The Cargo feature
 // graph (`fa2_backward = ["fa2"]`) enforces this, so this guard is
