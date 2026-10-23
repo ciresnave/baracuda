@@ -355,6 +355,37 @@ impl Synthesizer for BaracudaSynthesizer {
     }
 }
 
+/// Hash a region's structure: variant, `OpTag`, `OpAttrs::region_key()` (scalar values
+/// excluded, floats by bits) and children in order. Exhaustive over `PatternNode` on
+/// purpose: a new upstream variant fails the build instead of hashing as nothing.
+fn hash_region<H: std::hash::Hasher>(n: &SeamNode, h: &mut H) {
+    use std::hash::Hash;
+    match n {
+        SeamNode::Op {
+            op,
+            operands,
+            attrs,
+        } => {
+            0u8.hash(h);
+            op.hash(h);
+            attrs.region_key().hash(h);
+            operands.len().hash(h);
+            for c in operands {
+                hash_region(c, h);
+            }
+        }
+        SeamNode::Bind { index } => {
+            1u8.hash(h);
+            index.hash(h);
+        }
+        SeamNode::SeeThrough { then } => {
+            2u8.hash(h);
+            hash_region(then, h);
+        }
+        SeamNode::Any => 3u8.hash(h),
+    }
+}
+
 /// A stable, readable kernel id for a region: `jit_<root-op>_<hash>`, where the
 /// full 64-bit hash covers the region structure **and** the operand projection,
 /// so distinct regions (or the same region at different layouts/dtypes) are
@@ -368,7 +399,8 @@ fn region_op_id(region: &SeamNode, operands: &[OperandDesc]) -> String {
         _ => "fused".to_string(),
     };
     let mut h = std::collections::hash_map::DefaultHasher::new();
-    format!("{region:?}|{operands:?}").hash(&mut h);
+    hash_region(region, &mut h);
+    format!("{operands:?}").hash(&mut h);
     format!("jit_{root}_{:016x}", h.finish())
 }
 
@@ -928,9 +960,10 @@ mod tests {
     // A collision silently overwrites a not-yet-taken kernel — `region_op_id`'s
     // own doc says so, and chose a full u64 over a truncated prefix for that
     // reason. ⚠️ BUT THE PROPERTY RESTS ON SOMETHING THAT DOES NOT PROMISE IT:
-    // the id hashes `format!("{region:?}|{operands:?}")`, the **`Debug`**
-    // rendering of types owned by `fuel-kernel-seam-types`. `Debug` carries no
-    // injectivity guarantee — a hand-written impl, or one eliding a field,
+    // the id USED to hash the **`Debug`** rendering of types owned by
+    // `fuel-kernel-seam-types` (#117). It now hashes `OpAttrs::region_key()`
+    // per node (exhaustive destructure upstream, scalars excluded). The
+    // text below is the history: `Debug` carries no injectivity guarantee — a hand-written impl, or one eliding a field,
     // makes two distinct regions render identically and collide.
     //
     // Measured at `fuel-kernel-seam-types 0.10.3`: ZERO manual `Debug` impls,
@@ -997,7 +1030,7 @@ mod tests {
         // as designed; the 22 new entries below are the same decision made 22
         // more times, not a different one.
         let OpAttrs {
-            scalars: _,
+            scalars: _, // EXCLUDED from the id on purpose: see the scalar test below
             axis: _,
             perm: _,
             target_shape: _,
@@ -1033,8 +1066,6 @@ mod tests {
 
         let mut axis = base.clone();
         axis.axis = Some(2);
-        let mut scalars = base.clone();
-        scalars.scalars = vec![0.5];
         let mut perm = base.clone();
         perm.perm = vec![1, 0];
         let mut target_shape = base.clone();
@@ -1107,7 +1138,6 @@ mod tests {
 
         for (field, attrs) in [
             ("axis", &axis),
-            ("scalars", &scalars),
             ("perm", &perm),
             ("target_shape", &target_shape),
             ("dims", &dims),
@@ -1215,14 +1245,9 @@ mod tests {
     ///
     /// The value in `OpAttrs.scalars` is never read on the way to the source.
     /// So two `AddScalar` regions differing only in that value are the SAME
-    /// KERNEL — and this test measures that they nonetheless get DIFFERENT ids,
-    /// because `region_op_id` hashes `format!("{region:?}")` and `Debug`
-    /// renders `scalars`.
-    ///
-    /// Consequence: the registry keys two entries for one kernel — a wasted
-    /// compile per distinct scalar, and a `take_kernel` on the wrong key
-    /// returns `None` instead of the identical artifact already built. Not a
-    /// correctness bug; both entries hold the same kernel.
+    /// KERNEL and must get the SAME id (#115 / #117): `region_op_id` hashes
+    /// `OpAttrs::region_key()`, which excludes `scalars`. Before that it hashed
+    /// the `Debug` rendering, which gave one kernel two registry entries.
     ///
     /// ⚠️ SCOPE, STATED: this asserts the ID half only. The kernel-identity
     /// half is derived from the source above, NOT run here — `synthesize`
@@ -1232,7 +1257,7 @@ mod tests {
     /// CONTRACT could not be produced). Asserting "same kernel" from a call
     /// that never returns one would be a claim dressed as a measurement.
     #[test]
-    fn a_scalar_value_changes_the_region_id() {
+    fn a_scalar_value_does_not_change_the_region_id() {
         // Struct-update rather than `default()` + field assignment: clippy's
         // `field_reassign_with_default` is denied in CI. `OpAttrs` is not
         // `#[non_exhaustive]` (measured at fuel-kernel-seam-types 0.10.3), so
@@ -1255,10 +1280,10 @@ mod tests {
             "control: the two regions must differ in their Debug rendering"
         );
 
-        assert_ne!(
+        assert_eq!(
             region_op_id(&r1, &ops),
             region_op_id(&r2, &ops),
-            "documents CURRENT behaviour: the id depends on a scalar that cannot              reach the kernel. If this fails, `scalars` has been excluded from              the identity and the over-discrimination is fixed — invert it."
+            "scalar values never reach the kernel, so they must not reach the id"
         );
     }
 

@@ -16,6 +16,13 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.151 - 2026-10-23 (cuda-seam: registry fuel-kernel-seam 0.22.4, structural region ids)
+
+Workspace alpha.151 (PM to confirm at gate). `baracuda-cuda-emit` stays 0.20.2. Non-breaking.
+
+- **Change (#117):** `baracuda-cuda-seam` now depends on `fuel-kernel-seam` and `fuel-kernel-seam-types` `0.22.4` from crates.io instead of a git rev, and `region_op_id` hashes the region structure (`OpTag`, `OpAttrs::region_key()`, children, in an exhaustive `PatternNode` walk) instead of its `Debug` rendering. Kernel ids change once; scalar values no longer reach the id, so two regions differing only in a scalar share one kernel id (#115). The crate stays `publish = false`.
+- **Test:** `a_scalar_value_changes_the_region_id` is inverted to `a_scalar_value_does_not_change_the_region_id`; the per-field injectivity test drops its `scalars` row.
+
 ## 0.0.1-alpha.150 - 2026-10-22 (sys/types: drop false #![no_std])
 
 Workspace alpha.150 (PM-allocated). `baracuda-cuda-emit` stays 0.20.2. Non-breaking.

@@ -1534,15 +1534,18 @@ plumbing pattern as the cuDNN work above.
 established, and rounds out the "no `Contiguize` copies on library-
 backed paths" 1.0 story.
 
-### `baracuda-cuda-seam` publishability â€” WAITING on fuel (since 2026-10-14)
+### `baracuda-cuda-seam` publishability — UNBLOCKED (alpha.151, 2026-10-23)
 
-The crate is `publish = false`: it git-pins `fuel-kernel-seam{,-types}` at `c02da348`,
-because the registry latest (0.11.2) has `arch: ArchSku` only, with no `JitRequest::target` /
-`::new()`. **Blocked on fuel publishing its board #106 Step A seam crates** (no date from fuel;
-fuel lane notified 2026-10-14). Then: swap both git pins for versions, drop `publish = false`,
-PM allocates the bump and publishes. Fuel's consumer side
-(`fuel-dispatch/Cargo.toml:70`, cuda-emit `features=["seam","nvrtc"]`) must move to
-`baracuda-cuda-seam` â€” the `seam` feature is gone since cuda-emit 0.16.1.
+Fuel published `fuel-kernel-seam{,-types}` 0.22.4 (has `JitRequest::target` and
+`OpAttrs::region_key()`), so the crate now depends on registry versions only; the git pins
+are gone. `publish = false` is kept until the PM decides to publish it. To publish: drop that
+line, PM allocates the bump. Fuel's consumer side (`fuel-dispatch/Cargo.toml:70`, cuda-emit
+`features=["seam","nvrtc"]`) must move to `baracuda-cuda-seam` — the `seam` feature is gone
+since cuda-emit 0.16.1.
+
+### Dependency pass #130 — last row: `libloading` 0.8 -> 0.9 (WAITING on an admin, since 2026-10-23)
+
+On `main` (read 2026-10-23) `bindgen 0.73`, `syn 3`, `criterion 0.8`, `sha2 0.11` and the kiss-ref family `0.4.0` are current. Only `libloading` (0.8, latest 0.9.0) is stale. Its blocker is the one CireSnave lifted on 2026-10-08 (*"Feel free to raise the minimum Rust version on any project."*): 0.9 needs Rust 1.88, so `baracuda-core`'s declared floor goes 1.85 -> 1.88. One change, per the 2026-09-17 PM order: bump `libloading`, raise the floor, rename the CI job `MSRV 1.85 (driver-free surface)` -> `MSRV (driver-free surface)`, and drop the 22 unused `libloading` declarations in the `-sys` crates. **The rename waits for an admin to change the required status context first** (it is one of 7 on `main`; renaming first would leave `main` waiting on a check that never reports; owner decision item 31). Code: `loader.rs:49` needs `*candidate`; changelog note for the reshaped `LoaderError::Libloading`.
 
 ## Pre-1.0 nice-to-haves
 
