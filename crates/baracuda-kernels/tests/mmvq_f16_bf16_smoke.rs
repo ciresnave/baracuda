@@ -175,12 +175,7 @@ fn mmvq_q8_0_f16_smoke() {
     let dev_y = DeviceBuffer::from_slice(&ctx, &host_y_f16).expect("up y");
     let mut dev_o: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, 1).expect("alloc out");
 
-    let desc = GgufMmvqDescriptor {
-        nrows: 1,
-        ncols: 64,
-        block_format: GgufBlockFormat::Q8_0,
-        w_start_byte_offset: 0,
-    };
+    let desc = GgufMmvqDescriptor::new(1, 64, GgufBlockFormat::Q8_0);
     let plan = GgufMmvqPlan::<f16>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = GgufMmvqArgs {
         weight: TensorRef::new(
@@ -231,12 +226,7 @@ fn mmvq_q8_0_bf16_smoke() {
     let dev_y = DeviceBuffer::from_slice(&ctx, &host_y_bf16).expect("up y");
     let mut dev_o: DeviceBuffer<bf16> = DeviceBuffer::zeros(&ctx, 1).expect("alloc out");
 
-    let desc = GgufMmvqDescriptor {
-        nrows: 1,
-        ncols: 64,
-        block_format: GgufBlockFormat::Q8_0,
-        w_start_byte_offset: 0,
-    };
+    let desc = GgufMmvqDescriptor::new(1, 64, GgufBlockFormat::Q8_0);
     let plan =
         GgufMmvqPlan::<bf16>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = GgufMmvqArgs {
@@ -296,12 +286,7 @@ fn mmvq_q4_K_f16_smoke() {
     let dev_y = DeviceBuffer::from_slice(&ctx, &host_y_f16).expect("up y");
     let mut dev_o: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, 1).expect("alloc out");
 
-    let desc = GgufMmvqDescriptor {
-        nrows: 1,
-        ncols: 256,
-        block_format: GgufBlockFormat::Q4K,
-        w_start_byte_offset: 0,
-    };
+    let desc = GgufMmvqDescriptor::new(1, 256, GgufBlockFormat::Q4K);
     let plan = GgufMmvqPlan::<f16>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = GgufMmvqArgs {
         weight: TensorRef::new(
@@ -332,12 +317,7 @@ fn run_q4k_f32_ref(ctx: &Context, stream: &Stream, host_w: &[U8], host_y_f32: &[
     let dev_y = DeviceBuffer::from_slice(ctx, host_y_f32).expect("up y");
     let mut dev_o: DeviceBuffer<f32> = DeviceBuffer::zeros(ctx, 1).expect("alloc out");
 
-    let desc = GgufMmvqDescriptor {
-        nrows: 1,
-        ncols: host_y_f32.len() as i32,
-        block_format: GgufBlockFormat::Q4K,
-        w_start_byte_offset: 0,
-    };
+    let desc = GgufMmvqDescriptor::new(1, host_y_f32.len() as i32, GgufBlockFormat::Q4K);
     let plan = GgufMmvqPlan::<f32>::select(stream, &desc, PlanPreference::default()).expect("sel");
     let args = GgufMmvqArgs {
         weight: TensorRef::new(
@@ -385,12 +365,7 @@ fn mmvq_q8_K_bf16_smoke() {
     let dev_y = DeviceBuffer::from_slice(&ctx, &host_y_bf16).expect("up y");
     let mut dev_o: DeviceBuffer<bf16> = DeviceBuffer::zeros(&ctx, 1).expect("alloc out");
 
-    let desc = GgufMmvqDescriptor {
-        nrows: 1,
-        ncols: 256,
-        block_format: GgufBlockFormat::Q8K,
-        w_start_byte_offset: 0,
-    };
+    let desc = GgufMmvqDescriptor::new(1, 256, GgufBlockFormat::Q8K);
     let plan =
         GgufMmvqPlan::<bf16>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = GgufMmvqArgs {
@@ -446,12 +421,7 @@ fn mmvq_q8_0_f16_stride2_smoke() {
     let dev_y = DeviceBuffer::from_slice(&ctx, &host_y_f16).expect("up y");
     let mut dev_o: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, 1).expect("alloc out");
 
-    let desc = GgufMmvqDescriptor {
-        nrows: 1,
-        ncols: 64,
-        block_format: GgufBlockFormat::Q8_0,
-        w_start_byte_offset: 0,
-    };
+    let desc = GgufMmvqDescriptor::new(1, 64, GgufBlockFormat::Q8_0);
     let plan = GgufMmvqPlan::<f16>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = GgufMmvqArgs {
         weight: TensorRef::new(
@@ -498,12 +468,7 @@ fn mmvq_q4_K_bf16_stride0_broadcast_smoke() {
     let dev_y = DeviceBuffer::from_slice(&ctx, &host_y_bf16).expect("up y");
     let mut dev_o: DeviceBuffer<bf16> = DeviceBuffer::zeros(&ctx, 1).expect("alloc out");
 
-    let desc = GgufMmvqDescriptor {
-        nrows: 1,
-        ncols: 256,
-        block_format: GgufBlockFormat::Q4K,
-        w_start_byte_offset: 0,
-    };
+    let desc = GgufMmvqDescriptor::new(1, 256, GgufBlockFormat::Q4K);
     let plan =
         GgufMmvqPlan::<bf16>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = GgufMmvqArgs {
@@ -538,12 +503,7 @@ fn run_q4k_f32_ref_strided(
     let dev_y = DeviceBuffer::from_slice(ctx, host_y_f32).expect("up y");
     let mut dev_o: DeviceBuffer<f32> = DeviceBuffer::zeros(ctx, 1).expect("alloc out");
 
-    let desc = GgufMmvqDescriptor {
-        nrows: 1,
-        ncols: 256,
-        block_format: GgufBlockFormat::Q4K,
-        w_start_byte_offset: 0,
-    };
+    let desc = GgufMmvqDescriptor::new(1, 256, GgufBlockFormat::Q4K);
     let plan = GgufMmvqPlan::<f32>::select(stream, &desc, PlanPreference::default()).expect("sel");
     let args = GgufMmvqArgs {
         weight: TensorRef::new(

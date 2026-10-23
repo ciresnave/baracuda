@@ -51,16 +51,6 @@ fn adaptive_avg_pool2d_4x4_to_2x2_f32() {
     let plan = AdaptiveAvgPool2dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
 
-    // `derived_kernel_stride` was deprecated in Phase 16.1 — the
-    // bespoke kernel uses per-output-cell variable windows; no single
-    // (kernel, stride) pair represents the op. The deprecated getter
-    // now returns `((0,0), (0,0))` for source-compat.
-    {
-        let ((kh, sh), (kw, sw)) = plan.derived_kernel_stride();
-        assert_eq!((kh, sh), (0, 0));
-        assert_eq!((kw, sw), (0, 0));
-    }
-
     let x_shape = [n, c, h_in, w_in];
     let y_shape = [n, c, h_out, w_out];
     plan.run_fw(

@@ -142,12 +142,7 @@ fn mmvq_q8_0_stride1_matches_contig() {
     // override stride. The cleanest way is to set offset to 0 and call
     // the FFI directly here — but the plan-layer API is the contract,
     // so we just exercise the contig path as the canonical sanity arm.
-    let desc = GgufMmvqDescriptor {
-        nrows: 2,
-        ncols: 64,
-        block_format: GgufBlockFormat::Q8_0,
-        w_start_byte_offset: 0,
-    };
+    let desc = GgufMmvqDescriptor::new(2, 64, GgufBlockFormat::Q8_0);
     let plan = GgufMmvqPlan::select(&stream, &desc, PlanPreference::default()).expect("select");
     let weight_len = host_weight.len() as i32;
     let args = GgufMmvqArgs {
@@ -199,12 +194,7 @@ fn mmvq_q8_0_stride2() {
     let dev_y = DeviceBuffer::from_slice(&ctx, &host_y).expect("up y");
     let mut dev_o: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 1).expect("alloc out");
 
-    let desc = GgufMmvqDescriptor {
-        nrows: 1,
-        ncols: 64,
-        block_format: GgufBlockFormat::Q8_0,
-        w_start_byte_offset: 0,
-    };
+    let desc = GgufMmvqDescriptor::new(1, 64, GgufBlockFormat::Q8_0);
     let plan = GgufMmvqPlan::select(&stream, &desc, PlanPreference::default()).expect("select");
     let weight_len = host_weight.len() as i32;
     let args = GgufMmvqArgs {
@@ -253,12 +243,7 @@ fn mmvq_q8_0_stride0_broadcast() {
     let dev_y = DeviceBuffer::from_slice(&ctx, &host_y).expect("up y");
     let mut dev_o: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 1).expect("alloc out");
 
-    let desc = GgufMmvqDescriptor {
-        nrows: 1,
-        ncols: 64,
-        block_format: GgufBlockFormat::Q8_0,
-        w_start_byte_offset: 0,
-    };
+    let desc = GgufMmvqDescriptor::new(1, 64, GgufBlockFormat::Q8_0);
     let plan = GgufMmvqPlan::select(&stream, &desc, PlanPreference::default()).expect("select");
     let weight_len = host_weight.len() as i32;
     let args = GgufMmvqArgs {
@@ -323,12 +308,7 @@ fn mmvq_q8_0_w_start_byte_offset() {
 
     // First call: matrix A. With offset=0 and stride=1, this hits the
     // contig fast path.
-    let desc_a = GgufMmvqDescriptor {
-        nrows: 1,
-        ncols: 64,
-        block_format: GgufBlockFormat::Q8_0,
-        w_start_byte_offset: 0,
-    };
+    let desc_a = GgufMmvqDescriptor::new(1, 64, GgufBlockFormat::Q8_0);
     let plan_a = GgufMmvqPlan::select(&stream, &desc_a, PlanPreference::default()).expect("sel a");
     let args_a = GgufMmvqArgs {
         weight: TensorRef::new(
@@ -344,12 +324,8 @@ fn mmvq_q8_0_w_start_byte_offset() {
 
     // Second call: matrix B, dispatched via byte offset. This engages
     // the actstrided FFI sibling (since `w_start_byte_offset != 0`).
-    let desc_b = GgufMmvqDescriptor {
-        nrows: 1,
-        ncols: 64,
-        block_format: GgufBlockFormat::Q8_0,
-        w_start_byte_offset: matrix_bytes_each as i64,
-    };
+    let desc_b = GgufMmvqDescriptor::new(1, 64, GgufBlockFormat::Q8_0)
+        .with_w_start_byte_offset(matrix_bytes_each as i64);
     let plan_b = GgufMmvqPlan::select(&stream, &desc_b, PlanPreference::default()).expect("sel b");
     let args_b = GgufMmvqArgs {
         weight: TensorRef::new(
@@ -413,12 +389,8 @@ fn mmvq_q4_0_stride_and_offset() {
     let mut dev_o: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 1).expect("alloc out");
 
     // Dispatch matrix B with offset + stride-2.
-    let desc = GgufMmvqDescriptor {
-        nrows: 1,
-        ncols: 64,
-        block_format: GgufBlockFormat::Q4_0,
-        w_start_byte_offset: matrix_bytes as i64,
-    };
+    let desc = GgufMmvqDescriptor::new(1, 64, GgufBlockFormat::Q4_0)
+        .with_w_start_byte_offset(matrix_bytes as i64);
     let plan = GgufMmvqPlan::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = GgufMmvqArgs {
         weight: TensorRef::new(
@@ -466,12 +438,7 @@ fn mmvq_q8_k_stride2() {
     let dev_y = DeviceBuffer::from_slice(&ctx, &host_y).expect("up y");
     let mut dev_o: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 1).expect("alloc out");
 
-    let desc = GgufMmvqDescriptor {
-        nrows: 1,
-        ncols: 256,
-        block_format: GgufBlockFormat::Q8K,
-        w_start_byte_offset: 0,
-    };
+    let desc = GgufMmvqDescriptor::new(1, 256, GgufBlockFormat::Q8K);
     let plan = GgufMmvqPlan::select(&stream, &desc, PlanPreference::default()).expect("select");
     let weight_len = host_weight.len() as i32;
     let args = GgufMmvqArgs {
@@ -515,12 +482,7 @@ fn mmvq_q8_k_stride0_broadcast() {
     let dev_y = DeviceBuffer::from_slice(&ctx, &host_y).expect("up y");
     let mut dev_o: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 1).expect("alloc out");
 
-    let desc = GgufMmvqDescriptor {
-        nrows: 1,
-        ncols: 256,
-        block_format: GgufBlockFormat::Q8K,
-        w_start_byte_offset: 0,
-    };
+    let desc = GgufMmvqDescriptor::new(1, 256, GgufBlockFormat::Q8K);
     let plan = GgufMmvqPlan::select(&stream, &desc, PlanPreference::default()).expect("select");
     let weight_len = host_weight.len() as i32;
     let args = GgufMmvqArgs {
@@ -569,12 +531,8 @@ fn mmvq_w_offset_alignment_aligned_ok() {
         (GgufBlockFormat::Q8K, 292),
     ];
     for &(fmt, off) in cases {
-        let desc = GgufMmvqDescriptor {
-            nrows: 1,
-            ncols: min_valid_ncols(fmt),
-            block_format: fmt,
-            w_start_byte_offset: off,
-        };
+        let desc =
+            GgufMmvqDescriptor::new(1, min_valid_ncols(fmt), fmt).with_w_start_byte_offset(off);
         let r = GgufMmvqPlan::<f32>::select(&stream, &desc, PlanPreference::default());
         assert!(
             r.is_ok(),
@@ -623,12 +581,8 @@ fn mmvq_w_offset_alignment_misaligned_rejected_debug() {
     ];
 
     for &(fmt, off) in cases {
-        let desc = GgufMmvqDescriptor {
-            nrows: 1,
-            ncols: min_valid_ncols(fmt),
-            block_format: fmt,
-            w_start_byte_offset: off,
-        };
+        let desc =
+            GgufMmvqDescriptor::new(1, min_valid_ncols(fmt), fmt).with_w_start_byte_offset(off);
         let r = GgufMmvqPlan::<f32>::select(&stream, &desc, PlanPreference::default());
         match r {
             // Require the ALIGNMENT message: since #127 a width decline is also an
@@ -653,12 +607,8 @@ fn mmvq_w_offset_alignment_two_byte_ok_on_2aligned() {
         GgufBlockFormat::Q6K,
     ];
     for &fmt in cases {
-        let desc = GgufMmvqDescriptor {
-            nrows: 1,
-            ncols: min_valid_ncols(fmt),
-            block_format: fmt,
-            w_start_byte_offset: 2,
-        };
+        let desc =
+            GgufMmvqDescriptor::new(1, min_valid_ncols(fmt), fmt).with_w_start_byte_offset(2);
         let r = GgufMmvqPlan::<f32>::select(&stream, &desc, PlanPreference::default());
         assert!(
             r.is_ok(),

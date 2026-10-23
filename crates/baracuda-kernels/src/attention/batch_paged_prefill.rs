@@ -61,6 +61,7 @@ use super::batch_paged_decode::PagedKvCacheDescriptor;
 
 /// Descriptor for a batched paged-KV prefill op.
 #[derive(Copy, Clone, Debug)]
+#[non_exhaustive]
 pub struct BatchPagedPrefillDescriptor {
     /// Number of requests in the batch.
     pub batch_size: i32,
@@ -80,6 +81,44 @@ pub struct BatchPagedPrefillDescriptor {
     pub enable_kv_split: bool,
     /// Paged cache descriptor (shared between K and V).
     pub paged_kv: PagedKvCacheDescriptor,
+}
+
+impl BatchPagedPrefillDescriptor {
+    /// Build a descriptor with `causal = false` and `enable_kv_split = false`
+    /// (the lighter no-split path). Chain [`Self::with_causal`] /
+    /// [`Self::with_enable_kv_split`] to override.
+    #[inline]
+    pub fn new(
+        batch_size: i32,
+        total_num_rows: i32,
+        num_qo_heads: i32,
+        sm_scale: f32,
+        paged_kv: PagedKvCacheDescriptor,
+    ) -> Self {
+        Self {
+            batch_size,
+            total_num_rows,
+            num_qo_heads,
+            sm_scale,
+            causal: false,
+            enable_kv_split: false,
+            paged_kv,
+        }
+    }
+
+    /// Apply causal (autoregressive) masking. Default `false`.
+    #[inline]
+    pub fn with_causal(mut self, causal: bool) -> Self {
+        self.causal = causal;
+        self
+    }
+
+    /// Opt into FlashInfer's KV-split parallelism. Default `false`.
+    #[inline]
+    pub fn with_enable_kv_split(mut self, enable_kv_split: bool) -> Self {
+        self.enable_kv_split = enable_kv_split;
+        self
+    }
 }
 
 /// Args bundle for a batched paged-KV prefill launch.

@@ -53,6 +53,7 @@ impl GgufMmvqActivation for bf16 {}
 
 /// Descriptor for a GGUF MMVQ op.
 #[derive(Copy, Clone, Debug)]
+#[non_exhaustive]
 pub struct GgufMmvqDescriptor {
     /// Number of output rows (= rows of the packed weight matrix).
     pub nrows: i32,
@@ -68,6 +69,28 @@ pub struct GgufMmvqDescriptor {
     ///
     /// Phase 14.5 — defaults to `0` for source-compat.
     pub w_start_byte_offset: i64,
+}
+
+impl GgufMmvqDescriptor {
+    /// Build a descriptor for a matrix that starts at byte `0` of its `weight`
+    /// allocation. Chain [`Self::with_w_start_byte_offset`] to place it elsewhere.
+    #[inline]
+    pub fn new(nrows: i32, ncols: i32, block_format: GgufBlockFormat) -> Self {
+        Self {
+            nrows,
+            ncols,
+            block_format,
+            w_start_byte_offset: 0,
+        }
+    }
+
+    /// Byte offset into the `weight` allocation at which this matrix starts
+    /// (default `0`; non-zero engages the actstrided FFI sibling).
+    #[inline]
+    pub fn with_w_start_byte_offset(mut self, w_start_byte_offset: i64) -> Self {
+        self.w_start_byte_offset = w_start_byte_offset;
+        self
+    }
 }
 
 impl Default for GgufMmvqDescriptor {

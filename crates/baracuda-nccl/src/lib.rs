@@ -323,13 +323,6 @@ impl Communicator {
         self.world_size
     }
 
-    /// Deprecated alias for [`Self::world_size`]. Returns a `Result` for
-    /// source-compatibility with the pre-Phase-52 API; never errors.
-    #[deprecated(note = "Use `world_size()` (infallible, cached)")]
-    pub fn nranks(&self) -> Result<i32> {
-        Ok(self.world_size)
-    }
-
     /// Raw communicator handle. Use with care.
     #[inline]
     pub fn as_raw(&self) -> ncclComm_t {

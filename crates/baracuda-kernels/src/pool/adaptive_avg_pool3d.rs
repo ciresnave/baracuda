@@ -133,16 +133,6 @@ impl<T: Element> AdaptiveAvgPool3dPlan<T> {
         0
     }
 
-    /// Deprecated. Always returns three `(0, 0)` pairs.
-    #[inline]
-    #[deprecated(
-        since = "0.0.1-alpha.33",
-        note = "Phase 16.1 uses bit-exact per-output-cell windows; no single (kernel, stride) pair applies."
-    )]
-    pub fn derived_kernel_stride(&self) -> ((i32, i32), (i32, i32), (i32, i32)) {
-        ((0, 0), (0, 0), (0, 0))
-    }
-
     /// Run the forward pass.
     pub fn run_fw(
         &self,

@@ -76,6 +76,7 @@ const CHUNK_K: i32 = 256;
 /// GQA-batched WMMA kernel (Tier-2, gated on group_size ≥ 4 +
 /// head_dim aligned to 16).
 #[derive(Copy, Clone, Debug)]
+#[non_exhaustive]
 pub struct FlashDecodingDescriptor {
     /// Batch size (`B`).
     pub batch_size: i32,

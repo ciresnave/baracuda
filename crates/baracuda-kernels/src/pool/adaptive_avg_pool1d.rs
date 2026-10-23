@@ -144,20 +144,6 @@ impl<T: Element> AdaptiveAvgPool1dPlan<T> {
         0
     }
 
-    /// Deprecated. Returned the cuDNN-approximation `(kernel, stride)`
-    /// derived from `(L_in, L_out)` in the previous implementation.
-    /// Phase 16.1 implements PyTorch's per-output-cell variable window
-    /// directly — no single `(kernel, stride)` pair represents the op.
-    /// Always returns `(0, 0)` as a stable poison value.
-    #[inline]
-    #[deprecated(
-        since = "0.0.1-alpha.33",
-        note = "Phase 16.1 uses bit-exact per-output-cell windows; no single (kernel, stride) pair applies."
-    )]
-    pub fn derived_kernel_stride(&self) -> (i32, i32) {
-        (0, 0)
-    }
-
     /// Run the forward pass.
     pub fn run_fw(
         &self,

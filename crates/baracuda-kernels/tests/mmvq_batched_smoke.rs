@@ -405,12 +405,8 @@ fn batched_q4_K_f16_top_k_1() {
             let mut dev_out_ref: DeviceBuffer<f32> =
                 DeviceBuffer::zeros(&ctx, 1).expect("alloc out ref");
             let e_idx = t as i64; // 1:1 mapping in this test
-            let desc_ref = GgufMmvqDescriptor {
-                nrows: 1,
-                ncols: n_cols,
-                block_format: GgufBlockFormat::Q4K,
-                w_start_byte_offset: e_idx * (core::mem::size_of::<BlockQ4K>() as i64),
-            };
+            let desc_ref = GgufMmvqDescriptor::new(1, n_cols, GgufBlockFormat::Q4K)
+                .with_w_start_byte_offset(e_idx * (core::mem::size_of::<BlockQ4K>() as i64));
             let plan_ref =
                 GgufMmvqPlan::<f32>::select(&stream, &desc_ref, PlanPreference::default())
                     .expect("sel ref");

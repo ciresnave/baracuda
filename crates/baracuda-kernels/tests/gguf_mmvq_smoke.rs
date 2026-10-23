@@ -90,12 +90,7 @@ fn gguf_mmvq_q8_0_2x64() {
     let dev_activation = DeviceBuffer::from_slice(&ctx, &host_activation).expect("up act");
     let mut dev_out: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 2).expect("alloc out");
 
-    let desc = GgufMmvqDescriptor {
-        nrows,
-        ncols,
-        block_format: GgufBlockFormat::Q8_0,
-        w_start_byte_offset: 0,
-    };
+    let desc = GgufMmvqDescriptor::new(nrows, ncols, GgufBlockFormat::Q8_0);
     let plan = GgufMmvqPlan::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = GgufMmvqArgs {
         weight: TensorRef::new(
@@ -192,12 +187,7 @@ fn gguf_mmvq_q8_K_2x256() {
     let dev_activation = DeviceBuffer::from_slice(&ctx, &host_activation).expect("up act");
     let mut dev_out: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 2).expect("alloc out");
 
-    let desc = GgufMmvqDescriptor {
-        nrows,
-        ncols,
-        block_format: GgufBlockFormat::Q8K,
-        w_start_byte_offset: 0,
-    };
+    let desc = GgufMmvqDescriptor::new(nrows, ncols, GgufBlockFormat::Q8K);
     let plan = GgufMmvqPlan::select(&stream, &desc, PlanPreference::default())
         .expect("Q8_K MMVQ select (Phase 11.4) should succeed");
     let args = GgufMmvqArgs {

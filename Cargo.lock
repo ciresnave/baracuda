@@ -40,7 +40,7 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "baracuda"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
  "baracuda-cublas",
  "baracuda-cudf",
@@ -51,7 +51,7 @@ dependencies = [
  "baracuda-cusolver",
  "baracuda-cusparse",
  "baracuda-cvcuda",
- "baracuda-driver",
+ "baracuda-driver 0.1.0-alpha.1",
  "baracuda-nccl",
  "baracuda-npp",
  "baracuda-nvcomp",
@@ -62,12 +62,12 @@ dependencies = [
  "baracuda-nvrtc",
  "baracuda-runtime",
  "baracuda-tensorrt",
- "baracuda-types",
+ "baracuda-types 0.1.0-alpha.1",
 ]
 
 [[package]]
 name = "baracuda-bench-stats"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -75,40 +75,57 @@ dependencies = [
 
 [[package]]
 name = "baracuda-build"
-version = "0.0.1-alpha.165"
+version = "0.0.1-alpha.158"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e6a7a4a145a7adfc2697114e0a5e46626c7e554a294b0dba15fb336412cbceaa"
+
+[[package]]
+name = "baracuda-build"
+version = "0.1.0-alpha.1"
 dependencies = [
  "bindgen",
 ]
 
 [[package]]
 name = "baracuda-core"
-version = "0.0.1-alpha.165"
+version = "0.0.1-alpha.158"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "15f7f65296b49cdc236475a2b36e2cd4a940940b0ef313f86cb075b10acd4ed8"
 dependencies = [
- "baracuda-types",
+ "baracuda-types 0.0.1-alpha.158",
+ "libloading 0.9.0",
+ "thiserror",
+]
+
+[[package]]
+name = "baracuda-core"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "baracuda-types 0.1.0-alpha.1",
  "libloading 0.9.0",
  "thiserror",
 ]
 
 [[package]]
 name = "baracuda-cublas"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-core",
+ "baracuda-core 0.1.0-alpha.1",
  "baracuda-cublas-sys",
- "baracuda-cuda-sys",
- "baracuda-driver",
- "baracuda-types",
+ "baracuda-cuda-sys 0.1.0-alpha.1",
+ "baracuda-driver 0.1.0-alpha.1",
+ "baracuda-types 0.1.0-alpha.1",
  "thiserror",
 ]
 
 [[package]]
 name = "baracuda-cublas-sys"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-build",
- "baracuda-core",
- "baracuda-cuda-sys",
- "baracuda-types",
+ "baracuda-build 0.1.0-alpha.1",
+ "baracuda-core 0.1.0-alpha.1",
+ "baracuda-cuda-sys 0.1.0-alpha.1",
+ "baracuda-types 0.1.0-alpha.1",
 ]
 
 [[package]]
@@ -134,7 +151,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cuda-seam"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
  "baracuda-cuda-emit",
  "fuel-kernel-seam",
@@ -145,16 +162,27 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cuda-sys"
-version = "0.0.1-alpha.165"
+version = "0.0.1-alpha.158"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aab1134fed9247d48cf7be488ba9bc99849246d18f1adda238d7acda92b27bc7"
 dependencies = [
- "baracuda-build",
- "baracuda-core",
- "baracuda-types",
+ "baracuda-build 0.0.1-alpha.158",
+ "baracuda-core 0.0.1-alpha.158",
+ "baracuda-types 0.0.1-alpha.158",
+]
+
+[[package]]
+name = "baracuda-cuda-sys"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "baracuda-build 0.1.0-alpha.1",
+ "baracuda-core 0.1.0-alpha.1",
+ "baracuda-types 0.1.0-alpha.1",
 ]
 
 [[package]]
 name = "baracuda-cuda-vocab"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -163,212 +191,212 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cudf"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-core",
+ "baracuda-core 0.1.0-alpha.1",
  "baracuda-cudf-sys",
- "baracuda-driver",
- "baracuda-types",
+ "baracuda-driver 0.1.0-alpha.1",
+ "baracuda-types 0.1.0-alpha.1",
  "thiserror",
 ]
 
 [[package]]
 name = "baracuda-cudf-sys"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-build",
- "baracuda-core",
- "baracuda-cuda-sys",
- "baracuda-types",
+ "baracuda-build 0.1.0-alpha.1",
+ "baracuda-core 0.1.0-alpha.1",
+ "baracuda-cuda-sys 0.1.0-alpha.1",
+ "baracuda-types 0.1.0-alpha.1",
 ]
 
 [[package]]
 name = "baracuda-cudnn"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-core",
- "baracuda-cuda-sys",
+ "baracuda-core 0.1.0-alpha.1",
+ "baracuda-cuda-sys 0.1.0-alpha.1",
  "baracuda-cudnn-sys",
- "baracuda-driver",
- "baracuda-types",
+ "baracuda-driver 0.1.0-alpha.1",
+ "baracuda-types 0.1.0-alpha.1",
  "half",
  "thiserror",
 ]
 
 [[package]]
 name = "baracuda-cudnn-sys"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-build",
- "baracuda-core",
- "baracuda-cuda-sys",
- "baracuda-types",
+ "baracuda-build 0.1.0-alpha.1",
+ "baracuda-core 0.1.0-alpha.1",
+ "baracuda-cuda-sys 0.1.0-alpha.1",
+ "baracuda-types 0.1.0-alpha.1",
 ]
 
 [[package]]
 name = "baracuda-cufft"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-core",
- "baracuda-cuda-sys",
+ "baracuda-core 0.1.0-alpha.1",
+ "baracuda-cuda-sys 0.1.0-alpha.1",
  "baracuda-cufft-sys",
- "baracuda-driver",
- "baracuda-types",
+ "baracuda-driver 0.1.0-alpha.1",
+ "baracuda-types 0.1.0-alpha.1",
  "thiserror",
 ]
 
 [[package]]
 name = "baracuda-cufft-sys"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-build",
- "baracuda-core",
- "baracuda-cuda-sys",
- "baracuda-types",
+ "baracuda-build 0.1.0-alpha.1",
+ "baracuda-core 0.1.0-alpha.1",
+ "baracuda-cuda-sys 0.1.0-alpha.1",
+ "baracuda-types 0.1.0-alpha.1",
 ]
 
 [[package]]
 name = "baracuda-cufile"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-core",
+ "baracuda-core 0.1.0-alpha.1",
  "baracuda-cufile-sys",
- "baracuda-driver",
+ "baracuda-driver 0.1.0-alpha.1",
  "baracuda-runtime",
- "baracuda-types",
+ "baracuda-types 0.1.0-alpha.1",
  "thiserror",
 ]
 
 [[package]]
 name = "baracuda-cufile-sys"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-core",
- "baracuda-types",
+ "baracuda-core 0.1.0-alpha.1",
+ "baracuda-types 0.1.0-alpha.1",
 ]
 
 [[package]]
 name = "baracuda-cupti"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-core",
+ "baracuda-core 0.1.0-alpha.1",
  "baracuda-cupti-sys",
- "baracuda-types",
+ "baracuda-types 0.1.0-alpha.1",
  "thiserror",
 ]
 
 [[package]]
 name = "baracuda-cupti-sys"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-core",
- "baracuda-types",
+ "baracuda-core 0.1.0-alpha.1",
+ "baracuda-types 0.1.0-alpha.1",
 ]
 
 [[package]]
 name = "baracuda-curand"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-core",
- "baracuda-cuda-sys",
+ "baracuda-core 0.1.0-alpha.1",
+ "baracuda-cuda-sys 0.1.0-alpha.1",
  "baracuda-curand-sys",
- "baracuda-driver",
- "baracuda-types",
+ "baracuda-driver 0.1.0-alpha.1",
+ "baracuda-types 0.1.0-alpha.1",
  "thiserror",
 ]
 
 [[package]]
 name = "baracuda-curand-sys"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-build",
- "baracuda-core",
- "baracuda-cuda-sys",
- "baracuda-types",
+ "baracuda-build 0.1.0-alpha.1",
+ "baracuda-core 0.1.0-alpha.1",
+ "baracuda-cuda-sys 0.1.0-alpha.1",
+ "baracuda-types 0.1.0-alpha.1",
 ]
 
 [[package]]
 name = "baracuda-cusolver"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-core",
- "baracuda-cuda-sys",
+ "baracuda-core 0.1.0-alpha.1",
+ "baracuda-cuda-sys 0.1.0-alpha.1",
  "baracuda-cusolver-sys",
- "baracuda-driver",
- "baracuda-types",
+ "baracuda-driver 0.1.0-alpha.1",
+ "baracuda-types 0.1.0-alpha.1",
  "thiserror",
 ]
 
 [[package]]
 name = "baracuda-cusolver-sys"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-build",
- "baracuda-core",
- "baracuda-cuda-sys",
- "baracuda-types",
+ "baracuda-build 0.1.0-alpha.1",
+ "baracuda-core 0.1.0-alpha.1",
+ "baracuda-cuda-sys 0.1.0-alpha.1",
+ "baracuda-types 0.1.0-alpha.1",
 ]
 
 [[package]]
 name = "baracuda-cusparse"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-core",
- "baracuda-cuda-sys",
+ "baracuda-core 0.1.0-alpha.1",
+ "baracuda-cuda-sys 0.1.0-alpha.1",
  "baracuda-cusparse-sys",
- "baracuda-driver",
- "baracuda-types",
+ "baracuda-driver 0.1.0-alpha.1",
+ "baracuda-types 0.1.0-alpha.1",
  "thiserror",
 ]
 
 [[package]]
 name = "baracuda-cusparse-sys"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-build",
- "baracuda-core",
- "baracuda-cuda-sys",
- "baracuda-types",
+ "baracuda-build 0.1.0-alpha.1",
+ "baracuda-core 0.1.0-alpha.1",
+ "baracuda-cuda-sys 0.1.0-alpha.1",
+ "baracuda-types 0.1.0-alpha.1",
 ]
 
 [[package]]
 name = "baracuda-cutensor"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-core",
+ "baracuda-core 0.1.0-alpha.1",
  "baracuda-cutensor-sys",
- "baracuda-driver",
+ "baracuda-driver 0.1.0-alpha.1",
  "baracuda-runtime",
- "baracuda-types",
+ "baracuda-types 0.1.0-alpha.1",
  "thiserror",
 ]
 
 [[package]]
 name = "baracuda-cutensor-sys"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-core",
- "baracuda-types",
+ "baracuda-core 0.1.0-alpha.1",
+ "baracuda-types 0.1.0-alpha.1",
 ]
 
 [[package]]
 name = "baracuda-cutlass"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
  "baracuda-cublas",
  "baracuda-cublas-sys",
  "baracuda-cutlass-kernels-sys",
- "baracuda-driver",
- "baracuda-kernels-types",
+ "baracuda-driver 0.1.0-alpha.1",
+ "baracuda-kernels-types 0.1.0-alpha.1",
  "baracuda-ozimmu",
- "baracuda-types",
+ "baracuda-types 0.1.0-alpha.1",
  "half",
  "thiserror",
 ]
 
 [[package]]
 name = "baracuda-cutlass-kernels-sys"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
  "baracuda-cutlass-sys",
  "baracuda-forge",
@@ -376,63 +404,75 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cutlass-sys"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
  "fs2",
 ]
 
 [[package]]
 name = "baracuda-cuvs"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-core",
- "baracuda-cuda-sys",
+ "baracuda-core 0.1.0-alpha.1",
+ "baracuda-cuda-sys 0.1.0-alpha.1",
  "baracuda-cuvs-sys",
- "baracuda-driver",
- "baracuda-types",
+ "baracuda-driver 0.1.0-alpha.1",
+ "baracuda-types 0.1.0-alpha.1",
  "half",
  "thiserror",
 ]
 
 [[package]]
 name = "baracuda-cuvs-sys"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-build",
- "baracuda-core",
- "baracuda-cuda-sys",
- "baracuda-types",
+ "baracuda-build 0.1.0-alpha.1",
+ "baracuda-core 0.1.0-alpha.1",
+ "baracuda-cuda-sys 0.1.0-alpha.1",
+ "baracuda-types 0.1.0-alpha.1",
 ]
 
 [[package]]
 name = "baracuda-cvcuda"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-core",
+ "baracuda-core 0.1.0-alpha.1",
  "baracuda-cvcuda-sys",
- "baracuda-driver",
+ "baracuda-driver 0.1.0-alpha.1",
  "baracuda-runtime",
- "baracuda-types",
+ "baracuda-types 0.1.0-alpha.1",
  "thiserror",
 ]
 
 [[package]]
 name = "baracuda-cvcuda-sys"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-core",
- "baracuda-types",
+ "baracuda-core 0.1.0-alpha.1",
+ "baracuda-types 0.1.0-alpha.1",
 ]
 
 [[package]]
 name = "baracuda-driver"
-version = "0.0.1-alpha.165"
+version = "0.0.1-alpha.158"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "abdddf4a19a4998badfb60eace67ea73005b1dbf7e2472ccf0df9fe65d3e84f3"
 dependencies = [
- "baracuda-core",
- "baracuda-cuda-sys",
- "baracuda-driver",
+ "baracuda-core 0.0.1-alpha.158",
+ "baracuda-cuda-sys 0.0.1-alpha.158",
+ "baracuda-types 0.0.1-alpha.158",
+ "thiserror",
+]
+
+[[package]]
+name = "baracuda-driver"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "baracuda-core 0.1.0-alpha.1",
+ "baracuda-cuda-sys 0.1.0-alpha.1",
+ "baracuda-driver 0.1.0-alpha.1",
  "baracuda-nvrtc",
- "baracuda-types",
+ "baracuda-types 0.1.0-alpha.1",
  "futures-core",
  "thiserror",
 ]
@@ -446,7 +486,7 @@ dependencies = [
  "baracuda-cutensor-sys",
  "baracuda-cutlass",
  "baracuda-cvcuda",
- "baracuda-driver",
+ "baracuda-driver 0.1.0-alpha.1",
  "baracuda-forge",
  "baracuda-nvcomp",
  "baracuda-nvcomp-sys",
@@ -456,9 +496,9 @@ dependencies = [
 
 [[package]]
 name = "baracuda-flashinfer"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-driver",
+ "baracuda-driver 0.1.0-alpha.1",
  "baracuda-flashinfer-sys",
  "baracuda-kernels",
  "baracuda-kernels-sys",
@@ -467,16 +507,16 @@ dependencies = [
 
 [[package]]
 name = "baracuda-flashinfer-sys"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
  "baracuda-kernels-sys",
 ]
 
 [[package]]
 name = "baracuda-forge"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-build",
+ "baracuda-build 0.1.0-alpha.1",
  "fs2",
  "glob",
  "num_cpus",
@@ -490,12 +530,12 @@ dependencies = [
 
 [[package]]
 name = "baracuda-kernels"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
  "baracuda-cutlass",
- "baracuda-driver",
+ "baracuda-driver 0.1.0-alpha.1",
  "baracuda-kernels-sys",
- "baracuda-kernels-types",
+ "baracuda-kernels-types 0.1.0-alpha.1",
  "baracuda-megatron",
  "baracuda-nccl",
  "baracuda-nccl-sys",
@@ -503,7 +543,7 @@ dependencies = [
  "baracuda-nvshmem-sys",
  "baracuda-optim",
  "baracuda-transformer-engine",
- "baracuda-types",
+ "baracuda-types 0.1.0-alpha.1",
  "float8",
  "half",
  "libm",
@@ -512,7 +552,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-kernels-bench"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
  "baracuda-bench-stats",
  "baracuda-cublas",
@@ -521,13 +561,13 @@ dependencies = [
  "baracuda-cudnn",
  "baracuda-cutlass",
  "baracuda-cutlass-sys",
- "baracuda-driver",
+ "baracuda-driver 0.1.0-alpha.1",
  "baracuda-forge",
  "baracuda-kernels",
  "baracuda-kernels-sys",
- "baracuda-kernels-types",
+ "baracuda-kernels-types 0.1.0-alpha.1",
  "baracuda-ozimmu",
- "baracuda-types",
+ "baracuda-types 0.1.0-alpha.1",
  "criterion",
  "half",
  "serde",
@@ -537,7 +577,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-kernels-sys"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
  "baracuda-cutlass-kernels-sys",
  "baracuda-cutlass-sys",
@@ -546,10 +586,23 @@ dependencies = [
 
 [[package]]
 name = "baracuda-kernels-types"
-version = "0.0.1-alpha.165"
+version = "0.0.1-alpha.158"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "864ca0a19748f3deb2f4b2cdfd8e020ca225135961cbd27c04a5adb454b6a748"
 dependencies = [
- "baracuda-driver",
- "baracuda-types",
+ "baracuda-driver 0.0.1-alpha.158",
+ "baracuda-types 0.0.1-alpha.158",
+ "float8",
+ "half",
+ "unpopped-vocab",
+]
+
+[[package]]
+name = "baracuda-kernels-types"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "baracuda-driver 0.1.0-alpha.1",
+ "baracuda-types 0.1.0-alpha.1",
  "float8",
  "half",
  "unpopped-vocab",
@@ -557,299 +610,310 @@ dependencies = [
 
 [[package]]
 name = "baracuda-megatron"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
  "baracuda-cublas",
- "baracuda-driver",
+ "baracuda-driver 0.1.0-alpha.1",
  "baracuda-nccl",
- "baracuda-types",
+ "baracuda-types 0.1.0-alpha.1",
  "half",
  "thiserror",
 ]
 
 [[package]]
 name = "baracuda-nccl"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-core",
- "baracuda-cuda-sys",
- "baracuda-driver",
+ "baracuda-core 0.1.0-alpha.1",
+ "baracuda-cuda-sys 0.1.0-alpha.1",
+ "baracuda-driver 0.1.0-alpha.1",
  "baracuda-nccl-sys",
- "baracuda-types",
+ "baracuda-types 0.1.0-alpha.1",
  "half",
  "thiserror",
 ]
 
 [[package]]
 name = "baracuda-nccl-sys"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-build",
- "baracuda-core",
- "baracuda-cuda-sys",
- "baracuda-types",
+ "baracuda-build 0.1.0-alpha.1",
+ "baracuda-core 0.1.0-alpha.1",
+ "baracuda-cuda-sys 0.1.0-alpha.1",
+ "baracuda-types 0.1.0-alpha.1",
 ]
 
 [[package]]
 name = "baracuda-npp"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-core",
- "baracuda-driver",
+ "baracuda-core 0.1.0-alpha.1",
+ "baracuda-driver 0.1.0-alpha.1",
  "baracuda-npp-sys",
- "baracuda-types",
+ "baracuda-types 0.1.0-alpha.1",
  "thiserror",
 ]
 
 [[package]]
 name = "baracuda-npp-sys"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-build",
- "baracuda-core",
- "baracuda-cuda-sys",
- "baracuda-types",
+ "baracuda-build 0.1.0-alpha.1",
+ "baracuda-core 0.1.0-alpha.1",
+ "baracuda-cuda-sys 0.1.0-alpha.1",
+ "baracuda-types 0.1.0-alpha.1",
 ]
 
 [[package]]
 name = "baracuda-nvcomp"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-core",
- "baracuda-driver",
+ "baracuda-core 0.1.0-alpha.1",
+ "baracuda-driver 0.1.0-alpha.1",
  "baracuda-nvcomp-sys",
  "baracuda-runtime",
- "baracuda-types",
+ "baracuda-types 0.1.0-alpha.1",
  "thiserror",
 ]
 
 [[package]]
 name = "baracuda-nvcomp-sys"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-core",
- "baracuda-types",
+ "baracuda-core 0.1.0-alpha.1",
+ "baracuda-types 0.1.0-alpha.1",
 ]
 
 [[package]]
 name = "baracuda-nvimagecodec"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-core",
- "baracuda-cuda-sys",
- "baracuda-driver",
+ "baracuda-core 0.1.0-alpha.1",
+ "baracuda-cuda-sys 0.1.0-alpha.1",
+ "baracuda-driver 0.1.0-alpha.1",
  "baracuda-nvimagecodec-sys",
- "baracuda-types",
+ "baracuda-types 0.1.0-alpha.1",
  "thiserror",
 ]
 
 [[package]]
 name = "baracuda-nvimagecodec-sys"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-build",
- "baracuda-core",
- "baracuda-cuda-sys",
- "baracuda-types",
+ "baracuda-build 0.1.0-alpha.1",
+ "baracuda-core 0.1.0-alpha.1",
+ "baracuda-cuda-sys 0.1.0-alpha.1",
+ "baracuda-types 0.1.0-alpha.1",
 ]
 
 [[package]]
 name = "baracuda-nvjitlink"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-core",
- "baracuda-driver",
+ "baracuda-core 0.1.0-alpha.1",
+ "baracuda-driver 0.1.0-alpha.1",
  "baracuda-nvjitlink-sys",
- "baracuda-types",
+ "baracuda-types 0.1.0-alpha.1",
  "thiserror",
 ]
 
 [[package]]
 name = "baracuda-nvjitlink-sys"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-build",
- "baracuda-core",
- "baracuda-types",
+ "baracuda-build 0.1.0-alpha.1",
+ "baracuda-core 0.1.0-alpha.1",
+ "baracuda-types 0.1.0-alpha.1",
 ]
 
 [[package]]
 name = "baracuda-nvjpeg"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-core",
- "baracuda-cuda-sys",
- "baracuda-driver",
+ "baracuda-core 0.1.0-alpha.1",
+ "baracuda-cuda-sys 0.1.0-alpha.1",
+ "baracuda-driver 0.1.0-alpha.1",
  "baracuda-nvjpeg-sys",
- "baracuda-types",
+ "baracuda-types 0.1.0-alpha.1",
  "thiserror",
 ]
 
 [[package]]
 name = "baracuda-nvjpeg-sys"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-build",
- "baracuda-core",
- "baracuda-cuda-sys",
- "baracuda-types",
+ "baracuda-build 0.1.0-alpha.1",
+ "baracuda-core 0.1.0-alpha.1",
+ "baracuda-cuda-sys 0.1.0-alpha.1",
+ "baracuda-types 0.1.0-alpha.1",
 ]
 
 [[package]]
 name = "baracuda-nvml"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-core",
+ "baracuda-core 0.1.0-alpha.1",
  "baracuda-nvml-sys",
- "baracuda-types",
+ "baracuda-types 0.1.0-alpha.1",
  "thiserror",
 ]
 
 [[package]]
 name = "baracuda-nvml-sys"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-build",
- "baracuda-core",
- "baracuda-types",
+ "baracuda-build 0.1.0-alpha.1",
+ "baracuda-core 0.1.0-alpha.1",
+ "baracuda-types 0.1.0-alpha.1",
 ]
 
 [[package]]
 name = "baracuda-nvrtc"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-core",
- "baracuda-driver",
+ "baracuda-core 0.1.0-alpha.1",
+ "baracuda-driver 0.1.0-alpha.1",
  "baracuda-nvrtc-sys",
- "baracuda-types",
+ "baracuda-types 0.1.0-alpha.1",
  "thiserror",
 ]
 
 [[package]]
 name = "baracuda-nvrtc-sys"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-build",
- "baracuda-core",
- "baracuda-types",
+ "baracuda-build 0.1.0-alpha.1",
+ "baracuda-core 0.1.0-alpha.1",
+ "baracuda-types 0.1.0-alpha.1",
 ]
 
 [[package]]
 name = "baracuda-nvshmem"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-core",
- "baracuda-cuda-sys",
- "baracuda-driver",
+ "baracuda-core 0.1.0-alpha.1",
+ "baracuda-cuda-sys 0.1.0-alpha.1",
+ "baracuda-driver 0.1.0-alpha.1",
  "baracuda-nvshmem-sys",
- "baracuda-types",
+ "baracuda-types 0.1.0-alpha.1",
  "thiserror",
 ]
 
 [[package]]
 name = "baracuda-nvshmem-sys"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-build",
- "baracuda-core",
- "baracuda-cuda-sys",
- "baracuda-types",
+ "baracuda-build 0.1.0-alpha.1",
+ "baracuda-core 0.1.0-alpha.1",
+ "baracuda-cuda-sys 0.1.0-alpha.1",
+ "baracuda-types 0.1.0-alpha.1",
 ]
 
 [[package]]
 name = "baracuda-optim"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-driver",
+ "baracuda-driver 0.1.0-alpha.1",
  "baracuda-forge",
  "baracuda-nccl",
- "baracuda-types",
+ "baracuda-types 0.1.0-alpha.1",
  "half",
  "thiserror",
 ]
 
 [[package]]
 name = "baracuda-ozimmu"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
  "baracuda-cublas",
- "baracuda-driver",
+ "baracuda-driver 0.1.0-alpha.1",
  "baracuda-ozimmu-sys",
  "thiserror",
 ]
 
 [[package]]
 name = "baracuda-ozimmu-sys"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-build",
+ "baracuda-build 0.1.0-alpha.1",
  "baracuda-cublas-sys",
- "baracuda-cuda-sys",
+ "baracuda-cuda-sys 0.1.0-alpha.1",
  "baracuda-forge",
  "baracuda-kernels-sys",
 ]
 
 [[package]]
 name = "baracuda-runtime"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-core",
- "baracuda-cuda-sys",
- "baracuda-driver",
- "baracuda-types",
+ "baracuda-core 0.1.0-alpha.1",
+ "baracuda-cuda-sys 0.1.0-alpha.1",
+ "baracuda-driver 0.1.0-alpha.1",
+ "baracuda-types 0.1.0-alpha.1",
  "thiserror",
 ]
 
 [[package]]
 name = "baracuda-seam"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 
 [[package]]
 name = "baracuda-tensorrt"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-core",
- "baracuda-cuda-sys",
- "baracuda-driver",
+ "baracuda-core 0.1.0-alpha.1",
+ "baracuda-cuda-sys 0.1.0-alpha.1",
+ "baracuda-driver 0.1.0-alpha.1",
  "baracuda-tensorrt-sys",
- "baracuda-types",
+ "baracuda-types 0.1.0-alpha.1",
  "thiserror",
 ]
 
 [[package]]
 name = "baracuda-tensorrt-sys"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-build",
- "baracuda-core",
- "baracuda-cuda-sys",
- "baracuda-types",
+ "baracuda-build 0.1.0-alpha.1",
+ "baracuda-core 0.1.0-alpha.1",
+ "baracuda-cuda-sys 0.1.0-alpha.1",
+ "baracuda-types 0.1.0-alpha.1",
  "cc",
 ]
 
 [[package]]
 name = "baracuda-transformer-engine"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-driver",
+ "baracuda-driver 0.1.0-alpha.1",
  "baracuda-transformer-engine-sys",
- "baracuda-types",
+ "baracuda-types 0.1.0-alpha.1",
  "half",
  "thiserror",
 ]
 
 [[package]]
 name = "baracuda-transformer-engine-sys"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-build",
- "baracuda-cuda-sys",
+ "baracuda-build 0.1.0-alpha.1",
+ "baracuda-cuda-sys 0.1.0-alpha.1",
  "baracuda-forge",
 ]
 
 [[package]]
 name = "baracuda-types"
-version = "0.0.1-alpha.165"
+version = "0.0.1-alpha.158"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "03e92c813d4080f969e90ba58f20455f4d57c04a264cfd869a9a5bf52c02a379"
+dependencies = [
+ "float8",
+ "half",
+ "unpopped-vocab",
+]
+
+[[package]]
+name = "baracuda-types"
+version = "0.1.0-alpha.1"
 dependencies = [
  "baracuda-types-derive",
  "bytemuck",
@@ -861,9 +925,9 @@ dependencies = [
 
 [[package]]
 name = "baracuda-types-derive"
-version = "0.0.1-alpha.165"
+version = "0.1.0-alpha.1"
 dependencies = [
- "baracuda-types",
+ "baracuda-types 0.1.0-alpha.1",
  "proc-macro2",
  "quote",
  "syn 3.0.6",
@@ -1144,7 +1208,7 @@ version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40272ffe44573406206afa1dc89ecf53e755e399c646f7c37def3e190c6b4aaa"
 dependencies = [
- "baracuda-kernels-types",
+ "baracuda-kernels-types 0.0.1-alpha.158",
  "fuel-kernel-seam-types",
 ]
 
@@ -1685,7 +1749,7 @@ dependencies = [
 name = "xtask"
 version = "0.0.0"
 dependencies = [
- "baracuda-build",
+ "baracuda-build 0.1.0-alpha.1",
 ]
 
 [[package]]
