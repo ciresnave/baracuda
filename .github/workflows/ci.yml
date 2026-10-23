@@ -178,6 +178,7 @@ jobs:
       # `cargo doc cuvs surfaces` step later (a crate that failed to redden would be
       # silently un-gated). CUDA-only crates' rustdoc is checked on-device.
       - name: cargo doc (driver-free surface — enforces rustdoc deny)
+        shell: bash
         run: |
           WSVER="$(sed -n 's/^version = "\(.*\)"/\1/p' crates/baracuda-types/Cargo.toml | head -1)"
           [ -n "$WSVER" ] || { echo "cannot derive the workspace version"; exit 1; }
@@ -267,6 +268,7 @@ jobs:
       # compiles real wrapper code rather than skipping-green on a toolkit-less
       # runner. The feature-coverage guard enforces both properties.
       - name: clippy feature-gated surface (--all-features, CUDA-free)
+        shell: bash
         run: |
           WSVER="$(sed -n 's/^version = "\(.*\)"/\1/p' crates/baracuda-types/Cargo.toml | head -1)"
           [ -n "$WSVER" ] || { echo "cannot derive the workspace version"; exit 1; }
@@ -294,6 +296,7 @@ jobs:
       # RUN by .github/workflows/device-tests.yml on the self-hosted device runner, and a
       # stale run is caught by device-tests-detector.yml. See docs/DEVICE-TESTS.md.
       - name: clippy device-tests targets (type-check, CUDA-free)
+        shell: bash
         run: |
           WSVER="$(sed -n 's/^version = "\(.*\)"/\1/p' crates/baracuda-types/Cargo.toml | head -1)"
           [ -n "$WSVER" ] || { echo "cannot derive the workspace version"; exit 1; }
