@@ -16,6 +16,10 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.160 - 2026-10-23 (CI: repin the advisory CodeRipper check)
+
+Workspace alpha.160 (PM to confirm at gate). CI only. `portfolio.yml` repinned `789b0122` -> `a48fc6cc` (coderipper#127: the sweep now covers every workspace member, so `reachability` / `unused-*` run on a virtual workspace).
+
 ## 0.0.1-alpha.159 - 2026-10-23 (clippy burn-down: baracuda-kernels lib is clean and gated)
 
 Workspace alpha.159 (PM to confirm at gate). No behaviour change.
