@@ -1543,6 +1543,10 @@ line, PM allocates the bump. Fuel's consumer side (`fuel-dispatch/Cargo.toml:70`
 `features=["seam","nvrtc"]`) must move to `baracuda-cuda-seam` — the `seam` feature is gone
 since cuda-emit 0.16.1.
 
+### Dependency pass #130 — last row: `libloading` 0.8 -> 0.9 (WAITING on an admin, since 2026-10-23)
+
+On `main` (read 2026-10-23) `bindgen 0.73`, `syn 3`, `criterion 0.8`, `sha2 0.11` and the kiss-ref family `0.4.0` are current. Only `libloading` (0.8, latest 0.9.0) is stale. Its blocker is the one CireSnave lifted on 2026-10-08 (*"Feel free to raise the minimum Rust version on any project."*): 0.9 needs Rust 1.88, so `baracuda-core`'s declared floor goes 1.85 -> 1.88. One change, per the 2026-09-17 PM order: bump `libloading`, raise the floor, rename the CI job `MSRV 1.85 (driver-free surface)` -> `MSRV (driver-free surface)`, and drop the 22 unused `libloading` declarations in the `-sys` crates. **The rename waits for an admin to change the required status context first** (it is one of 7 on `main`; renaming first would leave `main` waiting on a check that never reports; owner decision item 31). Code: `loader.rs:49` needs `*candidate`; changelog note for the reshaped `LoaderError::Libloading`.
+
 ## Pre-1.0 nice-to-haves
 
 These would tighten the 1.0 surface but aren't blockers.
