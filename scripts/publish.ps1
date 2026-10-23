@@ -46,6 +46,10 @@ $excluded = @($meta.packages | Where-Object {
 
 if ($pub.Count -eq 0) { throw "no publishable crates found in workspace metadata" }
 $order = @($pub | ForEach-Object { $_.name })
+# name -> its own version: a bare `-p NAME` is ambiguous when the graph also holds a registry copy
+# of a lockstep crate (fuel-kernel-seam pulls one), and cuda-emit/parse do not share the workspace version.
+$crateVersion = @{}
+$pub | ForEach-Object { $crateVersion[$_.name] = $_.version }
 
 # Licence guard: every publishable crate must carry LICENSE-MIT and
 # LICENSE-APACHE identical to the root copies, because a published crate
@@ -121,7 +125,7 @@ for ($pass = 1; $pass -le 12 -and $pending.Count -gt 0; $pass++) {
 
         $done = $false
         for ($attempt = 1; $attempt -le 4 -and -not $done; $attempt++) {
-            $out = (cargo publish -p $crate --no-verify --allow-dirty 2>&1) -join "`n"
+            $out = (cargo publish -p "$crate@$($crateVersion[$crate])" --no-verify --allow-dirty 2>&1) -join "`n"
             $exit = $LASTEXITCODE
             Add-Content -Path $logFile -Value $out
 

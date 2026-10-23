@@ -40,7 +40,9 @@ def workspace_features():
     pairs = []
     for pkg in sorted(meta["packages"], key=lambda p: p["name"]):
         if pkg["id"] in members:
-            pairs.extend((pkg["name"], f) for f in sorted(pkg["features"]) if f != "default")
+            # name@version: bare names turn ambiguous when the graph also holds a registry copy.
+            spec = f"{pkg['name']}@{pkg['version']}"
+            pairs.extend((spec, f) for f in sorted(pkg["features"]) if f != "default")
     return pairs
 
 

@@ -178,17 +178,19 @@ jobs:
       # `cargo doc cuvs surfaces` step later (a crate that failed to redden would be
       # silently un-gated). CUDA-only crates' rustdoc is checked on-device.
       - name: cargo doc (driver-free surface — enforces rustdoc deny)
-        run: >
-          cargo doc --locked --no-deps
-          -p baracuda-cuda-emit
-          -p baracuda-cuda-seam
-          -p baracuda-cuda-vocab
-          -p baracuda-cuda-parse
-          -p baracuda-types
-          -p baracuda-types-derive
-          -p baracuda-build
-          -p baracuda-core
-          -p baracuda-kernels-types
+        run: |
+          WSVER="$(sed -n 's/^version = "\(.*\)"/\1/p' crates/baracuda-types/Cargo.toml | head -1)"
+          [ -n "$WSVER" ] || { echo "cannot derive the workspace version"; exit 1; }
+          cargo doc --locked --no-deps \
+          -p baracuda-cuda-emit \
+          -p baracuda-cuda-seam \
+          -p baracuda-cuda-vocab \
+          -p baracuda-cuda-parse \
+          -p baracuda-types@$WSVER \
+          -p baracuda-types-derive \
+          -p baracuda-build@$WSVER \
+          -p baracuda-core@$WSVER \
+          -p baracuda-kernels-types@$WSVER \
           -p baracuda-bench-stats
       # ---- feature-gated surfaces the default --workspace build never compiles.
       # These features are deliberately CI-safe: `cuvs` is a lazy dynamic loader
@@ -265,20 +267,22 @@ jobs:
       # compiles real wrapper code rather than skipping-green on a toolkit-less
       # runner. The feature-coverage guard enforces both properties.
       - name: clippy feature-gated surface (--all-features, CUDA-free)
-        run: >
-          cargo clippy --locked --all-features
-          -p baracuda
-          -p baracuda-build
-          -p baracuda-types
-          -p baracuda-cudnn
-          -p baracuda-nccl
-          -p baracuda-megatron
-          -p baracuda-runtime
-          -p baracuda-driver
-          -p baracuda-cuvs
-          -p baracuda-cuvs-sys
-          -p baracuda-cuda-emit
-          -p baracuda-cuda-seam
+        run: |
+          WSVER="$(sed -n 's/^version = "\(.*\)"/\1/p' crates/baracuda-types/Cargo.toml | head -1)"
+          [ -n "$WSVER" ] || { echo "cannot derive the workspace version"; exit 1; }
+          cargo clippy --locked --all-features \
+          -p baracuda \
+          -p baracuda-build@$WSVER \
+          -p baracuda-types@$WSVER \
+          -p baracuda-cudnn \
+          -p baracuda-nccl \
+          -p baracuda-megatron \
+          -p baracuda-runtime \
+          -p baracuda-driver@$WSVER \
+          -p baracuda-cuvs \
+          -p baracuda-cuvs-sys \
+          -p baracuda-cuda-emit \
+          -p baracuda-cuda-seam \
           -- -D warnings
       # baracuda-optim is MIXED: `distributed_optim` is CUDA-free but `sm80/89/90a`
       # invoke nvcc, so `--all-features` can't be used — enumerate the CUDA-free one.
@@ -290,7 +294,10 @@ jobs:
       # RUN by .github/workflows/device-tests.yml on the self-hosted device runner, and a
       # stale run is caught by device-tests-detector.yml. See docs/DEVICE-TESTS.md.
       - name: clippy device-tests targets (type-check, CUDA-free)
-        run: cargo clippy --locked -p baracuda-driver --tests --features device-tests -- -D warnings
+        run: |
+          WSVER="$(sed -n 's/^version = "\(.*\)"/\1/p' crates/baracuda-types/Cargo.toml | head -1)"
+          [ -n "$WSVER" ] || { echo "cannot derive the workspace version"; exit 1; }
+          cargo clippy --locked -p baracuda-driver@$WSVER --tests --features device-tests -- -D warnings
       - name: clippy baracuda-runtime --tests (device-tests off / on)
         run: |
           cargo clippy --locked -p baracuda-runtime --tests -- -D warnings
@@ -324,12 +331,18 @@ jobs:
         run: |
           expected="baracuda-build baracuda-core baracuda-cuda-emit baracuda-cuda-vocab baracuda-types baracuda-types-derive"
           exp=$(printf '%s\n' $expected | sort | tr '\n' ' '); exp="${exp% }"
-          names=$(cargo +1.88.0 metadata --locked --no-deps --format-version 1 \
+          meta=$(cargo +1.88.0 metadata --locked --no-deps --format-version 1)
+          names=$(printf '%s' "$meta" \
             | python3 -c "import json,sys; print(' '.join(sorted(p['name'] for p in json.load(sys.stdin)['packages'] if p.get('rust_version')=='1.88')))")
           echo "crates declaring rust-version=1.88: [$names]"
           [ -n "$names" ] || { echo "GUARD BROKEN: no crate declares rust-version=1.88 — this job would build nothing."; exit 2; }
           [ "$names" = "$exp" ] || { echo "MSRV DRIFT: {declares 1.88}=[$names] != {expected}=[$exp]. A crate gained or lost its 1.88 floor, or the 'expected' list was edited — reconcile the Cargo.toml declarations with the list in this step."; exit 1; }
-          args=(); for n in $names; do args+=(-p "$n"); done
+          # name@version: a graph that holds a registry copy of a lockstep crate (via fuel-kernel-seam)
+          # makes a bare `-p NAME` ambiguous, so qualify every member with its own workspace version.
+          args=(); for n in $names; do
+            v=$(printf '%s' "$meta" | python3 -c "import json,sys; print(next(p['version'] for p in json.load(sys.stdin)['packages'] if p['name']=='$n'))")
+            args+=(-p "$n@$v")
+          done
           cargo +1.88.0 build --locked "${args[@]}"
 
   arch-gated-check:
