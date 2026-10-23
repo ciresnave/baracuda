@@ -71,7 +71,7 @@ pub struct GemvDenseDescriptor {
 /// + β · D[g, 0, j]` per batch slot `g` (RRR row-major). There is no
 /// separate `C` operand: `β ≠ 0` accumulates into the existing contents
 /// of `D` (read-modify-write); `β == 0` is write-only (`D` may be
-/// uninitialized).
+///   uninitialized).
 ///
 /// `stride_*` are batch strides in **elements** (`ptr + g · stride`),
 /// ignored when `desc.batch == 1`. `stride_a` / `stride_b` may be `0` to

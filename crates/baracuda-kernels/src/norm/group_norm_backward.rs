@@ -111,7 +111,7 @@ impl<T: Element, const N: usize> GroupNormBackwardPlan<T, N> {
             ));
         }
         let c = desc.num_channels();
-        if c <= 0 || (c as u32) % desc.num_groups != 0 {
+        if c <= 0 || !(c as u32).is_multiple_of(desc.num_groups) {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::GroupNormBackwardPlan: num_groups must divide num_channels",
             ));

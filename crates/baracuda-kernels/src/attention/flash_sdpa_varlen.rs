@@ -687,9 +687,9 @@ impl<T: Element> FlashSdpaVarlenBackwardPlan<T> {
         #[cfg(not(feature = "fa2_backward"))]
         {
             let _ = (stream, workspace);
-            return Err(Error::Unsupported(
+            Err(Error::Unsupported(
                 "baracuda-kernels::FlashSdpaVarlenBackwardPlan: requires the `fa2_backward` cargo feature",
-            ));
+            ))
         }
         #[cfg(feature = "fa2_backward")]
         {

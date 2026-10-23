@@ -452,12 +452,12 @@ impl<T: Element> LstSqPlan<T> {
                 "baracuda-kernels::LstSqPlan: info shape != [1]",
             ));
         }
-        if let Some(ref bkp) = args.a_backup {
-            if bkp.shape() != [m, n] {
-                return Err(Error::InvalidProblem(
-                    "baracuda-kernels::LstSqPlan: a_backup shape != [M, N]",
-                ));
-            }
+        if let Some(ref bkp) = args.a_backup
+            && bkp.shape() != [m, n]
+        {
+            return Err(Error::InvalidProblem(
+                "baracuda-kernels::LstSqPlan: a_backup shape != [M, N]",
+            ));
         }
         Ok(())
     }

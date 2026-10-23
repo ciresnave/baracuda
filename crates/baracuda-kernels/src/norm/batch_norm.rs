@@ -176,19 +176,19 @@ impl<T: Element, const N: usize> BatchNormPlan<T, N> {
                 "baracuda-kernels::BatchNormPlan: saved_mean / saved_rstd length != num_channels",
             ));
         }
-        if let Some(g) = &args.gamma {
-            if g.shape()[0] as i64 != c {
-                return Err(Error::InvalidProblem(
-                    "baracuda-kernels::BatchNormPlan: gamma length != num_channels",
-                ));
-            }
+        if let Some(g) = &args.gamma
+            && g.shape()[0] as i64 != c
+        {
+            return Err(Error::InvalidProblem(
+                "baracuda-kernels::BatchNormPlan: gamma length != num_channels",
+            ));
         }
-        if let Some(b) = &args.beta {
-            if b.shape()[0] as i64 != c {
-                return Err(Error::InvalidProblem(
-                    "baracuda-kernels::BatchNormPlan: beta length != num_channels",
-                ));
-            }
+        if let Some(b) = &args.beta
+            && b.shape()[0] as i64 != c
+        {
+            return Err(Error::InvalidProblem(
+                "baracuda-kernels::BatchNormPlan: beta length != num_channels",
+            ));
         }
         match (
             args.gamma.is_some(),

@@ -226,13 +226,13 @@ impl<T: Element, const N: usize> TernaryBackwardPlan<T, N> {
             args.db.data().len(),
             args.dc.data().len(),
         ];
-        if let Some(&min_len) = lens.iter().min() {
-            if min_len < needed {
-                return Err(Error::BufferTooSmall {
-                    needed,
-                    got: min_len,
-                });
-            }
+        if let Some(&min_len) = lens.iter().min()
+            && min_len < needed
+        {
+            return Err(Error::BufferTooSmall {
+                needed,
+                got: min_len,
+            });
         }
         Ok(())
     }

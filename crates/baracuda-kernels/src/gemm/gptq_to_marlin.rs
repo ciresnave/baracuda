@@ -137,13 +137,13 @@ pub fn repack(g: &GptqWeights<'_>) -> Result<MarlinWeights, &'static str> {
              table not yet wired",
         );
     }
-    if g.ic % 16 != 0 {
+    if !g.ic.is_multiple_of(16) {
         return Err("gptq_to_marlin::repack: IC must be divisible by 16");
     }
-    if g.oc % 8 != 0 {
+    if !g.oc.is_multiple_of(8) {
         return Err("gptq_to_marlin::repack: OC must be divisible by 8");
     }
-    if g.ic % g.group_size != 0 {
+    if !g.ic.is_multiple_of(g.group_size) {
         return Err("gptq_to_marlin::repack: IC must be divisible by group_size");
     }
     let num_groups = g.ic / g.group_size;
@@ -228,7 +228,7 @@ pub fn repack(g: &GptqWeights<'_>) -> Result<MarlinWeights, &'static str> {
         }
     }
 
-    if g.oc % MARLIN_SCALE_PERM_LEN != 0 {
+    if !g.oc.is_multiple_of(MARLIN_SCALE_PERM_LEN) {
         return Err(
             "gptq_to_marlin::repack: OC must be divisible by 64 (Marlin's permutation runs)",
         );
@@ -272,8 +272,10 @@ pub fn repack(g: &GptqWeights<'_>) -> Result<MarlinWeights, &'static str> {
     let scale_perm = marlin_scale_perm();
     let mut scales_out = alloc::vec![0f32; g.scales.len()];
     for (dst, src) in scales_out
-        .chunks_exact_mut(MARLIN_SCALE_PERM_LEN)
-        .zip(g.scales.chunks_exact(MARLIN_SCALE_PERM_LEN))
+        .as_chunks_mut::<MARLIN_SCALE_PERM_LEN>()
+        .0
+        .iter_mut()
+        .zip(g.scales.as_chunks::<MARLIN_SCALE_PERM_LEN>().0)
     {
         for (j, d) in dst.iter_mut().enumerate() {
             *d = src[scale_perm[j]];
@@ -310,7 +312,7 @@ fn marlin_perm() -> Vec<usize> {
     }
     const INTERLEAVE: [usize; 8] = [0, 2, 4, 6, 1, 3, 5, 7];
     let mut out = Vec::with_capacity(1024);
-    for grp in perm.chunks_exact(8) {
+    for grp in perm.as_chunks::<8>().0 {
         out.extend(INTERLEAVE.iter().map(|&i| grp[i]));
     }
     out
