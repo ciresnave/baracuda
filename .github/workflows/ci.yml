@@ -274,17 +274,7 @@ jobs:
           cargo clippy --locked -p baracuda-runtime --tests --features device-tests -- -D warnings
 
   msrv-driver-free:
-    name: ${{ matrix.name }}
-    # TRANSITIONAL (#130): the required status context on `main` is still the old name
-    # "MSRV 1.85 (driver-free surface)", which only an admin can rename. Both names report from
-    # this one job (same build, now 1.88) so nothing blocks; once the PM makes the new name
-    # required and drops the old one, delete the old matrix entry.
-    strategy:
-      fail-fast: false
-      matrix:
-        name:
-          - MSRV (driver-free surface)
-          - MSRV 1.85 (driver-free surface)
+    name: MSRV (driver-free surface)
     # The declared `rust-version = 1.88` is inherited by exactly the driver-free
     # crates (see the scoping note in [workspace.package], root Cargo.toml). This
     # job EXERCISES that floor by building those crates under 1.88.0 — an MSRV
