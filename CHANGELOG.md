@@ -16,6 +16,13 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.152 - 2026-10-23 (cuda-emit / cuda-parse 0.21.0: track Unpopped 0.21.0)
+
+Workspace alpha.152 (PM to confirm at gate). `baracuda-cuda-emit` 0.20.2 -> 0.21.0 and `baracuda-cuda-parse` 0.20.1 -> 0.21.0, matching the Unpopped release they work with. Breaking (0.n is the major pre-1.0).
+
+- **Change:** `unpopped`, `unpopped-vocab`, `unpopped-cpu-c` and `unpopped-slang` move 0.20.13 -> 0.21.0 (workspace, cuda-emit dev-deps, `tools/kiss-ref-diff`). Unpopped 0.21.0 is the per-device decline (exactness records name the kernel hash they were baked against; `contract_with_exactness` takes `Measured`).
+- **No source change needed:** nothing in this repo calls the changed exactness entry points (`contract_with_exactness`, `ExactnessLedger`, `DeviceStamp`, `MeasuredOn`: 0 hits in `crates/` and `tools/`; the same grep finds them in unpopped f0f25620). `cargo test -p baracuda-cuda-emit -p baracuda-cuda-parse -p baracuda-cuda-seam` passes, and `-p baracuda-cuda-emit --features convert` passes (emit 328 unit, 50 contract, 22 jit, 5 fuzz).
+
 ## 0.0.1-alpha.151 - 2026-10-23 (cuda-seam: registry fuel-kernel-seam 0.22.4, structural region ids)
 
 Workspace alpha.151 (PM to confirm at gate). `baracuda-cuda-emit` stays 0.20.2. Non-breaking.
