@@ -294,9 +294,15 @@ impl<T: Element> AffinePlan<T> {
             } else {
                 // Strided slow path. Pass `shape` (logical, equal on
                 // both sides) plus signed-i64 strides for x and y.
-                let shape_ptr = args.input.shape().as_ptr();
-                let stride_x_ptr = args.input.stride().as_ptr();
-                let stride_y_ptr = args.output.stride().as_ptr();
+                // `shape()` / `stride()` return arrays BY VALUE: bind them so the
+                // pointers below stay valid across the FFI call (the launcher
+                // reads them on the host).
+                let shape = args.input.shape();
+                let stride_x = args.input.stride();
+                let stride_y = args.output.stride();
+                let shape_ptr = shape.as_ptr();
+                let stride_x_ptr = stride_x.as_ptr();
+                let stride_y_ptr = stride_y.as_ptr();
                 let rank: i32 = 1;
                 match T::KIND {
                     ElementKind::F32 => {

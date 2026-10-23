@@ -503,9 +503,12 @@ impl<T: Element> SdpaPlan<T> {
                 // FFI ignores stride_mask but we pass a valid pointer
                 // (its strides) to keep the contract simple.
                 let stride_mask_zero: [i64; 4] = [0, 0, 0, 0];
+                // `stride()` returns the array by value: bind it so the pointer
+                // outlives the FFI call.
+                let stride_mask_own: Option<[i64; 4]> = args.mask.as_ref().map(|m| m.stride());
                 let stride_mask_ptr: *const i64 = if self.desc.has_mask {
-                    if let Some(ref m) = args.mask {
-                        m.stride().as_ptr()
+                    if let Some(ref m) = stride_mask_own {
+                        m.as_ptr()
                     } else {
                         stride_mask_zero.as_ptr()
                     }

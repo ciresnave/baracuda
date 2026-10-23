@@ -199,12 +199,14 @@ struct Slot {
     handle: AtomicPtr<c_void>,
 }
 
-const EMPTY_SLOT: Slot = Slot {
-    ctx: AtomicUsize::new(0),
-    handle: AtomicPtr::new(ptr::null_mut()),
-};
-
-static POOL: [Slot; POOL_SLOTS] = [EMPTY_SLOT; POOL_SLOTS];
+// Inline `const` block, not a named `const`: each element is a fresh atomic pair, and a
+// named const with interior mutability trips clippy::declare_interior_mutable_const.
+static POOL: [Slot; POOL_SLOTS] = [const {
+    Slot {
+        ctx: AtomicUsize::new(0),
+        handle: AtomicPtr::new(ptr::null_mut()),
+    }
+}; POOL_SLOTS];
 
 /// Cache key for the calling thread's current CUDA context. Null /
 /// no-context maps to `usize::MAX` so it can't collide with the
