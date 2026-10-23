@@ -1561,6 +1561,15 @@ Source: the `portfolio` job's log (run 40013917052, job 120620977814). Advisory,
 
 CI's `--all-features` clippy step covers only the CUDA-free crates, so the nvcc crates were never linted. Measured 2026-10-23 with `DOCS_RS=1 cargo clippy --locked -p <crate> -- -D warnings`. **Done at alpha.158/159:** `baracuda-kernels-sys`, both cutlass `-sys` crates and the `baracuda-kernels` lib (default features; was 40 errors) are clean and gated by the `clippy nvcc crates` CI step. **Open (measured at alpha.159 base):** `baracuda-kernels-sys --all-features` has 57 errors (56 `missing_safety_doc` on unsafe fns in `conv_cudnn_facade.rs` and 1 `unnecessary_cast` in `pool_cudnn_facade.rs`); `baracuda-kernels --tests` fails on at least 2 doc-indentation errors in `where_cond_dtype_fanout_smoke` (later test crates were not reached, and the 66-odd test files contain more collapsible `if`s that `clippy --fix` rewrites mechanically but which no device run covers, so that change was not made). Then add `--all-features` / `--tests` variants to the CI step.
 
+### CodeRipper second sweep (members covered; a70b4c05, a48fc6cc; 2026-10-23)
+
+Source: the `portfolio` job on `main` (run 40025510102, job 120660567241). `SUP-004` and `lint-suppression` no longer appear (fixed at alpha.157). One row per rule:
+
+- **`reachability` (753 Medium/Medium findings, 40 crates):** nearly all say "`X` has zero callers found within this crate" for a `pub` item of a library crate, which is the public API by design (largest: `baracuda-cuda-sys` 212, `baracuda-runtime` 63, `baracuda-cudnn` 61, `baracuda-cvcuda-sys` 33, `baracuda-cusparse` 32, `baracuda-cupti` 32). The rule cannot see downstream callers (Fuel, lightbulb, crates.io dependents), so this is the PM's "kept as API" class: needs a ruling (waive pub API of published libraries, or scope the rule to non-`pub` items), not 753 deletions. Worth reading separately, because they are real candidates for dead code: the 9 `baracuda-cuda-seam` hits (`BaracudaSynthesizer`, `synthesize`, ... are the crate's whole purpose, consumed by Fuel, so that is the same class) and the 5 `baracuda-cuda-emit` helpers (`emit_cast_helper`, `emit_coord_unravel_helper`, `emit_dtype_promote_helper` ...), which may be genuinely unused. Not started.
+- **`unused-return-values`, `unused-parameters`:** 0 findings where they ran.
+- **Did not run (21 check errors), so these assert NOTHING for those crates:** `baracuda-kernels`, `baracuda-kernels-sys`, `baracuda-kernels-bench`, `baracuda-ozimmu`, `baracuda-flashinfer`, `baracuda-flashinfer-sys` (the CodeRipper build of an nvcc crate has no CUDA toolkit on the hosted runner, so the crate's build fails and the rules refuse to report), and `baracuda-examples` (`No such file or directory`). The nvcc crates are most of the code. Fixing needs either a self-hosted runner with CUDA (CireSnave board 241) or `DOCS_RS=1` in the sweep environment, which is a CodeRipper-side input.
+- **`licence` (3 Medium):** unchanged, board 263.
+
 ## Pre-1.0 nice-to-haves
 
 These would tighten the 1.0 surface but aren't blockers.

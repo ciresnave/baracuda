@@ -16,6 +16,10 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.162 - 2026-10-23 (docs: second CodeRipper sweep rows)
+
+Workspace alpha.162 (PM to confirm at gate). Docs only: ROADMAP rows for the sweep that now covers every workspace member (reachability 753, did-not-run crates). No code change.
+
 ## 0.0.1-alpha.161 - 2026-10-23 (baracuda-cuda-seam is publishable)
 
 Workspace alpha.161 (PM to confirm at gate). Requested by the Fuel lane: `baracuda-cuda-emit` 0.22.0 has no `seam` feature (it moved out at 0.16.1), and `BaracudaSynthesizer` lives in `baracuda-cuda-seam`.
