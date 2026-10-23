@@ -274,17 +274,7 @@ jobs:
           cargo clippy --locked -p baracuda-runtime --tests --features device-tests -- -D warnings
 
   msrv-driver-free:
-    name: ${{ matrix.name }}
-    # TRANSITIONAL (#130): the required status context on `main` is still the old name
-    # "MSRV 1.85 (driver-free surface)", which only an admin can rename. Both names report from
-    # this one job (same build, now 1.88) so nothing blocks; once the PM makes the new name
-    # required and drops the old one, delete the old matrix entry.
-    strategy:
-      fail-fast: false
-      matrix:
-        name:
-          - MSRV (driver-free surface)
-          - MSRV 1.85 (driver-free surface)
+    name: MSRV (driver-free surface)
     # The declared `rust-version = 1.88` is inherited by exactly the driver-free
     # crates (see the scoping note in [workspace.package], root Cargo.toml). This
     # job EXERCISES that floor by building those crates under 1.88.0 — an MSRV
@@ -468,3 +458,13 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - name: cargo check every (crate, feature)
         run: python3 scripts/check-each-feature.py --shard ${{ matrix.shard }}/4
+
+  # ADVISORY portfolio check (CireSnave 2026-10-23: "Roll out advisory-only, non-blocking CodeRipper
+  # checks everywhere."). NOT a required status context and no rule is silenced here: the rule list is
+  # fixed by the `portfolio` profile inside the reusable workflow. It builds the crates (build.rs runs),
+  # so the SHA below is pinned; move it only to adopt a newer CodeRipper.
+  portfolio:
+    name: Portfolio checks (advisory)
+    permissions:
+      contents: read
+    uses: ciresnave/coderipper/.github/workflows/portfolio.yml@789b01228190367c5476995649ec6c6036c9e8cb

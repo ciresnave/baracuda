@@ -16,6 +16,13 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.155 - 2026-10-23 (CI: advisory CodeRipper portfolio check)
+
+Workspace alpha.155 (PM to confirm at gate). Stacked on #226 (alpha.154). No code change.
+
+- **CI:** new `portfolio` job in `ci.yml` calling `ciresnave/coderipper/.github/workflows/portfolio.yml@789b0122` (pinned SHA, coderipper#125). Advisory and non-blocking per CireSnave 2026-10-23; not a required context, no rule silenced.
+- **CI:** the MSRV job's transitional second name `MSRV 1.85 (driver-free surface)` is removed (the PM swapped the required context to `MSRV (driver-free surface)` on main after #226).
+
 ## 0.0.1-alpha.154 - 2026-10-23 (dependency pass #130: libloading 0.9, MSRV floor 1.88)
 
 Workspace alpha.154 (PM to confirm at gate). `baracuda-cuda-emit` / `baracuda-cuda-parse` stay at 0.22.0.
