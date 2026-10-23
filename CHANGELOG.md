@@ -16,6 +16,15 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.158 - 2026-10-23 (fix: dangling host pointers in affine/sdpa strided paths; clippy on the nvcc -sys crates)
+
+Workspace alpha.158 (PM to confirm at gate). Stacked on #229 (alpha.157).
+
+- **Bug fix, affected versions:** introduced by #210 (alpha.138), which made `TensorRef`/`TensorMut` fields private behind by-value accessors; alpha.137 read the fields directly and was fine. Published `baracuda-kernels` versions carrying it (crates.io sparse index read 2026-10-23): alpha.138, .139, .140 and .147 (the only ones of alpha.138 to .153 on the index). Any caller passing a non-contiguous input/output to `AffinePlan` reaches the strided path, so this is normal use, not an edge case; the host read is of a dead stack temporary.
+- **Fix (real UB):** `AffinePlan::run`'s strided path took `args.input.shape().as_ptr()` / `.stride().as_ptr()`; those accessors return arrays BY VALUE, so the pointers dangled the moment each statement ended, and `launch_affine_strided` reads them on the host (`shape_host[d]`). Same in `SdpaPlan`'s strided path for the mask strides (that FFI currently ignores `stride_mask`, so latent there). Both now bind the arrays first. The rustc lint `dangling_pointers_from_temporaries` had been flagging all four sites.
+- **Fix:** `gemm_dense_cublas_facade.rs` handle pool uses an inline `const { .. }` block instead of a named interior-mutable `const` (clippy `declare_interior_mutable_const`); same behaviour.
+- **CI:** new step `clippy nvcc -sys crates (DOCS_RS, no CUDA)` for `baracuda-kernels-sys`, `baracuda-cutlass-sys`, `baracuda-cutlass-kernels-sys` (`-D warnings`).
+
 ## 0.0.1-alpha.157 - 2026-10-23 (CodeRipper baseline: SUP-004 and lint-suppression)
 
 Workspace alpha.157 (PM to confirm at gate). No behaviour change.

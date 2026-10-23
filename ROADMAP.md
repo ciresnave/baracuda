@@ -1557,6 +1557,10 @@ Source: the `portfolio` job's log (run 40013917052, job 120620977814). Advisory,
 - **`licence` (3 Medium), needs a CireSnave/PM ruling before any edit:** `LICENSE-MIT` names a person as the copyright holder; 1253 of 1254 source files carry no `SPDX-License-Identifier` in their first 15 lines (first hit `crates/baracuda-bench-stats/src/lib.rs:1`); 1 file names a person in a copyright line (`crates/baracuda-kernels/src/attention/flash_decoding.rs:1`, `SPDX-FileCopyrightText`). Whether those are findings to fix or the intended holder is a decision, not a lane edit; provenance and credit stay (portfolio rule, EXPECTATIONS 6.4a).
 - **Tool limit, not a finding:** `reachability`, `unused-return-values` and `unused-parameters` did not run: this repo's root is a virtual workspace, and CodeRipper wants `--project <member directory>` (job exit 3, 'check error'). The reusable workflow passes `--project .`; it needs a CodeRipper-side fix or a per-member input. Until then those three rules assert nothing for baracuda.
 
+### Clippy on the nvcc crates: `baracuda-kernels` lib is not gated (40 errors; measured 2026-10-23, alpha.158)
+
+CI's `--all-features` clippy step covers only the CUDA-free crates, so the nvcc crates were never linted. Measured with `DOCS_RS=1 cargo clippy --locked --workspace --keep-going -- -D warnings`: only `baracuda-kernels` (lib) fails, with **40 errors** (20 `collapsible_if`, 8 `manual_is_multiple_of`, 6 unused type parameter `T`, 3 `chunks_exact*` with a constant size, 1 `contains`, 1 needless `return`, 1 doc list indentation). Crates that depend on it were not reached by that run, and `--tests` / `--features` were not measured. Fixed at alpha.158: the `-sys` interior-mutable const, and 4 real dangling-pointer sites in `baracuda-kernels` (affine strided: read on the host, real UB; sdpa strided mask: latent). `baracuda-kernels-sys` and both cutlass `-sys` crates are now gated in CI. **Open:** fix the 40, then add `baracuda-kernels` (and its dependents, with `--tests`) to the new step.
+
 ## Pre-1.0 nice-to-haves
 
 These would tighten the 1.0 surface but aren't blockers.
