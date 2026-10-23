@@ -234,8 +234,9 @@ kerneldtype_sealed::Sealed + Copy + 'static { const KIND: ElementKind; }` (L131)
   re-exporting and have consumers depend on `unpopped-vocab` directly), so Unpopped additions stop
   moving baracuda's surface. **Cross-lane:** consumers (Fuel) may rely on the glob — ask before.
 - **R4** **RULED 2026-10-14 (board 198):** adopt §4.2 for the C ABI; from 1.0 it does not break within a
-  major (verbatim ruling and implications in §4.2). Still to build, both additive: `baracuda_kernels_abi_version()`
-  and the C-ABI deprecation note convention.
+  major (verbatim ruling and implications in §4.2). Built at alpha.164: `baracuda_kernels_abi_version()` as an independent ABI integer (not the crate
+  version), the checked-in `abi/abi-manifest.tsv` and the CI guard `scripts/check-abi-manifest.py`. Still to build:
+  the C-ABI deprecation note convention.
 - **R5** Remove the 8 deprecated items in the first breaking bump after adoption.
 - **R6** Per-family review of the 9 905 `stable` items by plan family before beta.0; this inventory
   is the denominator, not the verdict.

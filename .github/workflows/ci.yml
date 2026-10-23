@@ -109,6 +109,21 @@ jobs:
           PY="$(command -v python3 || command -v python)"
           "$PY" --version
           "$PY" scripts/check-crate-licences.py
+      # C-ABI guard (API-freeze R4): ABI_VERSION (lib.rs) == BARACUDA_KERNELS_ABI_VERSION (header),
+      # abi/abi-manifest.tsv == the exported symbols in the sources, and no symbol removed or changed
+      # against the base commit without bumping ABI_VERSION. See the script header for what it cannot see.
+      - name: C-ABI manifest guard
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          PY="$(command -v python3 || command -v python)"
+          if [ -n "$BASE_SHA" ] && git fetch --no-tags --depth=1 origin "$BASE_SHA" 2>/dev/null; then
+            "$PY" scripts/check-abi-manifest.py --base "$BASE_SHA"
+          else
+            echo "no base commit available (new branch or force push); checking without the breaking-change gate"
+            "$PY" scripts/check-abi-manifest.py
+          fi
       # ---- The workspace steps below are scoped to the DRIVER-FREE surface.
       # This is a CUDA library: its `-sys` kernel crates compile `.cu` via nvcc
       # in their build scripts, so a full `--workspace` build genuinely cannot
