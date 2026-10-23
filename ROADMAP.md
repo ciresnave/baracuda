@@ -1538,8 +1538,8 @@ backed paths" 1.0 story.
 
 Fuel published `fuel-kernel-seam{,-types}` 0.22.4 (has `JitRequest::target` and
 `OpAttrs::region_key()`), so the crate now depends on registry versions only; the git pins
-are gone. `publish = false` is kept until the PM decides to publish it. To publish: drop that
-line, PM allocates the bump. Fuel's consumer side (`fuel-dispatch/Cargo.toml:70`, cuda-emit
+are gone. **DONE at alpha.161:** `publish = false` dropped and `fuel-kernel-seam{,-types}` moved to
+0.23.0; the publish set is `baracuda-cuda-seam` alone. Fuel's consumer side (`fuel-dispatch/Cargo.toml:70`, cuda-emit
 `features=["seam","nvrtc"]`) must move to `baracuda-cuda-seam` — the `seam` feature is gone
 since cuda-emit 0.16.1.
 
