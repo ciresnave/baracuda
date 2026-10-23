@@ -25,6 +25,7 @@ import argparse
 import hashlib
 import os
 import re
+import shutil
 import subprocess
 import sys
 
@@ -66,10 +67,8 @@ def match_brace(s, i):
     raise ValueError("unbalanced braces")
 
 
-def extract(src):
-    """Yield (kind, name, normalised text) for the ABI-relevant items of one source file."""
-    s = strip_comments(src)
-    # extern "C" blocks -> their `fn` declarations.
+def extract_fns(s):
+    """`pub fn` / `pub static` declarations inside `extern "C"` blocks."""
     for m in re.finditer(r'(?:unsafe\s+)?extern\s+"C"\s*\{', s):
         end = match_brace(s, m.end() - 1)
         body = s[m.end():end - 1]
@@ -77,21 +76,37 @@ def extract(src):
             yield "fn", f.group(1), norm(f"({f.group(3)}) {f.group(4) or ''}")
         for st in re.finditer(r"pub\s+static\s+(?:mut\s+)?(\w+)\s*:([^;]*);", body):
             yield "static", st.group(1), norm(st.group(2))
-    # #[repr(C...)] / #[repr(<int>)] types.
+
+
+def repr_type_text(s, m):
+    """Text of one `#[repr(..)] pub struct/enum/union` item, through its closing brace or `;`."""
+    brace = s.find("{", m.end())
+    semi = s.find(";", m.end())
+    if semi != -1 and (brace == -1 or semi < brace):  # unit / tuple struct
+        return s[m.start():semi + 1]
+    return s[m.start():match_brace(s, brace)]
+
+
+def extract_types(s):
+    """`#[repr(C...)]` / `#[repr(<int>)]` types and top-level `pub type` aliases."""
     for m in re.finditer(r"#\[repr\(([^)]*)\)\]\s*(?:#\[[^\]]*\]\s*)*pub\s+(struct|enum|union)\s+(\w+)", s):
-        kind_pos = m.end()
-        brace = s.find("{", kind_pos)
-        semi = s.find(";", kind_pos)
-        if semi != -1 and (brace == -1 or semi < brace):  # unit / tuple struct
-            text = s[m.start():semi + 1]
-        else:
-            text = s[m.start():match_brace(s, brace)]
-        yield "type", m.group(3), norm(text)
-    # top-level pub consts and type aliases (status codes, enum values, handle types).
-    for m in re.finditer(r"(?m)^pub\s+const\s+(\w+)\s*:\s*([^=]+)=\s*([^;]+);", s):
-        yield "const", m.group(1), norm(f"{m.group(2)} = {m.group(3)}")
+        yield "type", m.group(3), norm(repr_type_text(s, m))
     for m in re.finditer(r"(?m)^pub\s+type\s+(\w+)\s*=\s*([^;]+);", s):
         yield "type", m.group(1), norm(m.group(2))
+
+
+def extract_consts(s):
+    """Top-level `pub const` values (status codes, enum values)."""
+    for m in re.finditer(r"(?m)^pub\s+const\s+(\w+)\s*:\s*([^=]+)=\s*([^;]+);", s):
+        yield "const", m.group(1), norm(f"{m.group(2)} = {m.group(3)}")
+
+
+def extract(src):
+    """Yield (kind, name, normalised text) for the ABI-relevant items of one source file."""
+    s = strip_comments(src)
+    yield from extract_fns(s)
+    yield from extract_types(s)
+    yield from extract_consts(s)
 
 
 def collect():
@@ -120,6 +135,22 @@ def header_version():
     if not m:
         sys.exit("FAIL: BARACUDA_KERNELS_ABI_VERSION not found in " + HEADER)
     return int(m.group(1))
+
+
+def git_show(ref, path):
+    """`git show REF:PATH` as text, or None when the path does not exist at REF.
+
+    The argv is a fixed list (no shell) and REF is a commit SHA or ref name chosen by the CI
+    workflow, never user input; git is resolved once so a missing git fails clearly.
+    """
+    git = shutil.which("git")
+    if git is None:
+        sys.exit("FAIL: git not found on PATH (needed for --base)")
+    r = subprocess.run([git, "show", f"{ref}:{path}"], cwd=ROOT, check=False, capture_output=True, text=True)
+    if r.returncode != 0:
+        print(f"note: no {path} at {ref} ({r.stderr.strip()}); breaking-change gate skipped.")
+        return None
+    return r.stdout
 
 
 def parse_manifest(text):
@@ -155,6 +186,60 @@ def show(label, keys, limit=8):
         print(f"  {label} ({len(keys)}): " + ", ".join(k[2] for k in keys[:limit]) + (" ..." if len(keys) > limit else ""))
 
 
+def check_versions(ver, hver, mver):
+    """The Rust constant, the C header and the manifest header must all agree."""
+    failed = False
+    if ver != hver:
+        print(f"FAIL: ABI_VERSION in {LIB_RS} is {ver} but {HEADER} says {hver}; they are one value.")
+        failed = True
+    if mver != ver:
+        print(f"FAIL: {MANIFEST} records abi_version={mver} but ABI_VERSION is {ver}; regenerate with --update.")
+        failed = True
+    return failed
+
+
+def check_manifest(ver, mver, old, cur):
+    """The checked-in manifest must equal what the sources say now."""
+    removed, changed, added = diff(old, cur)
+    if not (removed or changed or added):
+        return False
+    print(f"FAIL: {MANIFEST} is out of date against the sources. Regenerate with --update.")
+    show("removed", removed)
+    show("changed", changed)
+    show("added", added)
+    if (removed or changed) and mver == ver:
+        print("  removed/changed entries are an ABI BREAK: bump ABI_VERSION (lib.rs AND baracuda_abi.h), "
+              "then --update, and add a CHANGELOG line.")
+    return True
+
+
+def check_base(base_ref, ver, cur):
+    """Breaking-change gate: nothing in the base manifest may be removed or changed without a bump."""
+    base_text = git_show(base_ref, MANIFEST)
+    if base_text is None:
+        return False
+    bver, base = parse_manifest(base_text)
+    brem, bchg, badd = diff(base, cur)
+    print(f"base {base_ref}: abi_version={bver}, {len(base)} entries; now {ver}, {len(cur)} "
+          f"(+{len(badd)} -{len(brem)} ~{len(bchg)})")
+    failed = False
+    if (brem or bchg) and ver <= bver:
+        print(f"FAIL: ABI break against {base_ref} without bumping ABI_VERSION ({bver} -> {ver}).")
+        show("removed", brem)
+        show("changed", bchg)
+        failed = True
+    if ver < bver:
+        print(f"FAIL: ABI_VERSION went DOWN ({bver} -> {ver}).")
+        failed = True
+    return failed
+
+
+def write_manifest(ver, cur):
+    with open(os.path.join(ROOT, MANIFEST), "w", newline="\n") as f:
+        f.write(render(ver, cur))
+    print(f"wrote {MANIFEST}: abi_version={ver}, {len(cur)} entries")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--update", action="store_true")
@@ -162,60 +247,18 @@ def main():
     args = ap.parse_args()
 
     ver = rust_version()
-    hver = header_version()
     cur = collect()
     if not cur:
         sys.exit("FAIL: extracted 0 ABI entries; the parser is broken (this guard would assert nothing).")
-
     if args.update:
-        with open(os.path.join(ROOT, MANIFEST), "w", newline="\n") as f:
-            f.write(render(ver, cur))
-        print(f"wrote {MANIFEST}: abi_version={ver}, {len(cur)} entries")
+        write_manifest(ver, cur)
         return
 
-    failed = False
-    if ver != hver:
-        print(f"FAIL: ABI_VERSION in {LIB_RS} is {ver} but {HEADER} says {hver}; they are one value.")
-        failed = True
-
     mver, old = parse_manifest(read(MANIFEST))
-    if mver != ver:
-        print(f"FAIL: {MANIFEST} records abi_version={mver} but ABI_VERSION is {ver}; regenerate with --update.")
-        failed = True
-    removed, changed, added = diff(old, cur)
-    if removed or changed or added:
-        print(f"FAIL: {MANIFEST} is out of date against the sources. Regenerate with --update.")
-        show("removed", removed)
-        show("changed", changed)
-        show("added", added)
-        if (removed or changed) and mver == ver:
-            print("  removed/changed entries are an ABI BREAK: bump ABI_VERSION (lib.rs AND baracuda_abi.h), "
-                  "then --update, and add a CHANGELOG line.")
-        failed = True
-
+    failed = check_versions(ver, header_version(), mver)
+    failed = check_manifest(ver, mver, old, cur) or failed
     if args.base:
-        try:
-            base_text = subprocess.run(
-                ["git", "show", f"{args.base}:{MANIFEST}"], cwd=ROOT, check=True, capture_output=True, text=True
-            ).stdout
-        except subprocess.CalledProcessError as e:
-            # A base without a manifest is the commit that introduces it: nothing to compare.
-            print(f"note: no {MANIFEST} at {args.base} ({e.stderr.strip()}); breaking-change gate skipped.")
-            base_text = None
-        if base_text is not None:
-            bver, base = parse_manifest(base_text)
-            brem, bchg, badd = diff(base, cur)
-            print(f"base {args.base}: abi_version={bver}, {len(base)} entries; now {ver}, {len(cur)} "
-                  f"(+{len(badd)} -{len(brem)} ~{len(bchg)})")
-            if (brem or bchg) and ver <= bver:
-                print(f"FAIL: ABI break against {args.base} without bumping ABI_VERSION ({bver} -> {ver}).")
-                show("removed", brem)
-                show("changed", bchg)
-                failed = True
-            if ver < bver:
-                print(f"FAIL: ABI_VERSION went DOWN ({bver} -> {ver}).")
-                failed = True
-
+        failed = check_base(args.base, ver, cur) or failed
     if failed:
         sys.exit(1)
     print(f"ok: abi_version={ver}, {len(cur)} entries, header and manifest agree")
