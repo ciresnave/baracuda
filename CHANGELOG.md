@@ -16,6 +16,14 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.165 - 2026-10-23 (API-freeze: R2 measured, R3 guard test, C-ABI deprecation convention)
+
+Workspace alpha.165 (PM to confirm at gate). Docs, a tool and one test; no behaviour change.
+
+- **R2 (PM ruling (b)):** `docs/planning/api-freeze/README.md` section 7.3, `r2-growth.tsv` and `tool/r2growth.py.txt`: 3 of the 257 kernels `*Descriptor` structs ever grew a pub field (`BatchPagedPrefillDescriptor`, `FlashDecodingDescriptor`, `GgufMmvqDescriptor`); those become `#[non_exhaustive]` + `new()` + `with_*` in the beta.0 breaking window, the other 254 are declared frozen-as-is in writing. Method, controls and limits are in section 7.3.
+- **R3 guard:** `baracuda-kernels-types/tests/fuel_reexport_paths.rs` fails to compile if any of the seven names Fuel uses (`ElementKind`, `OperandDesc`, `ArchSku`, `TargetId`, `MAX_RANK`, `OpCategory`, `structure_key_token`) stops resolving at `baracuda_kernels_types::`. Passes today through the glob; negative control: an unresolved name makes it fail to compile. The glob replacement itself waits for the beta.0 window.
+- **C-ABI deprecation convention:** `/// Deprecated since <version>: ...` on an exported symbol's docs; `scripts/check-abi-manifest.py` records it in a fifth manifest column (format 2). Deprecating is not an ABI break, but the column must be regenerated. Controls (throwaway repo): adding the line fails until `--update`, then shows the version and passes `--base` without a bump.
+
 ## 0.0.1-alpha.164 - 2026-10-23 (C-ABI version integer and manifest guard; API-freeze R4)
 
 Workspace alpha.164 (PM to confirm at gate). Additive.
