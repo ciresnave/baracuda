@@ -291,7 +291,7 @@ impl<T: Element> GemmSparse24Plan<T> {
                     (bytes.as_raw().0 as *mut c_void, got as u64)
                 }
             };
-            let stream_ptr = stream.as_raw() as *mut c_void;
+            let stream_ptr = stream.as_raw();
             let x_ptr = args.x.data().as_raw().0 as *const c_void;
             let wc_ptr = args.w_compressed.data().as_raw().0 as *const c_void;
             let wm_ptr = args.w_metadata.data().as_raw().0 as *const c_void;

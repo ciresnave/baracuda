@@ -93,6 +93,7 @@ pub struct CausalConv1dDescriptor {
 }
 
 /// Args bundle for a causal-conv1d FW launch.
+#[derive(Debug)]
 pub struct CausalConv1dArgs<'a, T: Element> {
     /// Input — shape `[B, C, L]`, contiguous.
     pub x: TensorRef<'a, T, 3>,
@@ -105,6 +106,7 @@ pub struct CausalConv1dArgs<'a, T: Element> {
 }
 
 /// Causal-conv1d forward plan.
+#[derive(Debug)]
 pub struct CausalConv1dPlan<T: Element> {
     desc: CausalConv1dDescriptor,
     sku: KernelSku,
@@ -243,7 +245,7 @@ impl<T: Element> CausalConv1dPlan<T> {
         if self.desc.batch_size == 0 || self.desc.channels == 0 || self.desc.seq_len == 0 {
             return Ok(());
         }
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let x_ptr = args.x.data().as_raw().0 as *const c_void;
         let w_ptr = args.weight.data().as_raw().0 as *const c_void;
         let b_ptr = args
@@ -355,6 +357,7 @@ pub struct CausalConv1dBackwardDescriptor {
 ///
 /// `dw` and `db` are atomic-accumulated; caller must zero them
 /// before launch.
+#[derive(Debug)]
 pub struct CausalConv1dBackwardArgs<'a, T: Element> {
     /// Input (saved from FW) — shape `[B, C, L]`.
     pub x: TensorRef<'a, T, 3>,
@@ -374,6 +377,7 @@ pub struct CausalConv1dBackwardArgs<'a, T: Element> {
 }
 
 /// Causal-conv1d backward plan.
+#[derive(Debug)]
 pub struct CausalConv1dBackwardPlan<T: Element> {
     desc: CausalConv1dBackwardDescriptor,
     sku: KernelSku,
@@ -467,7 +471,7 @@ impl<T: Element> CausalConv1dBackwardPlan<T> {
         if self.desc.batch_size == 0 || self.desc.channels == 0 || self.desc.seq_len == 0 {
             return Ok(());
         }
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let x_ptr = args.x.data().as_raw().0 as *const c_void;
         let w_ptr = args.weight.data().as_raw().0 as *const c_void;
         let b_ptr = args

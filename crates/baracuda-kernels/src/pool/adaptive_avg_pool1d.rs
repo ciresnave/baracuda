@@ -75,6 +75,7 @@ impl AdaptivePool1dDescriptor {
 }
 
 /// FW args (shape `[N, C, L_in]` → `[N, C, L_out]`).
+#[derive(Debug)]
 pub struct AdaptivePool1dFwArgs<'a, T: Element> {
     /// Input `[N, C, L_in]`.
     pub x: TensorRef<'a, T, 3>,
@@ -85,6 +86,7 @@ pub struct AdaptivePool1dFwArgs<'a, T: Element> {
 /// BW args. `y` / `x` are retained for API symmetry with the prior
 /// cuDNN-driven plan but the bespoke AvgPool BW kernel only reads
 /// `dy` + writes `dx`.
+#[derive(Debug)]
 pub struct AdaptivePool1dBwArgs<'a, T: Element> {
     /// Saved FW output `[N, C, L_out]` (unused by AvgPool BW; retained
     /// for API symmetry with [`super::AdaptiveMaxPool1dPlan`]).
@@ -100,6 +102,7 @@ pub struct AdaptivePool1dBwArgs<'a, T: Element> {
 }
 
 /// Adaptive 1-D average-pool plan (bit-exact PyTorch, bespoke kernel).
+#[derive(Debug)]
 pub struct AdaptiveAvgPool1dPlan<T: Element> {
     desc: AdaptivePool1dDescriptor,
     sku: KernelSku,
@@ -152,7 +155,7 @@ impl<T: Element> AdaptiveAvgPool1dPlan<T> {
         args: AdaptivePool1dFwArgs<'_, T>,
     ) -> Result<()> {
         check_fw_args(&self.desc, &args)?;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let x_ptr = args.x.data().as_raw().0 as *const c_void;
         let y_ptr = args.y.data().as_raw().0 as *mut c_void;
         let nc = self.desc.batch * self.desc.channels;
@@ -181,7 +184,7 @@ impl<T: Element> AdaptiveAvgPool1dPlan<T> {
         args: AdaptivePool1dBwArgs<'_, T>,
     ) -> Result<()> {
         check_bw_args(&self.desc, &args)?;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
         let dx_ptr = args.dx.data().as_raw().0 as *mut c_void;
         let nc = self.desc.batch * self.desc.channels;

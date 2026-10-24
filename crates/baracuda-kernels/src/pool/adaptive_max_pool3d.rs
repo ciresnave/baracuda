@@ -17,6 +17,7 @@ use super::adaptive_avg_pool3d::{
 };
 
 /// Adaptive 3-D max-pool plan (bit-exact PyTorch, bespoke kernel).
+#[derive(Debug)]
 pub struct AdaptiveMaxPool3dPlan<T: Element> {
     desc: AdaptivePool3dDescriptor,
     sku: KernelSku,
@@ -65,7 +66,7 @@ impl<T: Element> AdaptiveMaxPool3dPlan<T> {
         args: AdaptivePool3dFwArgs<'_, T>,
     ) -> Result<()> {
         check_fw_args(&self.desc, &args)?;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let x_ptr = args.x.data().as_raw().0 as *const c_void;
         let y_ptr = args.y.data().as_raw().0 as *mut c_void;
         let nc = self.desc.batch * self.desc.channels;
@@ -93,7 +94,7 @@ impl<T: Element> AdaptiveMaxPool3dPlan<T> {
         args: AdaptivePool3dBwArgs<'_, T>,
     ) -> Result<()> {
         check_bw_args(&self.desc, &args)?;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let x_ptr = args.x.data().as_raw().0 as *const c_void;
         let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
         let dx_ptr = args.dx.data().as_raw().0 as *mut c_void;

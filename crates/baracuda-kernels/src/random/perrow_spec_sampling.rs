@@ -232,7 +232,7 @@ impl PerRowSamplingPlan {
         }
         #[cfg(feature = "flashinfer")]
         {
-            let stream_ptr = stream.as_raw() as *mut c_void;
+            let stream_ptr = stream.as_raw();
             let probs_ptr = args.probs.data().as_raw().0 as *const c_void;
             let output_ptr = args.output.data().as_raw().0 as *mut c_void;
             let valid_ptr = match &args.valid {
@@ -474,7 +474,7 @@ impl SpeculativeSamplingPlan {
         }
         #[cfg(feature = "flashinfer")]
         {
-            let stream_ptr = stream.as_raw() as *mut c_void;
+            let stream_ptr = stream.as_raw();
             let status = unsafe {
                 baracuda_kernels_sys::baracuda_kernels_flashinfer_chain_speculative_sampling_f32_run(
                     self.desc.batch_size,

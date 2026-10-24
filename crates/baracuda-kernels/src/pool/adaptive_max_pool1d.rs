@@ -22,6 +22,7 @@ use super::adaptive_avg_pool1d::{
 };
 
 /// Adaptive 1-D max-pool plan (bit-exact PyTorch, bespoke kernel).
+#[derive(Debug)]
 pub struct AdaptiveMaxPool1dPlan<T: Element> {
     desc: AdaptivePool1dDescriptor,
     sku: KernelSku,
@@ -70,7 +71,7 @@ impl<T: Element> AdaptiveMaxPool1dPlan<T> {
         args: AdaptivePool1dFwArgs<'_, T>,
     ) -> Result<()> {
         check_fw_args(&self.desc, &args)?;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let x_ptr = args.x.data().as_raw().0 as *const c_void;
         let y_ptr = args.y.data().as_raw().0 as *mut c_void;
         let nc = self.desc.batch * self.desc.channels;
@@ -99,7 +100,7 @@ impl<T: Element> AdaptiveMaxPool1dPlan<T> {
         args: AdaptivePool1dBwArgs<'_, T>,
     ) -> Result<()> {
         check_bw_args(&self.desc, &args)?;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let x_ptr = args.x.data().as_raw().0 as *const c_void;
         let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
         let dx_ptr = args.dx.data().as_raw().0 as *mut c_void;

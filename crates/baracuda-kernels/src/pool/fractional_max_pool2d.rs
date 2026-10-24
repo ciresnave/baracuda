@@ -167,6 +167,7 @@ impl FractionalMaxPool2dDescriptor {
 ///
 /// `indices` is **caller-allocated** and written by the kernel — retain
 /// it for the matching backward call.
+#[derive(Debug)]
 pub struct FractionalMaxPool2dFwArgs<'a, T: Element> {
     /// Input `[N, C, H_in, W_in]` NCHW contiguous.
     pub x: TensorRef<'a, T, 4>,
@@ -186,6 +187,7 @@ pub struct FractionalMaxPool2dFwArgs<'a, T: Element> {
 /// **Caller must zero `dx` before calling.** The kernel uses
 /// `atomicAdd` scatter; pre-existing values in `dx` would be summed
 /// with the gradient.
+#[derive(Debug)]
 pub struct FractionalMaxPool2dBwArgs<'a, T: Element> {
     /// Upstream gradient `[N, C, H_out, W_out]`.
     pub dy: TensorRef<'a, T, 4>,
@@ -211,6 +213,7 @@ pub struct FractionalMaxPool2dBwArgs<'a, T: Element> {
 /// (atomicAdd order races); FW is deterministic given the same input +
 /// samples. half / bf16 BW routes through atomicCAS for per-thread
 /// bit-stability.
+#[derive(Debug)]
 pub struct FractionalMaxPool2dPlan<T: Element> {
     desc: FractionalMaxPool2dDescriptor,
     sku: KernelSku,
@@ -259,7 +262,7 @@ impl<T: Element> FractionalMaxPool2dPlan<T> {
         args: FractionalMaxPool2dFwArgs<'_, T>,
     ) -> Result<()> {
         check_fw_args(&self.desc, &args)?;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let x = args.x.data().as_raw().0 as *const c_void;
         let y = args.y.data().as_raw().0 as *mut c_void;
         let indices = args.indices.data().as_raw().0 as *mut c_void;
@@ -344,7 +347,7 @@ impl<T: Element> FractionalMaxPool2dPlan<T> {
         args: FractionalMaxPool2dBwArgs<'_, T>,
     ) -> Result<()> {
         check_bw_args(&self.desc, &args)?;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let dy = args.dy.data().as_raw().0 as *const c_void;
         let indices = args.indices.data().as_raw().0 as *const c_void;
         let dx = args.dx.data().as_raw().0 as *mut c_void;

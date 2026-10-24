@@ -151,6 +151,7 @@ impl Pool2dDescriptor {
 
 /// Args bundle for a 2-D pooling forward launch (shared between max and
 /// average pooling).
+#[derive(Debug)]
 pub struct Pool2dFwArgs<'a, T: Element> {
     /// Input activations `[N, C, H_in, W_in]` NCHW contiguous.
     pub x: TensorRef<'a, T, 4>,
@@ -164,6 +165,7 @@ pub struct Pool2dFwArgs<'a, T: Element> {
 /// be retained from the FW launch.** cuDNN uses both to recover the
 /// per-window argmax for max-pool; avg-pool uses only `x` mathematically
 /// but cuDNN's API still demands `y` for uniformity.
+#[derive(Debug)]
 pub struct Pool2dBwArgs<'a, T: Element> {
     /// Saved forward output `[N, C, H_out, W_out]`.
     pub y: TensorRef<'a, T, 4>,
@@ -204,6 +206,7 @@ pub struct Pool2dBwArgs<'a, T: Element> {
 ///
 /// Owns one `cudnnHandle_t` + three lazy descriptors (`!Sync` /
 /// `!Send`); released on `Drop`. Gated under `feature = "cudnn"`.
+#[derive(Debug)]
 pub struct MaxPool2dPlan<T: Element> {
     desc: Pool2dDescriptor,
     sku: KernelSku,
@@ -329,7 +332,7 @@ impl<T: Element> MaxPool2dPlan<T> {
     }
 
     fn bind_stream(&self, h: cudnnHandle_t, stream: &Stream) -> Result<()> {
-        let status = unsafe { cudnnSetStream(h, stream.as_raw() as *mut c_void) };
+        let status = unsafe { cudnnSetStream(h, stream.as_raw()) };
         if status != 0 {
             return Err(Error::CutlassInternal(-status));
         }

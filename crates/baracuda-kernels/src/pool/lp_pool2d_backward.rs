@@ -22,6 +22,7 @@ use super::lp_pool2d::{LpPool2dDescriptor, build_lp2d_sku, compute_out_2d, valid
 /// Args bundle for an `LpPool2d` backward launch.
 ///
 /// Caller is responsible for zeroing `dx` before the launch.
+#[derive(Debug)]
 pub struct LpPool2dBwArgs<'a, T: Element> {
     /// Saved forward input `[N, C, H_in, W_in]`.
     pub x: TensorRef<'a, T, 4>,
@@ -34,6 +35,7 @@ pub struct LpPool2dBwArgs<'a, T: Element> {
 }
 
 /// `LPPool2d` backward plan — bespoke fused BW with atomicAdd scatter.
+#[derive(Debug)]
 pub struct LpPool2dBackwardPlan<T: Element> {
     desc: LpPool2dDescriptor,
     h_out: i32,
@@ -92,7 +94,7 @@ impl<T: Element> LpPool2dBackwardPlan<T> {
         let y_ptr = args.y.data().as_raw().0 as *const c_void;
         let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
         let dx_ptr = args.dx.data().as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let ceil_flag = if self.desc.ceil_mode { 1 } else { 0 };
 
         let status = match T::KIND {

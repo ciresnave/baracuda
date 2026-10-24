@@ -398,7 +398,7 @@ impl<T: Element> SdpaBlockSparsePlan<T> {
         }
         #[cfg(feature = "xformers_blocksparse")]
         {
-            let stream_ptr = stream.as_raw() as *mut c_void;
+            let stream_ptr = stream.as_raw();
             let q_ptr = args.q.data().as_raw().0 as *const c_void;
             let k_ptr = args.k.data().as_raw().0 as *const c_void;
             let v_ptr = args.v.data().as_raw().0 as *const c_void;

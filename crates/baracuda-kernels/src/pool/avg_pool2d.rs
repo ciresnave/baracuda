@@ -17,7 +17,6 @@
 //! coverage).
 
 use core::cell::Cell;
-use core::ffi::c_void;
 use core::marker::PhantomData;
 
 use baracuda_cutlass::{Error, Result};
@@ -61,6 +60,7 @@ use super::max_pool2d::{
 ///
 /// Owns one `cudnnHandle_t` + three lazy descriptors (`!Sync` /
 /// `!Send`); released on `Drop`. Gated under `feature = "cudnn"`.
+#[derive(Debug)]
 pub struct AvgPool2dPlan<T: Element> {
     desc: Pool2dDescriptor,
     sku: KernelSku,
@@ -193,7 +193,7 @@ impl<T: Element> AvgPool2dPlan<T> {
     }
 
     fn bind_stream(&self, h: cudnnHandle_t, stream: &Stream) -> Result<()> {
-        let status = unsafe { cudnnSetStream(h, stream.as_raw() as *mut c_void) };
+        let status = unsafe { cudnnSetStream(h, stream.as_raw()) };
         if status != 0 {
             return Err(Error::CutlassInternal(-status));
         }

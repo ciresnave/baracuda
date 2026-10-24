@@ -22,6 +22,7 @@ use super::pool_nd::{
 };
 
 /// 3-D average-pool plan (cuDNN-backed).
+#[derive(Debug)]
 pub struct AvgPool3dPlan<T: Element> {
     desc: Pool3dDescriptor,
     sku: KernelSku,

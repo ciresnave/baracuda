@@ -63,6 +63,7 @@ pub struct Col2Im1dDescriptor {
 }
 
 /// Args bundle for a `Col2Im1d` launch.
+#[derive(Debug)]
 pub struct Col2Im1dArgs<'a, T: Element> {
     /// Input column matrix `[N, C·kl, l_out]` contiguous.
     pub input: TensorRef<'a, T, 3>,
@@ -85,6 +86,7 @@ pub struct Col2Im1dArgs<'a, T: Element> {
 /// **not** bit-stable across runs (`atomicAdd` ordering).
 ///
 /// **Workspace**: none.
+#[derive(Debug)]
 pub struct Col2Im1dPlan<T: Element> {
     desc: Col2Im1dDescriptor,
     l_out: i32,
@@ -169,7 +171,7 @@ impl<T: Element> Col2Im1dPlan<T> {
         self.check_args(&args)?;
         let input_ptr = args.input.data().as_raw().0 as *const c_void;
         let output_ptr = args.output.data().as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let d = &self.desc;
         let status = match T::KIND {
             ElementKind::F32 => unsafe {

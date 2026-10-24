@@ -182,6 +182,7 @@ impl ConvTranspose2dDescriptor {
 }
 
 /// Args bundle for a ConvTranspose2d forward launch.
+#[derive(Debug)]
 pub struct ConvTranspose2dArgs<'a, T: Element> {
     /// Input activations `[N, C_in, H_in, W_in]`.
     pub x: TensorRef<'a, T, 4>,
@@ -193,6 +194,7 @@ pub struct ConvTranspose2dArgs<'a, T: Element> {
 }
 
 /// Args bundle for a ConvTranspose2d data-gradient launch.
+#[derive(Debug)]
 pub struct ConvTranspose2dBwArgs<'a, T: Element> {
     /// Filter weights `[C_in, C_out / groups, kH, kW]`.
     pub w: TensorRef<'a, T, 4>,
@@ -203,6 +205,7 @@ pub struct ConvTranspose2dBwArgs<'a, T: Element> {
 }
 
 /// Args bundle for a ConvTranspose2d filter-gradient launch.
+#[derive(Debug)]
 pub struct ConvTranspose2dDwArgs<'a, T: Element> {
     /// Input activations `[N, C_in, H_in, W_in]`.
     pub x: TensorRef<'a, T, 4>,
@@ -228,6 +231,7 @@ pub struct ConvTranspose2dDwArgs<'a, T: Element> {
 ///   filter-gradient role-swap only changes which tensor is the
 ///   "input" vs "output" of the synthetic forward conv; the filter
 ///   gradient computation is symmetric.
+#[derive(Debug)]
 pub struct ConvTranspose2dPlan<T: Element> {
     desc: ConvTranspose2dDescriptor,
     sku: KernelSku,
@@ -690,7 +694,7 @@ impl<T: Element> ConvTranspose2dPlan<T> {
     }
 
     fn bind_stream(&self, h: cudnnHandle_t, stream: &Stream) -> Result<()> {
-        let status = unsafe { cudnnSetStream(h, stream.as_raw() as *mut c_void) };
+        let status = unsafe { cudnnSetStream(h, stream.as_raw()) };
         if status != 0 {
             return Err(Error::CutlassInternal(-status));
         }

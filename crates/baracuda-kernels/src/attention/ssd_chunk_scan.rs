@@ -106,6 +106,7 @@ pub struct SsdChunkScanDescriptor {
 }
 
 /// Args bundle for a Mamba-2 SSD chunk-scan FW launch.
+#[derive(Debug)]
 pub struct SsdChunkScanArgs<'a, T: Element> {
     /// SSM input projections — shape `[B, L, H, D]`, contiguous.
     pub x: TensorRef<'a, T, 4>,
@@ -125,6 +126,7 @@ pub struct SsdChunkScanArgs<'a, T: Element> {
 /// Mamba-2 SSD chunk-scan forward plan.
 ///
 /// See module docs for the shape contract and algorithm summary.
+#[derive(Debug)]
 pub struct SsdChunkScanPlan<T: Element> {
     desc: SsdChunkScanDescriptor,
     sku: KernelSku,
@@ -281,7 +283,7 @@ impl<T: Element> SsdChunkScanPlan<T> {
         if self.desc.batch_size == 0 || self.desc.seq_len == 0 || self.desc.num_heads == 0 {
             return Ok(());
         }
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let x_ptr = args.x.data().as_raw().0 as *const c_void;
         let dt_ptr = args.dt.data().as_raw().0 as *const c_void;
         let a_ptr = args.a.data().as_raw().0 as *const c_void;
@@ -388,6 +390,7 @@ pub struct SsdChunkScanBackwardDescriptor {
 /// All gradient outputs (`dx`, `dB`, `dC`, `ddt`, `dA`) must be
 /// **zero-initialized by the caller** before launch — `dA` is
 /// atomic-accumulated across batch samples within the kernel.
+#[derive(Debug)]
 pub struct SsdChunkScanBackwardArgs<'a, T: Element> {
     /// SSM input projections (saved) — shape `[B, L, H, D]`.
     pub x: TensorRef<'a, T, 4>,
@@ -415,6 +418,7 @@ pub struct SsdChunkScanBackwardArgs<'a, T: Element> {
 }
 
 /// Mamba-2 SSD chunk-scan backward plan.
+#[derive(Debug)]
 pub struct SsdChunkScanBackwardPlan<T: Element> {
     desc: SsdChunkScanBackwardDescriptor,
     sku: KernelSku,
@@ -512,7 +516,7 @@ impl<T: Element> SsdChunkScanBackwardPlan<T> {
         if self.desc.batch_size == 0 || self.desc.seq_len == 0 || self.desc.num_heads == 0 {
             return Ok(());
         }
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let (ws_ptr, ws_bytes) = match workspace {
             Workspace::Borrowed(buf) => (buf.as_raw().0 as *mut c_void, buf.len()),
             Workspace::None => (core::ptr::null_mut(), 0usize),

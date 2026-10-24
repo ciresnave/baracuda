@@ -329,7 +329,7 @@ impl<T: Element> HyperConnectionPlan<T> {
         self.can_implement(&args)?;
         #[cfg(feature = "mhc")]
         {
-            let stream_ptr = stream.as_raw() as *mut c_void;
+            let stream_ptr = stream.as_raw();
             let status = unsafe {
                 baracuda_kernels_sys::baracuda_kernels_mhc_layer_static_bf16_run(
                     self.handle,

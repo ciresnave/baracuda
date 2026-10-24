@@ -31,6 +31,7 @@ use super::lp_pool1d::{LpPool1dDescriptor, build_lp1d_sku, compute_l_out, valida
 ///
 /// Caller is responsible for zeroing `dx` before the launch — the
 /// kernel uses `atomicAdd` scatter and does not clear the buffer.
+#[derive(Debug)]
 pub struct LpPool1dBwArgs<'a, T: Element> {
     /// Saved forward input `[N, C, L_in]`.
     pub x: TensorRef<'a, T, 3>,
@@ -43,6 +44,7 @@ pub struct LpPool1dBwArgs<'a, T: Element> {
 }
 
 /// `LPPool1d` backward plan — bespoke fused BW with atomicAdd scatter.
+#[derive(Debug)]
 pub struct LpPool1dBackwardPlan<T: Element> {
     desc: LpPool1dDescriptor,
     l_out: i32,
@@ -99,7 +101,7 @@ impl<T: Element> LpPool1dBackwardPlan<T> {
         let y_ptr = args.y.data().as_raw().0 as *const c_void;
         let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
         let dx_ptr = args.dx.data().as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let ceil_flag = if self.desc.ceil_mode { 1 } else { 0 };
 
         let status = match T::KIND {

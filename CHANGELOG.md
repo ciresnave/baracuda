@@ -16,6 +16,10 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.6 - 2026-10-24
+
+No API change. `baracuda-kernels` `--all-features` lib is clippy-clean and gated by a new CI step: `#[derive(Debug)]` on 84 public Args/Plan types (`missing_debug_implementations`), 54 redundant `stream.as_raw() as *mut c_void` casts dropped, `dA_ptr`..`dD_ptr` renamed to snake case, one doc-list indentation fixed. `--all-features --tests` stays open: with the lib clean, cargo now reaches the ~180 integration-test targets, which report >1000 further errors (see ROADMAP).
+
 ## 0.1.0-alpha.5 - 2026-10-24
 
 Docs only. `PROVENANCE.md` section 6 records `assets/barracuda.png` (AI-generated, C2PA GPT-4o; licence "unknown: pending CireSnave", board 267). No code change.
