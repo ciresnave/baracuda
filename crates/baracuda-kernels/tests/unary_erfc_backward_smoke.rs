@@ -21,8 +21,8 @@ use half::{bf16, f16};
 
 const F16_EPS: f32 = 9.77e-4;
 const BF16_EPS: f32 = 7.81e-3;
-const TWO_OVER_SQRT_PI_F: f32 = 1.1283791670955126_f32;
-const TWO_OVER_SQRT_PI_D: f64 = 1.1283791670955126_f64;
+const TWO_OVER_SQRT_PI_F: f32 = std::f32::consts::FRAC_2_SQRT_PI;
+const TWO_OVER_SQRT_PI_D: f64 = std::f64::consts::FRAC_2_SQRT_PI;
 
 fn setup() -> (Context, Stream) {
     init().expect("driver init");

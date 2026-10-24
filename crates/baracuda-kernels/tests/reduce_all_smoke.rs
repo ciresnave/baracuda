@@ -6,6 +6,10 @@
 //! Bit-exact comparison — All is integer-style AND of `(x != 0)`
 //! predicates, no FP math.
 #![cfg(feature = "device-tests")]
+// erasing_op: `0 * stride` is a spelled-out layout term (integer index arithmetic) kept so the expression reads like the layout under test; it is zero by construction.
+#![allow(clippy::erasing_op)]
+// identity_op: `1 * stride` / `+ 0` are spelled-out layout terms (integer index arithmetic) kept so the expression reads like the layout under test; removing them changes no value.
+#![allow(clippy::identity_op)]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{

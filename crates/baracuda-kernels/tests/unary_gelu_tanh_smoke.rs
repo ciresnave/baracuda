@@ -32,7 +32,7 @@ fn setup() -> (Context, Stream) {
 
 fn cpu_ref_f32(x: f32) -> f32 {
     {
-        let k = 0.7978845608028654_f32;
+        let k = 0.797_884_6_f32;
         let a = 0.044715_f32;
         0.5_f32 * x * (1.0 + (k * (x + a * x * x * x)).tanh())
     }

@@ -33,8 +33,8 @@ fn setup() -> (Context, Stream) {
 
 fn cpu_ref_f32(x: f32) -> f32 {
     {
-        const A: f32 = 1.6732632423543772;
-        const L: f32 = 1.0507009873554805;
+        const A: f32 = 1.673_263_2;
+        const L: f32 = 1.050_701;
         let branch = if x > 0.0 { x } else { A * (x.exp() - 1.0) };
         L * branch
     }

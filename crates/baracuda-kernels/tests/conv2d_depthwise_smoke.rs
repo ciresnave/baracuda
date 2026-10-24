@@ -7,6 +7,8 @@
 //! naive depthwise CPU reference.
 #![cfg(feature = "cudnn")]
 #![cfg(feature = "device-tests")]
+// identity_op: `1 * stride` / `+ 0` are spelled-out layout terms (integer index arithmetic) kept so the expression reads like the layout under test; removing them changes no value.
+#![allow(clippy::identity_op)]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{

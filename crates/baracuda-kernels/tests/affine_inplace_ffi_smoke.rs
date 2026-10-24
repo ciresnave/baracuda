@@ -23,6 +23,8 @@
 #![cfg(feature = "device-tests")]
 // needless_range_loop: these host reference models index several parallel buffers by one i; iterator rewrites would hide the element-wise correspondence with the kernel under test.
 #![allow(clippy::needless_range_loop)]
+// approx_constant: `3.14`/`3.14159` are arbitrary test values, not pi; std::f32::consts::PI would change the data under test.
+#![allow(clippy::approx_constant)]
 
 use core::ffi::c_void;
 
