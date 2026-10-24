@@ -16,6 +16,10 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.12 - 2026-10-24
+
+Docs only. `PROVENANCE.md` section 6 now records the maker and licence of `assets/barracuda.png`: made by CireSnave with GPT-4o (C2PA manifest), licence per OpenAI's output terms assigning output rights to the user (replaces "unknown: pending CireSnave"). No code change.
+
 ## 0.1.0-alpha.11 - 2026-10-24
 
 No API or behaviour change; CI only. The advisory `portfolio` job is repinned from CodeRipper `a48fc6cc` to `d14a22b6` (0.9.14), whose `portfolio.yml` sets `DOCS_RS=1` for the sweep step. At `a48fc6cc` the sweep ran `baracuda-kernels-sys`'s `build.rs` without it (no nvcc on the runner), so 7 crates (flashinfer, flashinfer-sys, kernels, kernels-bench and others) reported "no result can be trusted" (run 40097415583). `build.rs` honours `DOCS_RS` (build.rs:207) and skips nvcc, so those crates are now analysed statically only; the sweep does not build the CUDA code.
