@@ -16,6 +16,10 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.17 - 2026-10-24
+
+No API or behaviour change; docs only. Spec-to-roadmap audit (PM task, CireSnave's idea): all 176 tracked `.md` docs were diffed against `ROADMAP.md`; 39 rows (SA-1 .. SA-39) were added for outstanding work that had no roadmap row, plus a list of work that docs still show open but has merged. 8 rows need a CireSnave decision (SA-36, the upstream LICENSE asks, was PM-approved and filed). `ROADMAP.md`'s own stale statements were corrected (header version, the retired `baracuda-kernelgen` 589/0 figure, the api-freeze "Open" list). Many other docs contradict the code; they are listed in SA-38 and not fixed here.
+
 ## 0.1.0-alpha.16 - 2026-10-24
 
 **Behaviour change (numeric results change): the f16 / bf16 dense GEMM accumulates in f32 end to end.**

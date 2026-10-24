@@ -131,7 +131,7 @@ Comment-only edits; `docs/provenance/header-comment-changes-verified.tsv` shows,
 
 **PM ruling (2026-10-14, 13:15Z):** where upstream states no holder, the header says so ("The candle contributors", "Apex" origin note) and never carries a fabricated named holder.
 
-**Open, upstream-only:** `guoqingbao/attention.rs` and `guoqingbao/cudaforge` ship no LICENSE file (only a `Cargo.toml` `license` field), so no verbatim licence text can be carried. Asking each upstream to add one would resolve it; **no upstream issue has been filed** (needs PM approval).
+**Open, upstream-only:** `guoqingbao/attention.rs` and `guoqingbao/cudaforge` ship no LICENSE file (only a `Cargo.toml` `license` field), so no verbatim licence text can be carried. Asking each upstream to add one would resolve it; **filed 2026-10-24 (PM-approved, from the bot account):** https://github.com/guoqingbao/attention.rs/issues/117 and https://github.com/guoqingbao/cudaforge/issues/13.
 
 ## 3c. Pins bucket applied (PR alpha.104, 2026-10-14)
 
@@ -148,7 +148,7 @@ Recorded in each directory's `VENDOR.md` / `README.md`. **Date-bounded, not vend
 | fuel-q8_1 chain | Fuel `e1070acf9...` = candle `fd8448d2c7fe...`; xinfer `b88c1533...`; llama.cpp `0a5eebb45d...` | blob-equality, exact |
 | FA2 hd160/224 | `EricLBuehler/candle` `132643dc466c...` | 2025-07-09 (exact blob match) |
 
-G-PIN-1 and G-FQ-1 are closed by this. Remaining open: attention.rs / cudaforge ship no LICENSE (upstream-only).
+G-PIN-1 and G-FQ-1 are closed by this. Remaining open: attention.rs / cudaforge ship no LICENSE (upstream-only; asked 2026-10-24, https://github.com/guoqingbao/attention.rs/issues/117 and https://github.com/guoqingbao/cudaforge/issues/13).
 
 ## 4. Proposed fixes needing PM (no vendoring changes made)
 
