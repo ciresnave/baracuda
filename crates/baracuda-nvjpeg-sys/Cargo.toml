@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-nvjpeg-sys"
-version = "0.1.0-alpha.16"
+version = "0.1.0-alpha.17"
 description = "Raw FFI bindings and dynamic loader for NVIDIA nvJPEG."
 edition.workspace = true
 license.workspace = true
