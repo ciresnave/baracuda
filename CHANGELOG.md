@@ -16,6 +16,10 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.11 - 2026-10-24
+
+No API or behaviour change; CI only. The advisory `portfolio` job is repinned from CodeRipper `a48fc6cc` to `d14a22b6` (0.9.14), whose `portfolio.yml` sets `DOCS_RS=1` for the sweep step. At `a48fc6cc` the sweep ran `baracuda-kernels-sys`'s `build.rs` without it (no nvcc on the runner), so 7 crates (flashinfer, flashinfer-sys, kernels, kernels-bench and others) reported "no result can be trusted" (run 40097415583). `build.rs` honours `DOCS_RS` (build.rs:207) and skips nvcc, so those crates are now analysed statically only; the sweep does not build the CUDA code.
+
 ## 0.1.0-alpha.10 - 2026-10-24
 
 No API or behaviour change; `baracuda-kernels` test-target clippy, family D (numeric lints), and the CI gate: `clippy baracuda-kernels (DOCS_RS, all features, tests)` now runs `--all-features --tests -- -D warnings` (0 errors, was 789 at alpha.6). Basis per site: 25 `unusual_byte_groupings` hex seeds re-grouped (digits unchanged, asserted equal as integers); 28 `excessive_precision` float literals shortened and 10 `approx_constant` literals replaced by `std::f{32,64}::consts::{FRAC_1_SQRT_2,FRAC_2_SQRT_PI}`, each verified to denote the identical f32/f64 value by exact rational round-to-nearest-even of the old and new literal (no value changes). Not rewritten, file-level `#![allow]` with a stated reason: `identity_op` / `erasing_op` (17 files; spelled-out integer layout terms such as `1 * cols`, `+ 0`) and `approx_constant` for 4 arbitrary `3.14`/`3.14159` test values (not pi; replacing would change the data).
