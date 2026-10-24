@@ -83,7 +83,7 @@ fn ffi_reduce_max_to_f32_2d_reduce_dim0() {
             out_shape.as_ptr(),
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "reduce_max_to_f32 returned {status}");
@@ -123,7 +123,7 @@ fn ffi_reduce_max_to_f32_full_reduce_with_negatives() {
             out_shape.as_ptr(),
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -186,7 +186,7 @@ fn ffi_reduce_max_to_f64_3d() {
             out_shape.as_ptr(),
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);

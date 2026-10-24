@@ -109,7 +109,7 @@ fn argsort_big_f32_row_2000_ascending() {
             dev_idx.as_slice_mut().as_raw().0 as *mut c_void,
             workspace.as_slice_mut().as_raw().0 as *mut c_void,
             ws_bytes,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "argsort_f32_big_run returned non-zero");
@@ -146,7 +146,7 @@ fn argsort_big_f32_row_32000_descending() {
             dev_idx.as_slice_mut().as_raw().0 as *mut c_void,
             workspace.as_slice_mut().as_raw().0 as *mut c_void,
             ws_bytes,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -185,7 +185,7 @@ fn argsort_big_f64_row_5000_multibatch() {
             dev_idx.as_slice_mut().as_raw().0 as *mut c_void,
             workspace.as_slice_mut().as_raw().0 as *mut c_void,
             ws_bytes,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -238,7 +238,7 @@ fn argsort_big_i32_row_2048_ascending() {
             dev_idx.as_slice_mut().as_raw().0 as *mut c_void,
             workspace.as_slice_mut().as_raw().0 as *mut c_void,
             ws_bytes,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -275,7 +275,7 @@ fn argsort_big_i64_row_2000_ascending() {
             dev_idx.as_slice_mut().as_raw().0 as *mut c_void,
             workspace.as_slice_mut().as_raw().0 as *mut c_void,
             ws_bytes,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -306,7 +306,7 @@ fn argsort_big_workspace_too_small_returns_4() {
             dev_idx.as_slice_mut().as_raw().0 as *mut c_void,
             ws.as_slice_mut().as_raw().0 as *mut c_void,
             64,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 4, "tiny workspace should return WorkspaceTooSmall");

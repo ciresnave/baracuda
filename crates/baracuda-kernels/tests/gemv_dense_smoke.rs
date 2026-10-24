@@ -339,7 +339,7 @@ fn gemv_f32_direct_ffi() {
             0,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "direct-FFI gemv f32 run failed");

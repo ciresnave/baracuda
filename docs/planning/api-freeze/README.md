@@ -317,7 +317,7 @@ appeared that the previous revision lacked.
 | `FlashDecodingDescriptor` | `num_kv_heads` | 7 |
 | `GgufMmvqDescriptor` | `w_start_byte_offset` | 4 |
 
-Those three are the beta.0 R2 retrofit list (**done at 0.1.0-alpha.7**; R3 and R5 landed with it). The other **254 are frozen as-is**: their field sets have not changed
+Those three are the beta.0 R2 retrofit list (**done at 0.1.0-alpha.8**; R3 and R5 landed with it). The other **254 are frozen as-is**: their field sets have not changed
 over the measured history, and they stay literal-constructible (this avoids a breaking pass over 453 test files
 and 182 source/bench/example files, about 2 017 `XDescriptor {` sites, for a surface Fuel uses 0 of, section 7.1).
 If one of the 254 gains a field before 1.0 it joins the retrofit list; after 1.0 it is a breaking change.

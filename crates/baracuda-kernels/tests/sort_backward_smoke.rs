@@ -61,9 +61,7 @@ fn sort_backward_f32_basic() {
     stream.synchronize().expect("sync");
 
     // BW: dy[i] = i + 1 so the test detects misrouting.
-    let dy_host: Vec<f32> = (0..(batch * row_len) as i32)
-        .map(|i| (i + 1) as f32)
-        .collect();
+    let dy_host: Vec<f32> = (0..(batch * row_len)).map(|i| (i + 1) as f32).collect();
     let dev_dy = DeviceBuffer::from_slice(&ctx, &dy_host).expect("up dy");
     let mut dev_dx: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, dy_host.len()).expect("alloc dx");
 

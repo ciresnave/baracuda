@@ -38,7 +38,7 @@ fn host_bincount_i32(x: &[i32], num_bins: i32) -> Vec<i32> {
 fn host_bincount_i64(x: &[i64], num_bins: i32) -> Vec<i32> {
     let mut counts = vec![0_i32; num_bins as usize];
     for &v in x {
-        if v >= 0 && (v as i64) < num_bins as i64 {
+        if v >= 0 && v < num_bins as i64 {
             counts[v as usize] += 1;
         }
     }
@@ -65,7 +65,7 @@ fn bincount_i32_basic() {
             dev_out.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "bincount_i32 status");
@@ -99,7 +99,7 @@ fn bincount_i32_empty_input() {
             dev_out.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "bincount_i32 n=0 status");
@@ -138,7 +138,7 @@ fn bincount_i64_basic() {
             dev_out.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "bincount_i64 status");
@@ -171,7 +171,7 @@ fn bincount_i32_all_in_range_dense() {
             dev_out.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);

@@ -98,7 +98,7 @@ fn ffi_upsample_nearest_2d_f32_fw_matches_cpu() {
             dev_out.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "upsample_nearest_2d FW f32 failed");
@@ -137,7 +137,7 @@ fn ffi_upsample_nearest_2d_f32_bw_matches_cpu() {
             dev_din.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "upsample_nearest_2d BW f32 failed");
@@ -202,7 +202,7 @@ fn ffi_upsample_bilinear_2d_f32_fw_matches_interpolate_alias() {
             ac,
             scale_h,
             scale_w,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(s_a, 0);
@@ -222,7 +222,7 @@ fn ffi_upsample_bilinear_2d_f32_fw_matches_interpolate_alias() {
             ac,
             scale_h,
             scale_w,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(s_b, 0);
@@ -269,7 +269,7 @@ fn ffi_upsample_bilinear_2d_f16_fw_returns_status_zero() {
             0,
             0.0,
             0.0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "upsample_bilinear_2d FW f16 alias failed");
@@ -311,7 +311,7 @@ fn ffi_upsample_bilinear_2d_bf16_bw_returns_status_zero() {
             0,
             0.0,
             0.0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "upsample_bilinear_2d BW bf16 alias failed");

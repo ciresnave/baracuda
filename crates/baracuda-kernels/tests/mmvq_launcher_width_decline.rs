@@ -112,7 +112,7 @@ fn call_raw_q8_0(
             dev_out.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     stream.synchronize().expect("sync");

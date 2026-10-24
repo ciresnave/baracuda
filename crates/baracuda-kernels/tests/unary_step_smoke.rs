@@ -48,7 +48,7 @@ fn ffi_unary_step_f32_matches_cpu() {
             dev_y.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "unary_step_f32 returned status {status}");
@@ -87,7 +87,7 @@ fn ffi_unary_step_f64_matches_cpu() {
             dev_y.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);

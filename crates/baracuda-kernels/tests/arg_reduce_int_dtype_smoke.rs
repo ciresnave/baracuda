@@ -72,7 +72,7 @@ unsafe fn run_arg_reduce(
             dst_ptr,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "arg_reduce returned {status}");

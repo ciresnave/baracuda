@@ -45,9 +45,9 @@ fn build_q8_0_weights(nrows: i32, ncols: i32) -> (Vec<U8>, Vec<f32>) {
             let d = 0.05_f32 + 0.01 * ((r + bi) as f32);
             let mut qs = [0i8; 32];
             for j in 0..32 {
-                let v = (((r * 7 + bi * 13 + j as i32) % 17) - 8) as i8;
+                let v = (((r * 7 + bi * 13 + j) % 17) - 8) as i8;
                 qs[j as usize] = v;
-                fp_ref[(r * ncols + bi * 32 + j as i32) as usize] = d * (v as f32);
+                fp_ref[(r * ncols + bi * 32 + j) as usize] = d * (v as f32);
             }
             let blk = BlockQ8_0 {
                 d: half::f16::from_f32(d).to_bits(),

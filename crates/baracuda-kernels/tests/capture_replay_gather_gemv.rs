@@ -79,11 +79,7 @@ fn gather_rows_capture_replay_correct() {
     };
 
     // EAGER warm launch (non-graph) on the zeroed output.
-    assert_eq!(
-        run_ffi(stream.as_raw() as *mut c_void),
-        0,
-        "warm FFI status"
-    );
+    assert_eq!(run_ffi(stream.as_raw()), 0, "warm FFI status");
     stream.synchronize().unwrap();
     let mut warm = vec![0f32; out_len];
     d_dest.copy_to_host(&mut warm).unwrap();
@@ -93,7 +89,7 @@ fn gather_rows_capture_replay_correct() {
     let status = Cell::new(-1i32);
     let graph = stream
         .capture(CaptureMode::ThreadLocal, |s| {
-            status.set(run_ffi(s.as_raw() as *mut c_void));
+            status.set(run_ffi(s.as_raw()));
             Ok(())
         })
         .expect("capture gather_rows");
@@ -170,11 +166,7 @@ fn index_select_element0_replay_repro() {
     };
 
     // EAGER warm launch on the zeroed output.
-    assert_eq!(
-        run_ffi(stream.as_raw() as *mut c_void),
-        0,
-        "warm FFI status"
-    );
+    assert_eq!(run_ffi(stream.as_raw()), 0, "warm FFI status");
     stream.synchronize().unwrap();
     let mut warm = vec![0f32; out_len];
     d_out.copy_to_host(&mut warm).unwrap();
@@ -184,7 +176,7 @@ fn index_select_element0_replay_repro() {
     let status = Cell::new(-1i32);
     let graph = stream
         .capture(CaptureMode::ThreadLocal, |s| {
-            status.set(run_ffi(s.as_raw() as *mut c_void));
+            status.set(run_ffi(s.as_raw()));
             Ok(())
         })
         .expect("capture index_select");
@@ -267,11 +259,7 @@ fn index_select_element0_replay_repro_fuel_exact() {
         }
     };
 
-    assert_eq!(
-        run_ffi(stream.as_raw() as *mut c_void),
-        0,
-        "warm FFI status"
-    );
+    assert_eq!(run_ffi(stream.as_raw()), 0, "warm FFI status");
     stream.synchronize().unwrap();
     let mut warm = vec![0f32; out_len];
     d_out.copy_to_host(&mut warm).unwrap();
@@ -280,7 +268,7 @@ fn index_select_element0_replay_repro_fuel_exact() {
     let status = Cell::new(-1i32);
     let graph = stream
         .capture(CaptureMode::ThreadLocal, |s| {
-            status.set(run_ffi(s.as_raw() as *mut c_void));
+            status.set(run_ffi(s.as_raw()));
             Ok(())
         })
         .expect("capture index_select fuel-exact");
@@ -365,11 +353,7 @@ fn gemv_dense_capture_replay_byte_identical() {
     };
 
     // Eager warm → capture the reference bytes.
-    assert_eq!(
-        run_ffi(stream.as_raw() as *mut c_void),
-        0,
-        "warm gemv status"
-    );
+    assert_eq!(run_ffi(stream.as_raw()), 0, "warm gemv status");
     stream.synchronize().unwrap();
     let mut reference = vec![0f32; d_len];
     d_d.copy_to_host(&mut reference).unwrap();
@@ -382,7 +366,7 @@ fn gemv_dense_capture_replay_byte_identical() {
     let status = Cell::new(-1i32);
     let graph = stream
         .capture(CaptureMode::ThreadLocal, |s| {
-            status.set(run_ffi(s.as_raw() as *mut c_void));
+            status.set(run_ffi(s.as_raw()));
             Ok(())
         })
         .expect("capture gemv");

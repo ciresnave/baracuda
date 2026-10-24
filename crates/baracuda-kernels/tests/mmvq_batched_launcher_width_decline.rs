@@ -94,7 +94,7 @@ fn call_raw_q8_0_batched(
             1, // top_k
             dev_workspace.as_slice_mut().as_raw().0 as *mut c_void,
             (m_total * core::mem::size_of::<i32>()) as usize,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     stream.synchronize().expect("sync");
@@ -219,7 +219,7 @@ fn q2_k_batched_ncols256_via_raw_ffi_computes() {
             1,
             dev_workspace.as_slice_mut().as_raw().0 as *mut c_void,
             (m_total * core::mem::size_of::<i32>()) as usize,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     stream.synchronize().expect("sync");

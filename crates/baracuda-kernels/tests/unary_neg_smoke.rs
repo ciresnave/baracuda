@@ -122,7 +122,7 @@ fn neg_f32_strided_transposed() {
     let y_stride = contiguous_stride([m, n]);
 
     // CPU reference walks the same strides.
-    let numel = (M * N_DIM) as usize;
+    let numel = M * N_DIM;
     let mut expected = vec![0f32; numel];
     for i in 0..M {
         for j in 0..N_DIM {

@@ -77,7 +77,7 @@ fn fft_1d_c32_roundtrip_ffi() {
             dev_y.as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "fft_1d_c32 forward status");
@@ -92,7 +92,7 @@ fn fft_1d_c32_roundtrip_ffi() {
             dev_back.as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "fft_1d_c32 inverse status");
@@ -149,7 +149,7 @@ fn rfft_irfft_1d_f32_roundtrip_ffi() {
             dev_y.as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "rfft_1d_f32 status");
@@ -168,7 +168,7 @@ fn rfft_irfft_1d_f32_roundtrip_ffi() {
             dev_back.as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "irfft_1d_f32 status");
@@ -223,7 +223,7 @@ fn fft_nd_c32_2d_roundtrip_ffi() {
             dev_y.as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "fft_nd_c32 forward status");
@@ -239,7 +239,7 @@ fn fft_nd_c32_2d_roundtrip_ffi() {
             dev_back.as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "fft_nd_c32 inverse status");
@@ -305,7 +305,7 @@ fn rfft_irfft_nd_f32_2d_roundtrip_ffi() {
             dev_y.as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "rfft_nd_f32 status");
@@ -320,7 +320,7 @@ fn rfft_irfft_nd_f32_2d_roundtrip_ffi() {
             dev_back.as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "irfft_nd_f32 status");

@@ -67,7 +67,7 @@ fn moe_scalar_gguf_q8_0_small_fixture() {
             let scale = 0.001 * (e as f32 + 1.0);
             let mut qs = [0i8; 32];
             for k in 0..DM {
-                let q = (((n - k) as i32) % 64 - 32) as i8;
+                let q = ((n - k) % 64 - 32) as i8;
                 qs[k as usize] = q;
                 weights_dequant[((e * DE + n) * DM + k) as usize] = scale * (q as f32);
             }

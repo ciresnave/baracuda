@@ -31,7 +31,7 @@ fn prelu_f32_per_channel() {
     let c_extent = 3usize;
     let expected: Vec<f32> = (0..n_total)
         .map(|i| {
-            let c = (i as usize / c_stride) % c_extent;
+            let c = (i / c_stride) % c_extent;
             let x = h_x[i];
             if x > 0.0 { x } else { h_w[c] * x }
         })
@@ -119,7 +119,7 @@ fn prelu_f64_per_channel() {
     let c_extent = 3usize;
     let expected: Vec<f64> = (0..n_total)
         .map(|i| {
-            let c = (i as usize / c_stride) % c_extent;
+            let c = (i / c_stride) % c_extent;
             let x = h_x[i];
             if x > 0.0 { x } else { h_w[c] * x }
         })
@@ -204,7 +204,7 @@ fn prelu_f16_per_channel() {
     let c_extent = 3usize;
     let expected: Vec<f32> = (0..n_total)
         .map(|i| {
-            let c = (i as usize / c_stride) % c_extent;
+            let c = (i / c_stride) % c_extent;
             let x = h_x[i].to_f32();
             if x > 0.0 { x } else { h_w[c].to_f32() * x }
         })
@@ -307,7 +307,7 @@ fn prelu_bf16_per_channel() {
     let c_extent = 3usize;
     let expected: Vec<f32> = (0..n_total)
         .map(|i| {
-            let c = (i as usize / c_stride) % c_extent;
+            let c = (i / c_stride) % c_extent;
             let x = h_x[i].to_f32();
             if x > 0.0 { x } else { h_w[c].to_f32() * x }
         })

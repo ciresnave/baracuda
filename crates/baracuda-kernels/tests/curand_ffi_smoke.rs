@@ -63,7 +63,7 @@ fn curand_uniform_f32_ffi() {
             dev_y.as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "uniform f32 status");
@@ -118,7 +118,7 @@ fn curand_uniform_f64_ffi() {
             dev_y.as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "uniform f64 status");
@@ -155,7 +155,7 @@ fn curand_normal_f32_ffi() {
             dev_y.as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "normal f32 status");
@@ -210,7 +210,7 @@ fn curand_normal_f64_ffi() {
             dev_y.as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "normal f64 status");

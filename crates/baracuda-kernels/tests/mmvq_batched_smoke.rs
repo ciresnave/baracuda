@@ -87,7 +87,7 @@ fn batched_q8_0_f32_top_k_1_no_aliasing() {
                 let d = 0.1 * (e as f32 + 1.0) + 0.05 * (r as f32) + 0.01 * (b as f32);
                 let mut qs = [0i8; 32];
                 for i in 0usize..32 {
-                    let v = (i as i32 + e * 2 + r + b * 3) as i32;
+                    let v = i as i32 + e * 2 + r + b * 3;
                     qs[i] = ((v % 127) - 63) as i8;
                 }
                 let packed = pack_q8_0_row(d, &qs);

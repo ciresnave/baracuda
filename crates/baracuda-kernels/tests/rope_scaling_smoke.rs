@@ -70,8 +70,8 @@ fn rope_apply_linear_builder_matches_kernel() {
     let heads = 2i32;
     let seq = 8i32;
     let head_dim = 16i32;
-    let bh = (batch * heads) as i32;
-    let td = (seq * head_dim) as i32;
+    let bh = batch * heads;
+    let td = seq * head_dim;
     let numel = (batch * heads * seq * head_dim) as usize;
 
     let host_x: Vec<f32> = (0..numel)
@@ -100,7 +100,7 @@ fn rope_apply_linear_builder_matches_kernel() {
             dev_y.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "rope_apply_f32 status {status}");
@@ -135,8 +135,8 @@ fn rope_apply_yarn_builder_matches_host_ref() {
     let heads = 1i32;
     let seq = 4i32;
     let head_dim = 32i32;
-    let bh = (batch * heads) as i32;
-    let td = (seq * head_dim) as i32;
+    let bh = batch * heads;
+    let td = seq * head_dim;
     let numel = (batch * heads * seq * head_dim) as usize;
 
     let host_x: Vec<f32> = (0..numel).map(|i| (i as f32) * 0.05 - 0.3).collect();
@@ -171,7 +171,7 @@ fn rope_apply_yarn_builder_matches_host_ref() {
             dev_y.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -202,8 +202,8 @@ fn rope_apply_longrope_builder_matches_host_ref() {
     let heads = 1i32;
     let seq = 4i32;
     let head_dim = 16i32;
-    let bh = (batch * heads) as i32;
-    let td = (seq * head_dim) as i32;
+    let bh = batch * heads;
+    let td = seq * head_dim;
     let numel = (batch * heads * seq * head_dim) as usize;
 
     let host_x: Vec<f32> = (0..numel).map(|i| (i as f32) * 0.07 - 0.5).collect();
@@ -241,7 +241,7 @@ fn rope_apply_longrope_builder_matches_host_ref() {
             dev_y.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);

@@ -104,7 +104,7 @@ fn gemm_f32_simt_rrr_ffi() {
             0.0_f32,
             ws_ptr,
             ws_bytes_arg,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "gemm_f32_simt_rrr status");
@@ -187,7 +187,7 @@ fn gemm_bias_f32_simt_rrr_ffi() {
             0.0_f32,
             ws_ptr,
             ws_bytes_arg,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "gemm_bias_f32_simt_rrr status");
@@ -286,7 +286,7 @@ fn gemm_batched_f16_rcr_ffi() {
             batch_count,
             ws_ptr,
             ws_bytes_arg,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "gemm_batched_f16_rcr status");

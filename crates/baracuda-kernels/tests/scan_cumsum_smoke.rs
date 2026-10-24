@@ -48,7 +48,7 @@ fn host_cumsum_f32<const N: usize>(
         stride[d] = stride[d + 1] * input_shape[d + 1] as usize;
     }
     let mut y = vec![0f32; numel];
-    let extent = input_shape[axis] as i32;
+    let extent = input_shape[axis];
     for_each_coord::<N, _>(input_shape, |coord, linear| {
         let k = coord[axis];
         let mut acc = 0f32;

@@ -95,7 +95,7 @@ fn rms_norm_f32_inplace_matches_non_aliased() {
             dev_rms_ref.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "non-aliased run");
@@ -125,7 +125,7 @@ fn rms_norm_f32_inplace_matches_non_aliased() {
             dev_rms_inplace.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "aliased (in-place) run");
@@ -193,7 +193,7 @@ fn rms_norm_f16_inplace_matches_non_aliased() {
             dev_rms_ref.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -221,7 +221,7 @@ fn rms_norm_f16_inplace_matches_non_aliased() {
             dev_rms_inplace.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -276,7 +276,7 @@ fn rms_norm_bf16_inplace_matches_non_aliased() {
             dev_rms_ref.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -304,7 +304,7 @@ fn rms_norm_bf16_inplace_matches_non_aliased() {
             dev_rms_inplace.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -358,7 +358,7 @@ fn rms_norm_f64_inplace_matches_non_aliased() {
             dev_rms_ref.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "f64 non-aliased");
@@ -386,7 +386,7 @@ fn rms_norm_f64_inplace_matches_non_aliased() {
             dev_rms_inplace.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "f64 aliased");
