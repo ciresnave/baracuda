@@ -16,6 +16,10 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.5 - 2026-10-24
+
+Docs only. `PROVENANCE.md` section 6 records `assets/barracuda.png` (AI-generated, C2PA GPT-4o; licence "unknown: pending CireSnave", board 267). No code change.
+
 ## 0.1.0-alpha.3 - 2026-10-24
 
 No API change. `baracuda-kernels-sys`: six cuDNN conv facade macros now carry a real `# Safety` doc section (were `# Safety:` inline), one redundant cast dropped, and `probe_windows_versioned_root` in `build.rs` is gated to Windows (dead code on other hosts with `cudnn`). CI gates clippy for the `-sys` crates with `--all-features --tests` and for `baracuda-kernels --tests`.
