@@ -78,9 +78,8 @@ fn cpu_write_slice<const N: usize>(
         // Byte-level copy.
         let dst_byte = dest_off as usize * byte_width;
         let src_byte = source_off as usize * byte_width;
-        for b in 0..byte_width {
-            out[dst_byte + b] = source[src_byte + b];
-        }
+        out[dst_byte..dst_byte + byte_width]
+            .copy_from_slice(&source[src_byte..src_byte + byte_width]);
     }
     out
 }
@@ -559,13 +558,12 @@ fn write_slice_nibble_odd_start_rejected() {
 
 /// Reinterpret an `&[T]` as `&[u8]` for byte-level reference computations.
 fn bytemuck_slice<T: Copy>(s: &[T]) -> Vec<u8> {
-    let bytes_per = core::mem::size_of::<T>();
-    let mut out = vec![0u8; s.len() * bytes_per];
+    let mut out = vec![0u8; std::mem::size_of_val(s)];
     unsafe {
         core::ptr::copy_nonoverlapping(
             s.as_ptr() as *const u8,
             out.as_mut_ptr(),
-            s.len() * bytes_per,
+            std::mem::size_of_val(s),
         );
     }
     out

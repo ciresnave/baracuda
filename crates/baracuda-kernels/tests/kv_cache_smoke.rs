@@ -9,6 +9,8 @@
 //!
 //! Gated behind the `device-tests` feature — requires a real CUDA device.
 #![cfg(feature = "device-tests")]
+// needless_range_loop: these host reference models index several parallel buffers by one i; iterator rewrites would hide the element-wise correspondence with the kernel under test.
+#![allow(clippy::needless_range_loop)]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -53,9 +55,7 @@ fn cpu_kv_cache_append<T: Copy>(
                 }
                 let src_base = ((b * heads + h) * new_len + l) * d;
                 let dst_base = ((b * heads + h) * max_cache_len + cache_pos as usize) * d;
-                for di in 0..d {
-                    cache_buf[dst_base + di] = new_buf[src_base + di];
-                }
+                cache_buf[dst_base..dst_base + d].copy_from_slice(&new_buf[src_base..src_base + d]);
             }
         }
     }

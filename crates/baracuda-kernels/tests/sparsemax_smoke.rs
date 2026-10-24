@@ -6,6 +6,8 @@
 //!   2. Row-sums-to-1 invariant on a random input.
 //!   3. All outputs `>= 0`, with some genuinely zero (sparsity).
 #![cfg(feature = "device-tests")]
+// needless_range_loop: these host reference models index several parallel buffers by one i; iterator rewrites would hide the element-wise correspondence with the kernel under test.
+#![allow(clippy::needless_range_loop)]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{

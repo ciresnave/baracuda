@@ -10,6 +10,8 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test arg_reduce_dtype_smoke --features device-tests`.
 #![cfg(feature = "device-tests")]
+// needless_range_loop: these host reference models index several parallel buffers by one i; iterator rewrites would hide the element-wise correspondence with the kernel under test.
+#![allow(clippy::needless_range_loop)]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{

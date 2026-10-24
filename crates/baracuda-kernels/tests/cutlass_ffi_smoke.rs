@@ -16,6 +16,8 @@
 //! Gated behind the `device-tests` feature — requires a real CUDA device.
 
 #![allow(
+// needless_range_loop: these host reference models index several parallel buffers by one i; iterator rewrites would hide the element-wise correspondence with the kernel under test.
+#![allow(clippy::needless_range_loop)]
     unused_mut,
     reason = "test bindings are kept uniform across cases; some are never mutated"
 )]
@@ -70,10 +72,9 @@ fn gemm_f32_simt_rrr_ffi() {
         b_host[(i * n + i) as usize] = 1.0;
     }
 
-    let mut dev_a = DeviceBuffer::from_slice(&ctx, &a_host).expect("up a");
-    let mut dev_b = DeviceBuffer::from_slice(&ctx, &b_host).expect("up b");
-    let mut dev_d: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, (m * n) as usize).expect("alloc d");
+    let dev_a = DeviceBuffer::from_slice(&ctx, &a_host).expect("up a");
+    let dev_b = DeviceBuffer::from_slice(&ctx, &b_host).expect("up b");
+    let dev_d: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (m * n) as usize).expect("alloc d");
 
     // Query workspace.
     let ws_bytes = unsafe { baracuda_kernels_gemm_f32_simt_rrr_sm80_workspace_size(m, n, k) };
@@ -152,11 +153,10 @@ fn gemm_bias_f32_simt_rrr_ffi() {
     // Bias of length N — broadcast across all rows.
     let bias_host: Vec<f32> = (0..n).map(|i| (i as f32) + 0.5).collect();
 
-    let mut dev_a = DeviceBuffer::from_slice(&ctx, &a_host).expect("up a");
-    let mut dev_b = DeviceBuffer::from_slice(&ctx, &b_host).expect("up b");
-    let mut dev_bias = DeviceBuffer::from_slice(&ctx, &bias_host).expect("up bias");
-    let mut dev_d: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, (m * n) as usize).expect("alloc d");
+    let dev_a = DeviceBuffer::from_slice(&ctx, &a_host).expect("up a");
+    let dev_b = DeviceBuffer::from_slice(&ctx, &b_host).expect("up b");
+    let dev_bias = DeviceBuffer::from_slice(&ctx, &bias_host).expect("up bias");
+    let dev_d: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (m * n) as usize).expect("alloc d");
 
     let ws_bytes = unsafe { baracuda_kernels_gemm_bias_f32_simt_rrr_sm80_workspace_size(m, n, k) };
     let mut ws_buf: Option<DeviceBuffer<u8>> = if ws_bytes > 0 {
@@ -247,9 +247,9 @@ fn gemm_batched_f16_rcr_ffi() {
             b_host[off] = f16::from_f32(1.0);
         }
     }
-    let mut dev_a = DeviceBuffer::from_slice(&ctx, &a_host).expect("up a");
-    let mut dev_b = DeviceBuffer::from_slice(&ctx, &b_host).expect("up b");
-    let mut dev_d: DeviceBuffer<f16> =
+    let dev_a = DeviceBuffer::from_slice(&ctx, &a_host).expect("up a");
+    let dev_b = DeviceBuffer::from_slice(&ctx, &b_host).expect("up b");
+    let dev_d: DeviceBuffer<f16> =
         DeviceBuffer::zeros(&ctx, (batch_count * m * n) as usize).expect("alloc d");
 
     let ws_bytes =

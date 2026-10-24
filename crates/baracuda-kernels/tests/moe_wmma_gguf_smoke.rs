@@ -199,7 +199,9 @@ fn moe_wmma_gguf_q8_0_small_fixture() {
         })
         .expect("dl");
     let got_f32: Vec<f32> = got_f16_bits
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|c| {
             let lo = c[0].to_le_bytes();
             let hi = c[1].to_le_bytes();

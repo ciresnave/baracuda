@@ -89,15 +89,10 @@ impl Op {
 // For division, `b` is biased away from zero so the result stays finite
 // for every cell.
 
-fn gen_a_f32(non_div: bool) -> Vec<f32> {
+fn gen_a_f32(_non_div: bool) -> Vec<f32> {
     // Range roughly [-8, 7.875]; small magnitudes so f16/bf16 ULP errors
     // stay below 1 across all 8k cells.
-    (0..N_DIM)
-        .map(|i| {
-            let v = (i as f32) * 0.125 - 8.0;
-            if non_div { v } else { v }
-        })
-        .collect()
+    (0..N_DIM).map(|i| (i as f32) * 0.125 - 8.0).collect()
 }
 
 fn gen_b_f32_safe() -> Vec<f32> {
