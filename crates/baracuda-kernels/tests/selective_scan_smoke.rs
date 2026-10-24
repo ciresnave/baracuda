@@ -502,7 +502,7 @@ fn selective_scan_with_last_state_saves_final_h() {
     let mut ref_last = vec![0.0f32; BSZ * DIM * DSTATE];
     for bi in 0..BSZ {
         for di in 0..DIM {
-            let mut h = vec![0.0f32; DSTATE];
+            let mut h = [0.0f32; DSTATE];
             for t in 0..L {
                 let dt = delta[bi * L * DIM + t * DIM + di];
                 let u_t = u[bi * L * DIM + t * DIM + di];

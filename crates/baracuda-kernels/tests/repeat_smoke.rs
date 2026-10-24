@@ -23,7 +23,7 @@ fn repeat_1d() {
     let output_shape = [12i32];
     let host_x: Vec<f32> = (0..4).map(|i| i as f32).collect();
     // Expected: [0,1,2,3, 0,1,2,3, 0,1,2,3]
-    let mut expected = vec![0f32; 12];
+    let mut expected = [0f32; 12];
     for i in 0..12 {
         expected[i] = host_x[i % 4];
     }
@@ -71,7 +71,7 @@ fn repeat_2d() {
     let in_numel = 6;
     let host_x: Vec<f32> = (0..in_numel).map(|i| (i as f32) * 0.5).collect();
     // For each output coord (i, j): input coord = (i % 2, j % 3).
-    let mut expected = vec![0f32; 36];
+    let mut expected = [0f32; 36];
     for i in 0..6 {
         for j in 0..6 {
             let in_i = i % 2;

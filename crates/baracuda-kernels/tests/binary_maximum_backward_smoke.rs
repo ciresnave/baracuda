@@ -43,7 +43,7 @@ fn build_inputs_f32(numel: usize) -> (Vec<f32>, Vec<f32>, Vec<f32>) {
         let m = i % 8;
         let base = (i as f32) * 0.125 - 1.0;
         match m {
-            0 | 1 | 2 | 3 => {
+            0..=3 => {
                 // a > b
                 host_a.push(base + 1.0);
                 host_b.push(base);

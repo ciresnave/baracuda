@@ -391,7 +391,7 @@ fn run_fa2_bw_bf16(dk: i32, is_causal: bool) {
     let dvb = DeviceBuffer::from_slice(&ctx, &v_host).expect("up v");
     let ddy = DeviceBuffer::from_slice(&ctx, &dy_host).expect("up dy");
     let mut dy_out: DeviceBuffer<bf16> = DeviceBuffer::zeros(&ctx, n_qkv).expect("y");
-    let mut dlse_f32: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, n_lse_f32).expect("lse_f32");
+    let dlse_f32: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, n_lse_f32).expect("lse_f32");
 
     // FW (bf16 variant).
     let mut dummy_lse_t_mut: DeviceBuffer<bf16> =

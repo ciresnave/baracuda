@@ -75,7 +75,7 @@ fn run_f32_contig<const N: usize>(shape: [i32; N]) {
     let numel: usize = shape.iter().map(|&d| d as usize).product();
 
     let host_x: Vec<f32> = (0..numel)
-        .map(|i| (((i % 100) as f32) * 0.05 - 2.0))
+        .map(|i| ((i % 100) as f32) * 0.05 - 2.0)
         .collect();
     let expected: Vec<f32> = host_x.iter().map(|x| (*x).exp()).collect();
 
@@ -112,7 +112,7 @@ fn run_f16_contig_3d(shape: [i32; 3]) {
     let numel: usize = shape.iter().map(|&d| d as usize).product();
 
     let host_x: Vec<f16> = (0..numel)
-        .map(|i| f16::from_f32((((i % 100) as f32) * 0.05 - 2.0)))
+        .map(|i| f16::from_f32(((i % 100) as f32) * 0.05 - 2.0))
         .collect();
     let host_expected: Vec<f16> = host_x
         .iter()
@@ -152,7 +152,7 @@ fn run_bf16_contig_3d(shape: [i32; 3]) {
     let numel: usize = shape.iter().map(|&d| d as usize).product();
 
     let host_x: Vec<bf16> = (0..numel)
-        .map(|i| bf16::from_f32((((i % 100) as f32) * 0.05 - 2.0)))
+        .map(|i| bf16::from_f32(((i % 100) as f32) * 0.05 - 2.0))
         .collect();
     let host_expected: Vec<bf16> = host_x
         .iter()
@@ -192,7 +192,7 @@ fn run_f64_contig_3d(shape: [i32; 3]) {
     let numel: usize = shape.iter().map(|&d| d as usize).product();
 
     let host_x: Vec<f64> = (0..numel)
-        .map(|i| (((i % 100) as f64) * 0.05 - 2.0))
+        .map(|i| ((i % 100) as f64) * 0.05 - 2.0)
         .collect();
     let expected: Vec<f64> = host_x.iter().map(|x| (*x).exp()).collect();
 
@@ -233,7 +233,7 @@ fn exp_f32_strided_transposed() {
     let n = N_DIM as i32;
 
     let x_buf: Vec<f32> = (0..(N_DIM * M))
-        .map(|i| (((i % 100) as f32) * 0.05 - 2.0))
+        .map(|i| ((i % 100) as f32) * 0.05 - 2.0)
         .collect();
     let x_shape = [m, n];
     let x_stride = [1i64, M as i64]; // transposed

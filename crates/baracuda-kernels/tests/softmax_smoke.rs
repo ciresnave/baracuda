@@ -195,8 +195,8 @@ fn softmax_f16_2d_axis_1() {
     let expected_f32 = {
         // CPU softmax over a 2-D shape (reuse 3-D helper with a leading 1).
         let three_d_shape = [1i32, shape[0], shape[1]];
-        let h = host_softmax_f32(three_d_shape, 2, &host_x_f32);
-        h
+
+        host_softmax_f32(three_d_shape, 2, &host_x_f32)
     };
     let host_x: Vec<f16> = host_x_f32.iter().map(|&v| f16::from_f32(v)).collect();
 

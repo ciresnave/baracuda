@@ -31,10 +31,10 @@ fn setup() -> (Context, Stream) {
 }
 
 fn cpu_ref_f32(x: f32) -> f32 {
-    { (((x + 3.0) * (1.0 / 6.0)).max(0.0)).min(1.0) }
+    (((x + 3.0) * (1.0 / 6.0)).max(0.0)).min(1.0)
 }
 fn cpu_ref_f64(x: f64) -> f64 {
-    { (((x + 3.0) * (1.0 / 6.0)).max(0.0)).min(1.0) }
+    (((x + 3.0) * (1.0 / 6.0)).max(0.0)).min(1.0)
 }
 
 fn assert_close_f32(got: f32, expected: f32, idx: usize) {

@@ -33,7 +33,7 @@ fn scatter_add_backward_via_gather_f32_2d_dim1() {
     // dout is the upstream gradient w.r.t. the FW scatter_add output.
     let host_dout: Vec<f32> = (0..(3 * 6)).map(|i| (i as f32) * 0.5 - 4.0).collect();
     // Reference: dupdates[i, j] = dout[i, idx[i, j]].
-    let mut expected = vec![0f32; 3 * 4];
+    let mut expected = [0f32; 3 * 4];
     for i in 0..3usize {
         for j in 0..4usize {
             let k = host_idx[i * 4 + j] as usize;

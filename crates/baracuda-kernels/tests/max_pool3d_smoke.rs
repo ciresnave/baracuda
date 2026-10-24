@@ -85,7 +85,7 @@ fn max_pool3d_f32() {
 
     let mut got_dx = vec![0f32; 8];
     dev_dx.copy_to_host(&mut got_dx).expect("dl dx");
-    let mut exp_dx = vec![0f32; 8];
+    let mut exp_dx = [0f32; 8];
     exp_dx[7] = 1.0; // value 8 is at the last position
     for i in 0..8 {
         let t = (exp_dx[i].abs() * 16.0 * f32::EPSILON).max(16.0 * f32::EPSILON);

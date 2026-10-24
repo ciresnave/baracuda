@@ -33,7 +33,7 @@ fn flip_2d_axis_1_f16() {
     let host_x: Vec<f16> = (0..32)
         .map(|i| f16::from_f32(((i % 21) as f32) - 10.0))
         .collect();
-    let mut expected = vec![f16::from_f32(0.0); 32];
+    let mut expected = [f16::from_f32(0.0); 32];
     for i in 0..4 {
         for j in 0..8 {
             expected[(i * 8 + j) as usize] = host_x[(i * 8 + (7 - j)) as usize];
@@ -75,7 +75,7 @@ fn flip_2d_axis_1_bf16() {
     let host_x: Vec<bf16> = (0..32)
         .map(|i| bf16::from_f32(((i % 21) as f32) - 10.0))
         .collect();
-    let mut expected = vec![bf16::from_f32(0.0); 32];
+    let mut expected = [bf16::from_f32(0.0); 32];
     for i in 0..4 {
         for j in 0..8 {
             expected[(i * 8 + j) as usize] = host_x[(i * 8 + (7 - j)) as usize];

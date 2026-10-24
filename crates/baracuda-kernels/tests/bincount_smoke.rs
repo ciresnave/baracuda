@@ -155,7 +155,7 @@ fn bincount_i32_all_in_range_dense() {
     let num_bins: i32 = 64;
     // Stress test: every bin gets exactly 3 entries.
     let host_x: Vec<i32> = (0..num_bins)
-        .flat_map(|b| std::iter::repeat(b).take(3))
+        .flat_map(|b| std::iter::repeat_n(b, 3))
         .collect();
     let expected: Vec<i32> = vec![3; num_bins as usize];
 

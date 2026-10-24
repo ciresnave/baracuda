@@ -617,7 +617,7 @@ fn build_matrix_complex32(b: usize, m: usize, n: usize, seed: u32) -> Vec<Comple
     // genuinely complex (non-zero imaginary part).
     let real = build_matrix_f32(b, m, n, seed);
     let imag = build_matrix_f32(b, m, n, seed.wrapping_add(0x5151_5151));
-    for (r, i) in real.into_iter().zip(imag.into_iter()) {
+    for (r, i) in real.into_iter().zip(imag) {
         out.push(Complex64::new(r, i));
     }
     out

@@ -29,7 +29,7 @@ fn fftshift_even_n_f32() {
     let n: i32 = 4;
     let batch: i32 = 1;
     let x_host = vec![0f32, 1.0, 2.0, 3.0];
-    let mut dev_x = DeviceBuffer::from_slice(&ctx, &x_host).expect("upload");
+    let dev_x = DeviceBuffer::from_slice(&ctx, &x_host).expect("upload");
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 4).expect("alloc y");
 
     let shape = [batch, n];
@@ -61,7 +61,7 @@ fn ifftshift_even_n_f32() {
     let n: i32 = 4;
     let batch: i32 = 1;
     let x_host = vec![0f32, 1.0, 2.0, 3.0];
-    let mut dev_x = DeviceBuffer::from_slice(&ctx, &x_host).expect("upload");
+    let dev_x = DeviceBuffer::from_slice(&ctx, &x_host).expect("upload");
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 4).expect("alloc y");
 
     let shape = [batch, n];
@@ -188,7 +188,7 @@ fn fftshift_batched_complex32() {
         Complex64::new(12.0, 1.0),
         Complex64::new(13.0, 1.0),
     ];
-    let mut dev_x = DeviceBuffer::from_slice(&ctx, &x_host).expect("upload");
+    let dev_x = DeviceBuffer::from_slice(&ctx, &x_host).expect("upload");
     let mut dev_y: DeviceBuffer<Complex64> = DeviceBuffer::zeros(&ctx, 8).expect("alloc y");
 
     let shape = [batch, n];

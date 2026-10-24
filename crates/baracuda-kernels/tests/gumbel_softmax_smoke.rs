@@ -68,7 +68,7 @@ fn gumbel_softmax_f32_2d_axis_1() {
         for j in 0..6 {
             let v = got[row * 6 + j];
             assert!(
-                v >= 0.0 && v <= 1.0,
+                (0.0..=1.0).contains(&v),
                 "f32 gumbel out of [0,1] @ ({row},{j}) = {v}"
             );
             sum += v;
@@ -179,7 +179,7 @@ fn gumbel_softmax_f64_2d_axis_0() {
         for row in 0..5 {
             let v = got[row * 4 + col];
             assert!(
-                v >= 0.0 && v <= 1.0,
+                (0.0..=1.0).contains(&v),
                 "f64 gumbel out of [0,1] @ ({row},{col})"
             );
             sum += v;
@@ -232,7 +232,7 @@ fn gumbel_softmax_f16_2d_axis_1() {
         for j in 0..5 {
             let v = got[row * 5 + j].to_f32();
             assert!(
-                v >= -1e-3 && v <= 1.0 + 1e-3,
+                (-1e-3..=1.0 + 1e-3).contains(&v),
                 "f16 gumbel out of [0,1] @ ({row},{j}) = {v}"
             );
             sum += v;
@@ -287,7 +287,7 @@ fn gumbel_softmax_bf16_2d_axis_1() {
         for j in 0..5 {
             let v = got[row * 5 + j].to_f32();
             assert!(
-                v >= -1e-2 && v <= 1.0 + 1e-2,
+                (-1e-2..=1.0 + 1e-2).contains(&v),
                 "bf16 gumbel out of [0,1] @ ({row},{j}) = {v}"
             );
             sum += v;

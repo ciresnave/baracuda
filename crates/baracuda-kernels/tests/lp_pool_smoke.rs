@@ -12,9 +12,9 @@
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    ElementKind, LpPool1dBackwardPlan, LpPool1dBwArgs, LpPool1dDescriptor, LpPool1dFwArgs,
-    LpPool1dPlan, LpPool2dBackwardPlan, LpPool2dBwArgs, LpPool2dDescriptor, LpPool2dFwArgs,
-    LpPool2dPlan, PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
+    ElementKind, LpPool1dDescriptor, LpPool1dFwArgs, LpPool1dPlan, LpPool2dBackwardPlan,
+    LpPool2dBwArgs, LpPool2dDescriptor, LpPool2dFwArgs, LpPool2dPlan, PlanPreference, TensorMut,
+    TensorRef, Workspace, contiguous_stride,
 };
 use half::f16;
 

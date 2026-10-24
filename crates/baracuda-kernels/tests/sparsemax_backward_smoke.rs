@@ -66,7 +66,7 @@ fn sparsemax_bw_f32_known() {
     //                                            = [(a-b)/2, (b-a)/2, 0].
     let host_y = vec![0.5_f32, 0.5, 0.0];
     let host_dy = vec![3.0_f32, 1.0, 2.0];
-    let expected = vec![1.0_f32, -1.0, 0.0];
+    let expected = [1.0_f32, -1.0, 0.0];
 
     let dev_y = DeviceBuffer::from_slice(&ctx, &host_y).expect("up y");
     let dev_dy = DeviceBuffer::from_slice(&ctx, &host_dy).expect("up dy");
