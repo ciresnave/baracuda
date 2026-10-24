@@ -31,8 +31,10 @@
 
 #![cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
 #![cfg(feature = "device-tests")]
-// approx_constant: `3.14`/`3.14159` are arbitrary test values, not pi; std::f32::consts::PI would change the data under test.
-#![allow(clippy::approx_constant)]
+#![allow(
+    clippy::approx_constant,
+    reason = "`3.14`/`3.14159` are arbitrary test values, not pi; std::f32::consts::PI would change the data under test."
+)]
 
 use core::ffi::c_void;
 

@@ -8,8 +8,10 @@
 //! precision isn't the bottleneck in LLM training; the plan supports it
 //! for API completeness).
 #![cfg(feature = "device-tests")]
-// needless_range_loop: these host reference models index several parallel buffers by one i; iterator rewrites would hide the element-wise correspondence with the kernel under test.
-#![allow(clippy::needless_range_loop)]
+#![allow(
+    clippy::needless_range_loop,
+    reason = "these host reference models index several parallel buffers by one i; iterator rewrites would hide the element-wise correspondence with the kernel under test."
+)]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{

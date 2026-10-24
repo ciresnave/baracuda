@@ -2,8 +2,10 @@
 //! (Phase 9 Category T). PyTorch defaults: bilinear, zeros pad,
 //! `align_corners=false`. gated behind the `device-tests` feature.
 #![cfg(feature = "device-tests")]
-// erasing_op: `0 * stride` is a spelled-out layout term (integer index arithmetic) kept so the expression reads like the layout under test; it is zero by construction.
-#![allow(clippy::erasing_op)]
+#![allow(
+    clippy::erasing_op,
+    reason = "`0 * stride` is a spelled-out layout term (integer index arithmetic) kept so the expression reads like the layout under test; it is zero by construction."
+)]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{

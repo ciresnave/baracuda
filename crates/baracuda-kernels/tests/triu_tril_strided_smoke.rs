@@ -16,10 +16,14 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test triu_tril_strided_smoke --features device-tests`.
 #![cfg(feature = "device-tests")]
-// needless_range_loop: these host reference models index several parallel buffers by one i; iterator rewrites would hide the element-wise correspondence with the kernel under test.
-#![allow(clippy::needless_range_loop)]
-// identity_op: `1 * stride` / `+ 0` are spelled-out layout terms (integer index arithmetic) kept so the expression reads like the layout under test; removing them changes no value.
-#![allow(clippy::identity_op)]
+#![allow(
+    clippy::needless_range_loop,
+    reason = "these host reference models index several parallel buffers by one i; iterator rewrites would hide the element-wise correspondence with the kernel under test."
+)]
+#![allow(
+    clippy::identity_op,
+    reason = "`1 * stride` / `+ 0` are spelled-out layout terms (integer index arithmetic) kept so the expression reads like the layout under test; removing them changes no value."
+)]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{

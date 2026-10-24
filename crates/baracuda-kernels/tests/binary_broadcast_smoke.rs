@@ -12,10 +12,14 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test binary_broadcast_smoke --features device-tests`.
 #![cfg(feature = "device-tests")]
-// needless_range_loop: these host reference models index several parallel buffers by one i; iterator rewrites would hide the element-wise correspondence with the kernel under test.
-#![allow(clippy::needless_range_loop)]
-// approx_constant: `3.14`/`3.14159` are arbitrary test values, not pi; std::f32::consts::PI would change the data under test.
-#![allow(clippy::approx_constant)]
+#![allow(
+    clippy::needless_range_loop,
+    reason = "these host reference models index several parallel buffers by one i; iterator rewrites would hide the element-wise correspondence with the kernel under test."
+)]
+#![allow(
+    clippy::approx_constant,
+    reason = "`3.14`/`3.14159` are arbitrary test values, not pi; std::f32::consts::PI would change the data under test."
+)]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{

@@ -11,8 +11,10 @@
 //! Tolerance: matches the contig smoke test (Q8_0 ≈ 1e-2 relative due
 //! to fp16 scale round-trip; Q8_K ≈ 1e-3 since it has an f32 scale).
 #![cfg(feature = "device-tests")]
-// needless_range_loop: these host reference models index several parallel buffers by one i; iterator rewrites would hide the element-wise correspondence with the kernel under test.
-#![allow(clippy::needless_range_loop)]
+#![allow(
+    clippy::needless_range_loop,
+    reason = "these host reference models index several parallel buffers by one i; iterator rewrites would hide the element-wise correspondence with the kernel under test."
+)]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{

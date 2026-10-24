@@ -9,8 +9,10 @@
 //! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 --features device-tests`.
 #![cfg(feature = "device-tests")]
-// neg_cmp_op_on_partial_ord: !(err <= tol) is deliberately true for NaN so a NaN result fails the check; err > tol would let it pass.
-#![allow(clippy::neg_cmp_op_on_partial_ord)]
+#![allow(
+    clippy::neg_cmp_op_on_partial_ord,
+    reason = "!(err <= tol) is deliberately true for NaN so a NaN result fails the check; err > tol would let it pass."
+)]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
