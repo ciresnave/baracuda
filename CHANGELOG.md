@@ -16,6 +16,13 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.19 - 2026-10-24
+
+### Changed
+
+- `.gitattributes`: workspace-wide `*.cu text eol=lf` (ROADMAP SA-19); previously only the
+  emitter goldens were pinned. Blobs were already LF, so no content change.
+
 ## 0.1.0-alpha.18 - 2026-10-24
 
 ### Changed
