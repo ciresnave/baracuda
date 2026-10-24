@@ -23,7 +23,7 @@ use unpopped::ir::{
     is_admissible_int_reduction_operand, is_bit_move_fold_output, is_bit_move_row_reduce_output,
     is_bit_or_sign_move, narrow_sign_masks,
 };
-use unpopped::plan::{KernelPlan, ReduceAxisClass, RrRole, Schedule, rr_role};
+use unpopped::plan::{HalfArith, KernelPlan, ReduceAxisClass, RrRole, Schedule, rr_role};
 use unpopped_vocab::structure_key::LayoutOrder;
 use unpopped_vocab::{AxisMask, Contiguity, ElementKind, OperandKey};
 
@@ -439,7 +439,7 @@ impl Backend for Cuda {
                         // gated to Input-leaf bodies (a Const/Param participates in
                         // double-promoted math on the scalar path, which a pair splat
                         // would change).
-                        Some(pk) if body_packs(plan.body) => emit_vectorized_packed(plan, &pk),
+                        Some(pk) if bodies_pack(plan) => emit_vectorized_packed(plan, &pk),
                         // No packed path (or a const/param body): scalar fallback —
                         // still correct, still the narrower-dtype bandwidth win.
                         _ => emit_scalar(plan, ctype),
@@ -541,8 +541,13 @@ fn vector_type(dt: ElementKind, width: u32) -> Option<(&'static str, &'static [&
 /// (byte-identical decision); a multi-output packed lowering requires all bodies
 /// to pack, else the whole DAG falls back to the scalar path (one body with a
 /// `Const`/`Param` disqualifies the pair splat, same rule as today).
+///
+/// A target whose [`KernelPlan::half_arith`] is [`HalfArith::ViaF32`] (sm_61: fp16
+/// runs below the fp32 rate) never packs: the scalar kernel promotes each lane to
+/// f32, which is the decision Unpopped made for that target (ROADMAP SA-12).
+/// [`Cuda::effective_count_width`] reads this too, so the ABI contract follows.
 fn bodies_pack(plan: &KernelPlan<'_>) -> bool {
-    plan.output_bodies().iter().all(|b| body_packs(b))
+    plan.half_arith() == HalfArith::Native && plan.output_bodies().iter().all(|b| body_packs(b))
 }
 
 /// Pair-lane field names for the per-kernel packed vector struct.
@@ -8866,6 +8871,26 @@ mod tests {
         assert!(k.source.contains("vo.x = (v0.x + v1.x);"));
         assert!(k.source.contains("vo.y = (v0.y + v1.y);"));
         assert!(!k.source.contains("vo.z")); // only two lanes
+    }
+
+    #[test]
+    fn f16_on_sm61_computes_via_f32_not_packed_half2() {
+        // sm_61 fp16 is slower than fp32, so `half_arith()` is ViaF32: the V8 key
+        // must lower through the scalar kernel (f32 math), not `__half2` pairs, and
+        // the contract's count unit must say elements, not vectors.
+        let a = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::F16, 256);
+        let t = unpopped_vocab::TargetId::parse("cuda:sm61").unwrap();
+        let key = structure_key(OpCategory::BinaryElementwise, &[a, a, a], t);
+        let k = generate(&add_op(&[ElementKind::F16]), &key, &Cuda);
+        assert!(!k.source.contains("__half2 "), "{}", k.source);
+        assert!(!k.source.contains("_vec {"), "{}", k.source);
+        // positive control: the sm89 key for the same op still packs.
+        let native = generate(
+            &add_op(&[ElementKind::F16]),
+            &binary_key(ElementKind::F16),
+            &Cuda,
+        );
+        assert!(native.source.contains("__half2 tmp0"));
     }
 
     #[test]
