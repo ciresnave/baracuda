@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-nvrtc"
-version = "0.1.0-alpha.8"
+version = "0.1.0-alpha.9"
 description = "Safe Rust wrappers for NVIDIA NVRTC (compile CUDA C++ to PTX at runtime)."
 edition.workspace = true
 license.workspace = true

@@ -127,7 +127,7 @@ fn cpu_int4_gemm_rrr_identity(
 // Test harness — generic over T ∈ {S4, U4}
 // ============================================================================
 
-fn run_int4_rrr_identity<T: IntElement + Default>(
+fn run_int4_rrr_identity<T: IntElement + Default + 'static>(
     m: i32,
     n: i32,
     k: i32,
@@ -137,9 +137,7 @@ fn run_int4_rrr_identity<T: IntElement + Default>(
     abs_max_a: i32,
     abs_max_b: i32,
     out_max_abs: f32,
-) where
-    T: 'static,
-{
+) {
     init().expect("driver init");
     let device = Device::get(0).expect("device 0");
     let ctx = Context::new(&device).expect("context");

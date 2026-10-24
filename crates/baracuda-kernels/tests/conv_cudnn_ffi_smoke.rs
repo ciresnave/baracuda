@@ -67,7 +67,7 @@ impl Conv2dDims {
             (self.w_in + 2 * self.pad_w - w_eff) / self.stride_w + 1,
         )
     }
-    fn to_descriptor(&self, elem: ElementKind) -> Conv2dDescriptor {
+    fn descriptor(&self, elem: ElementKind) -> Conv2dDescriptor {
         Conv2dDescriptor::new(
             self.n,
             self.c_in,
@@ -121,7 +121,7 @@ fn rust_plan_conv2d_fw_f32(
     let (h_out, w_out) = d.output_dims();
     let y_numel = (d.n * d.c_out * h_out * w_out) as usize;
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(ctx, y_numel).expect("alloc y");
-    let desc = d.to_descriptor(ElementKind::F32);
+    let desc = d.descriptor(ElementKind::F32);
     let plan = Conv2dPlan::<f32>::select(stream, &desc, PlanPreference::default()).expect("sel");
     let ws_bytes = plan.query_fw_workspace_size(stream).expect("ws");
     let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(ctx, ws_bytes.max(1)).expect("alloc ws");
@@ -225,7 +225,7 @@ fn ffi_conv2d_f32_bw_data_matches_plan() {
     let dev_w = DeviceBuffer::from_slice(&ctx, &w).expect("up w");
     let dev_dy = DeviceBuffer::from_slice(&ctx, &dy).expect("up dy");
     let mut dev_dx: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, dx_numel).expect("alloc dx");
-    let desc = d.to_descriptor(ElementKind::F32);
+    let desc = d.descriptor(ElementKind::F32);
     let plan = Conv2dPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let ws_bytes = plan.query_bw_data_workspace_size(&stream).expect("ws");
     let mut dev_ws: DeviceBuffer<u8> =
@@ -308,7 +308,7 @@ fn ffi_conv2d_f32_bw_filter_matches_plan() {
     let dev_x = DeviceBuffer::from_slice(&ctx, &x).expect("up x");
     let dev_dy = DeviceBuffer::from_slice(&ctx, &dy).expect("up dy");
     let mut dev_dw: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, dw_numel).expect("alloc dw");
-    let desc = d.to_descriptor(ElementKind::F32);
+    let desc = d.descriptor(ElementKind::F32);
     let plan = Conv2dPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let ws_bytes = plan.query_bw_filter_workspace_size(&stream).expect("ws");
     let mut dev_ws: DeviceBuffer<u8> =

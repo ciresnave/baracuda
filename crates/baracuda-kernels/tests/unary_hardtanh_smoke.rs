@@ -10,6 +10,8 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \`
 //!   `--test unary_hardtanh_smoke --features device-tests`.
 #![cfg(feature = "device-tests")]
+// manual_clamp: the host reference mirrors the device fmaxf/fminf chain; for NaN input max(lo).min(hi) yields a bound, f32::clamp would propagate NaN.
+#![allow(clippy::manual_clamp)]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{

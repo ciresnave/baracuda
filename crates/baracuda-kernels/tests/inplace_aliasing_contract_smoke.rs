@@ -25,6 +25,8 @@
 //!    --test inplace_aliasing_contract_smoke -- --include-ignored`.
 
 #![cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+// needless_range_loop: these host reference models index several parallel buffers by one i; iterator rewrites would hide the element-wise correspondence with the kernel under test.
+#![allow(clippy::needless_range_loop)]
 
 #[cfg(feature = "device-tests")]
 use core::ffi::c_void;

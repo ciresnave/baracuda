@@ -29,9 +29,7 @@ fn fmin_ref_f32(a: f32, b: f32) -> f32 {
         a
     } else if a.is_nan() {
         b
-    } else if b.is_nan() {
-        a
-    } else if a < b {
+    } else if b.is_nan() || a < b {
         a
     } else {
         b
@@ -43,9 +41,7 @@ fn fmin_ref_f64(a: f64, b: f64) -> f64 {
         a
     } else if a.is_nan() {
         b
-    } else if b.is_nan() {
-        a
-    } else if a < b {
+    } else if b.is_nan() || a < b {
         a
     } else {
         b
