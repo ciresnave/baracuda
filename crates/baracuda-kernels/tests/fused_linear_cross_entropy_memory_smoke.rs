@@ -11,8 +11,8 @@
 //!   1024·32768·4 = 128 MiB **just for logits**.
 //! - FLCE: only `[chunk_size, V]` is materialized at a time. With
 //!   the Liger heuristic at BT=1024, V=32K, H=512:
-//!     inc_factor = ceildiv(V, H) = 64,
-//!     chunk_size = next_pow2(ceildiv(BT, inc_factor)) = next_pow2(16) = 16
+//!   inc_factor = ceildiv(V, H) = 64,
+//!   chunk_size = next_pow2(ceildiv(BT, inc_factor)) = next_pow2(16) = 16
 //!   so the per-chunk scratch is 16·32768·4 = 2 MiB — a **64× reduction**.
 //!
 //! This test uses `mem_get_info()` to read the device's free memory

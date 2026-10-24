@@ -403,7 +403,7 @@ unsafe fn setup_nd(
             res.pool_desc,
             mode,
             CUDNN_NOT_PROPAGATE_NAN,
-            nb_pool_dims as i32,
+            nb_pool_dims,
             win.as_ptr(),
             pad.as_ptr(),
             str_.as_ptr(),

@@ -2,8 +2,8 @@
 //! (bitsandbytes NF4 vendor).
 //!
 //! Quantize → pack → device-dequant → host-dequant round-trip on a
-//! small `[N, K]` weight matrix. Verifies that the GPU codebook lookup
-//! + absmax scaling matches the host reference bit-for-bit (modulo the
+//! small `[N, K]` weight matrix. Verifies that the GPU codebook lookup +
+//! absmax scaling matches the host reference bit-for-bit (modulo the
 //! T_act cast — we test the f32 dequant path here to keep the
 //! comparison exact).
 //!

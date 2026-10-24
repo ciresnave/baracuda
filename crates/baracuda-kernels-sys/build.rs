@@ -137,7 +137,7 @@ fn probe_install_root(root: &Path) -> Option<String> {
 /// Walk a Windows `C:\Program Files\NVIDIA\CUDNN` root, pick the
 /// highest cuDNN version, then the highest CUDA-toolkit sub-dir, then
 /// return the `x64` lib path inside.
-#[cfg(feature = "cudnn")]
+#[cfg(all(feature = "cudnn", target_os = "windows"))]
 fn probe_windows_versioned_root(std_root: &Path) -> Option<String> {
     let mut versions: Vec<PathBuf> = std::fs::read_dir(std_root)
         .ok()?

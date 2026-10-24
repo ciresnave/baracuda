@@ -16,6 +16,10 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.3 - 2026-10-24
+
+No API change. `baracuda-kernels-sys`: six cuDNN conv facade macros now carry a real `# Safety` doc section (were `# Safety:` inline), one redundant cast dropped, and `probe_windows_versioned_root` in `build.rs` is gated to Windows (dead code on other hosts with `cudnn`). CI gates clippy for the `-sys` crates with `--all-features --tests` and for `baracuda-kernels --tests`.
+
 ## 0.1.0-alpha.2 - 2026-10-24
 
 `baracuda-cuda-seam`: `fuel-kernel-seam` and `fuel-kernel-seam-types` `0.23.0` -> `0.24.0` (the 0.24 seam crates no longer depend on `baracuda-kernels-types`). No API change; no ABI change.

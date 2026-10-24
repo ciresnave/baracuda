@@ -6,8 +6,8 @@
 //!
 //!   - (a) U32 / I64 cond × {f32, f16, bf16, f64} — 1 contig per cell.
 //!   - (b) U8 / U32 / I64 cond × {u8, i8, u32, i16, i32, i64} — at
-//!         least one contig per cond dtype (mixed value coverage), plus
-//!         one strided case per cond dtype.
+//!     least one contig per cond dtype (mixed value coverage), plus
+//!     one strided case per cond dtype.
 //!   - (c) U8-cond × Fp8E4M3FN — single contig (treated as raw u8 bytes).
 //!
 //! Validation is bit-exact against a Rust CPU reference because the op

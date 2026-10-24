@@ -18,8 +18,8 @@
 //! the identical `% 64 == 0` rule -- not the sidecar's looser one. This
 //! is independently confirmed by the Rust plan layer: `GgufMmvqBatchedPlan
 //! ::select` (`crates/baracuda-kernels/src/quantize/gguf/mmvq_batched.rs`)
-//! already declines exactly this way via its own `DMMV_ITER_STRIDE_COLS`
-//! + `uses_dmmv_stride` (documented there against #127) -- the raw-FFI
+//! already declines exactly this way via its own `DMMV_ITER_STRIDE_COLS` +
+//! `uses_dmmv_stride` (documented there against #127) -- the raw-FFI
 //! `_can_implement` sidecars were simply out of sync with the plan layer's
 //! already-correct, already-shipped rule. This fix brings the `.cu` layer
 //! in line with the `.rs` layer rather than inventing a new rule.
