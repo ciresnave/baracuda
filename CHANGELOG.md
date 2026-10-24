@@ -16,6 +16,10 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.15 - 2026-10-24
+
+`baracuda-cuda-seam` moves `fuel-kernel-seam` and `fuel-kernel-seam-types` from 0.24.0 to 0.25.10 (the registry release Fuel published; both crates stay at the same version so the graph holds one copy of the types crate). Publish set: `baracuda-cuda-seam` alone.
+
 ## 0.1.0-alpha.14 - 2026-10-24
 
 No API or behaviour change; tests only. The 74 file-level `#![allow(clippy::...)]` in `baracuda-kernels/tests` (needless_range_loop, identity_op, erasing_op, approx_constant, neg_cmp_op_on_partial_ord) now carry their justification as `reason = "..."` (same text, taken from the comment above each), which CodeRipper 0.9.20 reads; it reported all 74 as "has no reason".
