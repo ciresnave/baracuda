@@ -20,8 +20,10 @@
     reason = "test bindings are kept uniform across cases; some are never mutated"
 )]
 #![cfg(feature = "device-tests")]
-// needless_range_loop: these host reference models index several parallel buffers by one i; iterator rewrites would hide the element-wise correspondence with the kernel under test.
-#![allow(clippy::needless_range_loop)]
+#![allow(
+    clippy::needless_range_loop,
+    reason = "these host reference models index several parallel buffers by one i; iterator rewrites would hide the element-wise correspondence with the kernel under test."
+)]
 
 use core::ffi::c_void;
 

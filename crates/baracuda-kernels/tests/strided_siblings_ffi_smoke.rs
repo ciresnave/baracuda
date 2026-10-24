@@ -18,8 +18,10 @@
 
 #![cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
 #![cfg(feature = "device-tests")]
-// identity_op: `1 * stride` / `+ 0` are spelled-out layout terms (integer index arithmetic) kept so the expression reads like the layout under test; removing them changes no value.
-#![allow(clippy::identity_op)]
+#![allow(
+    clippy::identity_op,
+    reason = "`1 * stride` / `+ 0` are spelled-out layout terms (integer index arithmetic) kept so the expression reads like the layout under test; removing them changes no value."
+)]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels_sys as sys;
