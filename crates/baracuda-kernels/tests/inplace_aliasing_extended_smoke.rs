@@ -67,7 +67,7 @@ fn cast_f32_to_i32_aliasing_same_byte_width_safe() {
             dev_y.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "ref cast f32→i32");
@@ -86,7 +86,7 @@ fn cast_f32_to_i32_aliasing_same_byte_width_safe() {
             p as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "aliased cast f32→i32");
@@ -134,7 +134,7 @@ fn where_f32_aliasing_a_eq_y_safe() {
             dev_y.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -156,7 +156,7 @@ fn where_f32_aliasing_a_eq_y_safe() {
             p as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -198,7 +198,7 @@ fn triu_f32_aliasing_input_eq_output_safe() {
             shape.as_ptr(),
             shape.len() as i32,
             diagonal,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -216,7 +216,7 @@ fn triu_f32_aliasing_input_eq_output_safe() {
             shape.as_ptr(),
             shape.len() as i32,
             diagonal,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -249,7 +249,7 @@ fn tril_f32_aliasing_input_eq_output_safe() {
             shape.as_ptr(),
             shape.len() as i32,
             diagonal,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -266,7 +266,7 @@ fn tril_f32_aliasing_input_eq_output_safe() {
             shape.as_ptr(),
             shape.len() as i32,
             diagonal,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -308,7 +308,7 @@ fn unary_relu_backward_f32_aliasing_dx_eq_saved_safe() {
             dev_dx.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -328,7 +328,7 @@ fn unary_relu_backward_f32_aliasing_dx_eq_saved_safe() {
             p as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -368,7 +368,7 @@ fn unary_relu_backward_f32_aliasing_dx_eq_dy_safe() {
             dev_dx.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -388,7 +388,7 @@ fn unary_relu_backward_f32_aliasing_dx_eq_dy_safe() {
             p as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -427,7 +427,7 @@ fn fill_f32_writes_constant() {
             value,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);

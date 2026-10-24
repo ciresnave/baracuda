@@ -43,7 +43,7 @@ fn ffi_unary_elu_f32_alpha_2_5_matches_cpu() {
             alpha,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "unary_elu_f32 returned status {status}");
@@ -87,7 +87,7 @@ fn ffi_unary_elu_f64_alpha_negative_branch_uses_alpha() {
             alpha,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "unary_elu_f64 returned status {status}");

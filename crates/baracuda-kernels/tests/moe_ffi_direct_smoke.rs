@@ -154,7 +154,7 @@ fn moe_wmma_f16_via_ffi_direct() {
             /* is_prefill */ 1,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "FFI status: {status}");
@@ -294,7 +294,7 @@ fn moe_scalar_gguf_q8_0_via_ffi_direct() {
             /* gguf_dtype */ 0,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "FFI status: {status}");

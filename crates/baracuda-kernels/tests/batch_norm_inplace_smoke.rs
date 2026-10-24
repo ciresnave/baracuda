@@ -71,7 +71,7 @@ fn batch_norm_f32_inplace_matches_non_aliased() {
             dev_rstd_ref.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "non-aliased BN f32");
@@ -99,7 +99,7 @@ fn batch_norm_f32_inplace_matches_non_aliased() {
             dev_rstd_ip.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "aliased BN f32");
@@ -144,7 +144,7 @@ fn batch_norm_f16_inplace_matches_non_aliased() {
             dev_rstd_ref.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -172,7 +172,7 @@ fn batch_norm_f16_inplace_matches_non_aliased() {
             dev_rstd_ip.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -215,7 +215,7 @@ fn batch_norm_bf16_inplace_matches_non_aliased() {
             dev_rstd_ref.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -243,7 +243,7 @@ fn batch_norm_bf16_inplace_matches_non_aliased() {
             dev_rstd_ip.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -286,7 +286,7 @@ fn batch_norm_f64_inplace_matches_non_aliased() {
             dev_rstd_ref.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -314,7 +314,7 @@ fn batch_norm_f64_inplace_matches_non_aliased() {
             dev_rstd_ip.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);

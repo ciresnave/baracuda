@@ -61,7 +61,7 @@ fn log_softmax_f32_inplace_matches_non_aliased() {
             dev_y_ref.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "non-aliased log_softmax");
@@ -86,7 +86,7 @@ fn log_softmax_f32_inplace_matches_non_aliased() {
             p as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "aliased log_softmax");
@@ -136,7 +136,7 @@ fn log_softmax_f16_inplace_matches_non_aliased() {
             dev_y_ref.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -161,7 +161,7 @@ fn log_softmax_f16_inplace_matches_non_aliased() {
             p as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -211,7 +211,7 @@ fn log_softmax_bf16_inplace_matches_non_aliased() {
             dev_y_ref.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -236,7 +236,7 @@ fn log_softmax_bf16_inplace_matches_non_aliased() {
             p as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -284,7 +284,7 @@ fn log_softmax_f64_inplace_matches_non_aliased() {
             dev_y_ref.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "f64 non-aliased log_softmax");
@@ -309,7 +309,7 @@ fn log_softmax_f64_inplace_matches_non_aliased() {
             p as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "f64 aliased log_softmax");

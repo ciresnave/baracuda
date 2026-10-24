@@ -59,7 +59,7 @@ fn affine_inplace_f32_contig() {
             dev.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "affine_inplace_f32_run status");
@@ -94,7 +94,7 @@ fn affine_inplace_f64_contig() {
             dev.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -135,7 +135,7 @@ fn affine_inplace_bf16_contig() {
             dev.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -179,7 +179,7 @@ fn affine_inplace_f16_contig() {
             dev.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -224,7 +224,7 @@ fn affine_inplace_i32_contig() {
             dev.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -254,7 +254,7 @@ fn affine_inplace_i64_contig() {
             dev.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -291,7 +291,7 @@ fn affine_inplace_u8_contig() {
             dev.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -324,7 +324,7 @@ fn affine_inplace_i8_contig() {
             dev.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -395,7 +395,7 @@ fn affine_inplace_strided_f32() {
             dev.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -453,7 +453,7 @@ fn affine_inplace_strided_f64() {
             dev.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -502,7 +502,7 @@ fn affine_inplace_strided_i32() {
             dev.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -541,7 +541,7 @@ fn affine_inplace_strided_i64() {
             dev.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -580,7 +580,7 @@ fn affine_inplace_strided_u8() {
             dev.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -619,7 +619,7 @@ fn affine_inplace_strided_bf16() {
             dev.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -664,7 +664,7 @@ fn affine_inplace_strided_f16() {
             dev.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -708,7 +708,7 @@ fn affine_inplace_strided_rank0() {
             dev.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -742,7 +742,7 @@ fn affine_inplace_strided_rejects_rank_over_8() {
             dummy_dev.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 2, "rank > MAX_RANK must return STATUS_INVALID_ARG");

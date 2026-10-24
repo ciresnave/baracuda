@@ -70,7 +70,7 @@ fn unary_neg_f32_contig_aliasing_safe() {
             dev_y.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "non-aliased run");
@@ -88,7 +88,7 @@ fn unary_neg_f32_contig_aliasing_safe() {
             p as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "aliased run");
@@ -130,7 +130,7 @@ fn binary_add_f32_contig_aliasing_a_eq_y_safe() {
             dev_y.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -150,7 +150,7 @@ fn binary_add_f32_contig_aliasing_a_eq_y_safe() {
             p as *mut c_void,                              // y == a
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -190,7 +190,7 @@ fn binary_add_f32_contig_aliasing_b_eq_y_safe() {
             dev_y.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -209,7 +209,7 @@ fn binary_add_f32_contig_aliasing_b_eq_y_safe() {
             p as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -248,7 +248,7 @@ fn ternary_clamp_f32_contig_aliasing_a_eq_y_safe() {
             dev_y.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -270,7 +270,7 @@ fn ternary_clamp_f32_contig_aliasing_a_eq_y_safe() {
             p as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -343,7 +343,7 @@ fn unary_neg_f32_strided_aliasing_equal_strides_safe() {
             dev_y.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "non-aliased run");
@@ -365,7 +365,7 @@ fn unary_neg_f32_strided_aliasing_equal_strides_safe() {
             p as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "aliased run");
@@ -424,7 +424,7 @@ fn binary_add_f32_strided_aliasing_a_eq_y_equal_strides_safe() {
             dev_y.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -449,7 +449,7 @@ fn binary_add_f32_strided_aliasing_a_eq_y_equal_strides_safe() {
             p as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -507,7 +507,7 @@ fn ternary_clamp_f32_strided_aliasing_a_eq_y_equal_strides_safe() {
             dev_y.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -535,7 +535,7 @@ fn ternary_clamp_f32_strided_aliasing_a_eq_y_equal_strides_safe() {
             p as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);

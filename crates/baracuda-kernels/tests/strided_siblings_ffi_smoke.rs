@@ -91,7 +91,7 @@ fn rms_norm_f32_strided_smoke() {
             core::ptr::null_mut(),
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "rms_norm_f32_strided_run returned {status}");
@@ -172,7 +172,7 @@ fn layer_norm_f32_strided_smoke() {
             core::ptr::null_mut(),
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "layer_norm_f32_strided_run returned {status}");
@@ -248,7 +248,7 @@ fn softmax_f32_strided_smoke() {
             dev_y.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "softmax_f32_strided_run returned {status}");
@@ -322,7 +322,7 @@ fn log_softmax_f32_strided_smoke() {
             dev_y.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "log_softmax_f32_strided_run returned {status}");
@@ -373,7 +373,7 @@ fn flip_f32_strided_smoke() {
             dev_y.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "flip_f32_strided_run returned {status}");
@@ -433,7 +433,7 @@ fn roll_f32_strided_smoke() {
             dev_y.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "roll_f32_strided_run returned {status}");
@@ -487,7 +487,7 @@ fn permute_f32_strided_smoke() {
             dev_y.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "permute_f32_strided_run returned {status}");

@@ -141,7 +141,7 @@ fn cholesky_f32_ffi() {
             dev_info.as_raw().0 as *mut i32,
             dev_ws.as_raw().0 as *mut c_void,
             ws_bytes,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "cholesky_f32_run status");
@@ -178,7 +178,7 @@ fn lu_f32_ffi() {
             dev_info.as_raw().0 as *mut i32,
             dev_ws.as_raw().0 as *mut c_void,
             ws_bytes,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -214,7 +214,7 @@ fn qr_f32_ffi() {
             dev_info.as_raw().0 as *mut i32,
             dev_ws.as_raw().0 as *mut c_void,
             ws_bytes,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -263,7 +263,7 @@ fn ormqr_f32_ffi() {
             dev_info.as_raw().0 as *mut i32,
             dev_ws.as_raw().0 as *mut c_void,
             ws_bytes,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -287,7 +287,7 @@ fn ormqr_f32_ffi() {
             dev_info.as_raw().0 as *mut i32,
             dev_ws.as_raw().0 as *mut c_void,
             ws_bytes,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -331,7 +331,7 @@ fn svd_f32_ffi() {
             dev_info.as_raw().0 as *mut i32,
             dev_ws.as_raw().0 as *mut c_void,
             ws_bytes,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -388,7 +388,7 @@ fn svd_batched_f32_ffi() {
             b,
             dev_ws.as_raw().0 as *mut c_void,
             ws_bytes,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -464,7 +464,7 @@ fn svda_batched_f32_ffi() {
             b,
             dev_ws.as_raw().0 as *mut c_void,
             ws_bytes,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -503,7 +503,7 @@ fn eigh_f32_ffi() {
             dev_info.as_raw().0 as *mut i32,
             dev_ws.as_raw().0 as *mut c_void,
             ws_bytes,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -550,7 +550,7 @@ fn eigh_c32_ffi() {
             dev_info.as_raw().0 as *mut i32,
             dev_ws.as_raw().0 as *mut c_void,
             ws_bytes,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -607,7 +607,7 @@ fn eig_f32_ffi() {
             ws_dev,
             host_ws_buf.as_mut_ptr() as *mut c_void,
             ws_host,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -656,7 +656,7 @@ fn lstsq_f32_ffi() {
             dev_info.as_raw().0 as *mut i32,
             dev_ws.as_raw().0 as *mut c_void,
             ws_bytes,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -698,7 +698,7 @@ fn solve_f32_ffi() {
             dev_info.as_raw().0 as *mut i32,
             dev_ws.as_raw().0 as *mut c_void,
             ws_bytes,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -742,7 +742,7 @@ fn inverse_f32_ffi() {
             dev_info.as_raw().0 as *mut i32,
             dev_ws.as_raw().0 as *mut c_void,
             ws_bytes,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);

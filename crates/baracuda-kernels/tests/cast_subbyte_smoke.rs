@@ -69,7 +69,7 @@ fn cast_s4_to_i32_unpacks_with_sign_extension() {
         .expect("select");
     // S4 is nibble-packed: the tensor view's shape/numel uses the PACKED
     // slot count (one slot per byte = two logical elements).
-    let packed_slots = (numel as i32) / 2;
+    let packed_slots = numel / 2;
     let args = CastSubByteArgs::<S4, i32> {
         input: TensorRef::new(
             dev_x.as_slice(),
@@ -119,7 +119,7 @@ fn cast_u4_to_i32_unpacks_with_zero_extension() {
     };
     let plan = CastSubBytePlan::<U4, i32>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
-    let packed_slots = (numel as i32) / 2;
+    let packed_slots = numel / 2;
     let args = CastSubByteArgs::<U4, i32> {
         input: TensorRef::new(
             dev_x.as_slice(),

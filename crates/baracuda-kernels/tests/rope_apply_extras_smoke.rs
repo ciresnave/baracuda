@@ -165,7 +165,7 @@ fn rope_apply_interleaved_f32_matches_canonical_apply() {
             dev_y_canonical.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status_canon, 0);
@@ -182,7 +182,7 @@ fn rope_apply_interleaved_f32_matches_canonical_apply() {
             dev_y_interleaved.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status_interleaved, 0);
@@ -249,7 +249,7 @@ fn rope_apply_interleaved_backward_f32_matches_canonical() {
             dev_dx_canon.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status_canon, 0);
@@ -266,7 +266,7 @@ fn rope_apply_interleaved_backward_f32_matches_canonical() {
             dev_dx_inter.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status_inter, 0);
@@ -320,7 +320,7 @@ fn rope_apply_interleaved_f16_matches_canonical_apply() {
             dev_y_canon.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status_canon, 0);
@@ -337,7 +337,7 @@ fn rope_apply_interleaved_f16_matches_canonical_apply() {
             dev_y_inter.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status_inter, 0);
@@ -420,7 +420,7 @@ fn rope_apply_thd_f32_single_head_single_t_matches_cpu() {
             dev_y.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -477,7 +477,7 @@ fn rope_apply_thd_f32_full_extent_matches_cpu() {
             dev_y.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -536,7 +536,7 @@ fn rope_apply_thd_backward_f32_matches_cpu() {
             dev_y.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(s1, 0);
@@ -553,7 +553,7 @@ fn rope_apply_thd_backward_f32_matches_cpu() {
             dev_roundtrip.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(s2, 0);
@@ -602,7 +602,7 @@ fn rope_apply_thd_bf16_smoke() {
             dev_y.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);

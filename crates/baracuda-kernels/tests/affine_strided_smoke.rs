@@ -320,7 +320,7 @@ fn affine_u8_strided_input_stride2() {
     let stride_y: [i64; 1] = [1];
     let x_ptr = dev_x.as_slice().as_raw().0 as *const core::ffi::c_void;
     let y_ptr = dev_y.as_slice_mut().as_raw().0 as *mut core::ffi::c_void;
-    let stream_ptr = stream.as_raw() as *mut core::ffi::c_void;
+    let stream_ptr = stream.as_raw();
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_affine_u8_strided_run(
             numel as i64,

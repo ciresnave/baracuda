@@ -39,7 +39,7 @@ fn ffi_unary_powf_f32_integer_exponent_matches_cpu() {
             exponent,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "unary_powf_f32 returned status {status}");
@@ -77,7 +77,7 @@ fn ffi_unary_powf_f32_fractional_exponent_matches_cpu() {
             exponent,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -114,7 +114,7 @@ fn ffi_unary_powf_f64_matches_cpu() {
             exponent,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);

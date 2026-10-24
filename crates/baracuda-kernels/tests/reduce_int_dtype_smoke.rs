@@ -69,7 +69,7 @@ unsafe fn run_reduce(f: ReduceFn, stream: &Stream, src_ptr: *const c_void, dst_p
             dst_ptr,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "reduce returned {status}");

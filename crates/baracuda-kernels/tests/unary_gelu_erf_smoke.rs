@@ -39,7 +39,7 @@ fn ffi_unary_gelu_erf_f32_matches_cpu() {
             dev_y.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "unary_gelu_erf_f32 returned status {status}");
@@ -79,7 +79,7 @@ fn ffi_unary_gelu_erf_matches_unary_gelu_bit_identical() {
             dev_y_erf.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         );
         let st2 = baracuda_kernels_sys::baracuda_kernels_unary_gelu_f32_run(
             host_x.len() as i64,
@@ -87,7 +87,7 @@ fn ffi_unary_gelu_erf_matches_unary_gelu_bit_identical() {
             dev_y_gelu.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         );
         assert_eq!(st1, 0);
         assert_eq!(st2, 0);

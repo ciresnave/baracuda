@@ -157,7 +157,7 @@ fn run_fw_bw_roundtrip_f16(dk: i32, is_causal: bool) {
             dev_lse.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(fw_status, 0, "FW status");
@@ -217,7 +217,7 @@ fn run_fw_bw_roundtrip_f16(dk: i32, is_causal: bool) {
             dev_dv.as_slice_mut().as_raw().0 as *mut c_void,
             dev_bw_ws.as_slice_mut().as_raw().0 as *mut c_void,
             bw_ws_bytes,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(bw_status, 0, "BW status");
@@ -296,7 +296,7 @@ fn run_fw_bw_roundtrip_bf16(dk: i32, is_causal: bool) {
             dev_lse.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(fw_status, 0);
@@ -337,7 +337,7 @@ fn run_fw_bw_roundtrip_bf16(dk: i32, is_causal: bool) {
             dev_dv.as_slice_mut().as_raw().0 as *mut c_void,
             dev_bw_ws.as_slice_mut().as_raw().0 as *mut c_void,
             bw_ws_bytes,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(bw_status, 0);
@@ -485,7 +485,7 @@ fn run_fw_bw_with_features_f16(
             dev_lse.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(fw_status, 0, "FW v2 status");
@@ -526,7 +526,7 @@ fn run_fw_bw_with_features_f16(
             dev_dv.as_slice_mut().as_raw().0 as *mut c_void,
             dev_bw_ws.as_slice_mut().as_raw().0 as *mut c_void,
             bw_ws_bytes,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(bw_status, 0, "BW status");

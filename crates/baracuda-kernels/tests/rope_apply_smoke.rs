@@ -86,7 +86,7 @@ fn rope_apply_f32_matches_default_rope() {
             dev_y_ref.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status_ref, 0, "rope_f32 returned status {status_ref}");
@@ -104,7 +104,7 @@ fn rope_apply_f32_matches_default_rope() {
             dev_y_apply.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(
@@ -166,7 +166,7 @@ fn rope_apply_backward_f32_matches_default() {
             dev_dx_ref.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status_ref, 0);
@@ -183,7 +183,7 @@ fn rope_apply_backward_f32_matches_default() {
             dev_dx_apply.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status_apply, 0);
@@ -238,7 +238,7 @@ fn rope_apply_f16_matches_default() {
             dev_y_ref.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status_ref, 0);
@@ -255,7 +255,7 @@ fn rope_apply_f16_matches_default() {
             dev_y_apply.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status_apply, 0);
@@ -318,7 +318,7 @@ fn rope_apply_bf16_matches_default() {
             dev_y_ref.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status_ref, 0);
@@ -335,7 +335,7 @@ fn rope_apply_bf16_matches_default() {
             dev_y_apply.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status_apply, 0);

@@ -74,7 +74,7 @@ fn max_pool_2d_f32_ffi_matches_plan() {
             pw,
             dev_x.as_raw().0 as *const c_void,
             dev_y_ffi.as_raw().0 as *mut c_void,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(ffi_status, 0, "ffi max_pool_2d_fw_f32 status");
@@ -144,7 +144,7 @@ fn max_pool_2d_f32_ffi_matches_plan() {
             dev_dy.as_raw().0 as *const c_void,
             dev_x.as_raw().0 as *const c_void,
             dev_dx_ffi.as_raw().0 as *mut c_void,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(ffi_bw_status, 0, "ffi max_pool_2d_bw_f32 status");
@@ -225,7 +225,7 @@ fn avg_pool_2d_f32_one_mode(count_include_pad: bool) {
             if count_include_pad { 1 } else { 0 },
             dev_x.as_raw().0 as *const c_void,
             dev_y_ffi.as_raw().0 as *mut c_void,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(ffi_status, 0, "ffi avg_pool_2d_fw_f32 status");
@@ -300,7 +300,7 @@ fn avg_pool_2d_f32_one_mode(count_include_pad: bool) {
             dev_dy.as_raw().0 as *const c_void,
             dev_x.as_raw().0 as *const c_void,
             dev_dx_ffi.as_raw().0 as *mut c_void,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(ffi_bw_status, 0, "ffi avg_pool_2d_bw_f32 status");
@@ -385,7 +385,7 @@ fn max_pool_1d_f16_fw_ffi_matches_plan() {
             pl,
             dev_x.as_raw().0 as *const c_void,
             dev_y_ffi.as_raw().0 as *mut c_void,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(ffi_status, 0, "ffi max_pool_1d_fw_f16 status");
@@ -478,7 +478,7 @@ fn avg_pool_3d_bf16_fw_ffi_matches_plan() {
             0, // count_include_pad = false (PyTorch default)
             dev_x.as_raw().0 as *const c_void,
             dev_y_ffi.as_raw().0 as *mut c_void,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(ffi_status, 0, "ffi avg_pool_3d_fw_bf16 status");

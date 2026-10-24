@@ -52,7 +52,7 @@ fn gather_u8idx_f32_2d_dim1() {
     let src_ptr = dev_src.as_slice().as_raw().0 as *const c_void;
     let idx_ptr = dev_idx.as_slice().as_raw().0 as *const c_void;
     let out_ptr = dev_out.as_slice_mut().as_raw().0 as *mut c_void;
-    let stream_ptr = stream.as_raw() as *mut c_void;
+    let stream_ptr = stream.as_raw();
 
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_gather_u8idx_f32_run(
@@ -115,7 +115,7 @@ fn gather_u8idx_f64_2d_dim0() {
     let src_ptr = dev_src.as_slice().as_raw().0 as *const c_void;
     let idx_ptr = dev_idx.as_slice().as_raw().0 as *const c_void;
     let out_ptr = dev_out.as_slice_mut().as_raw().0 as *mut c_void;
-    let stream_ptr = stream.as_raw() as *mut c_void;
+    let stream_ptr = stream.as_raw();
 
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_gather_u8idx_f64_run(

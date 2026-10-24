@@ -31,7 +31,7 @@ fn prelu_backward_f32_per_channel() {
     let h_dy: Vec<f32> = (0..n_total).map(|i| 0.5 + (i as f32) * 0.01).collect();
     let exp_dx: Vec<f32> = (0..n_total)
         .map(|i| {
-            let c = (i as usize / c_stride) % c_extent;
+            let c = (i / c_stride) % c_extent;
             if h_x[i] > 0.0 {
                 h_dy[i]
             } else {
@@ -42,7 +42,7 @@ fn prelu_backward_f32_per_channel() {
     let mut exp_dw = vec![0.0f32; c_extent];
     for i in 0..n_total {
         if h_x[i] < 0.0 {
-            let c = (i as usize / c_stride) % c_extent;
+            let c = (i / c_stride) % c_extent;
             exp_dw[c] += h_dy[i] * h_x[i];
         }
     }
@@ -167,7 +167,7 @@ fn prelu_backward_f64_per_channel() {
     let h_dy: Vec<f64> = (0..n_total).map(|i| 0.5 + (i as f64) * 0.01).collect();
     let exp_dx: Vec<f64> = (0..n_total)
         .map(|i| {
-            let c = (i as usize / c_stride) % c_extent;
+            let c = (i / c_stride) % c_extent;
             if h_x[i] > 0.0 {
                 h_dy[i]
             } else {
@@ -178,7 +178,7 @@ fn prelu_backward_f64_per_channel() {
     let mut exp_dw = vec![0.0f64; c_extent];
     for i in 0..n_total {
         if h_x[i] < 0.0 {
-            let c = (i as usize / c_stride) % c_extent;
+            let c = (i / c_stride) % c_extent;
             exp_dw[c] += h_dy[i] * h_x[i];
         }
     }
@@ -296,7 +296,7 @@ fn prelu_backward_f16_per_channel() {
     let h_dy: Vec<f16> = h_dy_f32.iter().map(|&v| f16::from_f32(v)).collect();
     let exp_dx: Vec<f32> = (0..n_total)
         .map(|i| {
-            let c = (i as usize / c_stride) % c_extent;
+            let c = (i / c_stride) % c_extent;
             let xv = h_x[i].to_f32();
             let dyv = h_dy[i].to_f32();
             if xv > 0.0 { dyv } else { h_w[c].to_f32() * dyv }
@@ -306,7 +306,7 @@ fn prelu_backward_f16_per_channel() {
     for i in 0..n_total {
         let xv = h_x[i].to_f32();
         if xv < 0.0 {
-            let c = (i as usize / c_stride) % c_extent;
+            let c = (i / c_stride) % c_extent;
             exp_dw[c] += h_dy[i].to_f32() * xv;
         }
     }
@@ -447,7 +447,7 @@ fn prelu_backward_bf16_per_channel() {
     let h_dy: Vec<bf16> = h_dy_f32.iter().map(|&v| bf16::from_f32(v)).collect();
     let exp_dx: Vec<f32> = (0..n_total)
         .map(|i| {
-            let c = (i as usize / c_stride) % c_extent;
+            let c = (i / c_stride) % c_extent;
             let xv = h_x[i].to_f32();
             let dyv = h_dy[i].to_f32();
             if xv > 0.0 { dyv } else { h_w[c].to_f32() * dyv }
@@ -457,7 +457,7 @@ fn prelu_backward_bf16_per_channel() {
     for i in 0..n_total {
         let xv = h_x[i].to_f32();
         if xv < 0.0 {
-            let c = (i as usize / c_stride) % c_extent;
+            let c = (i / c_stride) % c_extent;
             exp_dw[c] += h_dy[i].to_f32() * xv;
         }
     }

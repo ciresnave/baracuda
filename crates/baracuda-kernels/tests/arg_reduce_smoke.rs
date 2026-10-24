@@ -133,7 +133,7 @@ fn argmax_3d_axis_1() {
         for k in 0..5 {
             let max_j = (i * 4 + k) % 16;
             let out_off = (i * out_strides[0] + 0 * out_strides[1] + k * out_strides[2]) as usize;
-            expected[out_off] = max_j as i64;
+            expected[out_off] = max_j;
         }
     }
 

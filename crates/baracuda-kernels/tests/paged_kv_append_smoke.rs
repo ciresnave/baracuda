@@ -111,7 +111,7 @@ fn paged_kv_append_f32_basic() {
             dev_last_page_len.as_slice_mut().as_raw().0 as *mut c_void,
             dev_key.as_slice().as_raw().0 as *const c_void,
             dev_value.as_slice().as_raw().0 as *const c_void,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "paged_kv_append f32 status");
@@ -192,7 +192,7 @@ fn paged_kv_append_f16_runs_to_completion() {
             dev_last_page_len.as_slice_mut().as_raw().0 as *mut c_void,
             dev_key.as_slice().as_raw().0 as *const c_void,
             dev_value.as_slice().as_raw().0 as *const c_void,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "paged_kv_append f16 status");
@@ -239,7 +239,7 @@ fn paged_kv_append_bf16_runs_to_completion() {
             dev_last_page_len.as_slice_mut().as_raw().0 as *mut c_void,
             dev_key.as_slice().as_raw().0 as *const c_void,
             dev_value.as_slice().as_raw().0 as *const c_void,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "paged_kv_append bf16 status");

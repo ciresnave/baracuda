@@ -185,7 +185,7 @@ fn ffi_conv2d_fw_f32(
             dev_y.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "FFI Conv2d FW f32 failed");
@@ -280,7 +280,7 @@ fn ffi_conv2d_f32_bw_data_matches_plan() {
             dev_dx2.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "FFI Conv2d BW data f32 failed");
@@ -362,7 +362,7 @@ fn ffi_conv2d_f32_bw_filter_matches_plan() {
             dev_dw2.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "FFI Conv2d BW filter f32 failed");
@@ -489,7 +489,7 @@ fn ffi_conv1d_f16_fw_matches_plan() {
             dev_y2.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "FFI Conv1d FW f16 failed");
@@ -617,7 +617,7 @@ fn ffi_conv_transpose_2d_f32_fw_matches_plan() {
             dev_y2.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "FFI ConvTranspose2d FW f32 failed");

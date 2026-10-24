@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-nvjpeg"
-version = "0.1.0-alpha.7"
+version = "0.1.0-alpha.8"
 description = "Safe Rust wrappers for NVIDIA nvJPEG (GPU JPEG decode)."
 edition.workspace = true
 license.workspace = true

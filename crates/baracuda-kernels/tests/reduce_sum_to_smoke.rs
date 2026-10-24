@@ -94,7 +94,7 @@ fn ffi_reduce_sum_to_f32_2d_reduce_dim0() {
             out_shape.as_ptr(),
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0, "reduce_sum_to_f32 returned {status}");
@@ -137,7 +137,7 @@ fn ffi_reduce_sum_to_f32_3d_reduce_dim0_dim2() {
             out_shape.as_ptr(),
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);
@@ -178,7 +178,7 @@ fn ffi_reduce_sum_to_f32_full_reduce() {
             out_shape.as_ptr(),
             core::ptr::null_mut(),
             0,
-            stream.as_raw() as *mut c_void,
+            stream.as_raw(),
         )
     };
     assert_eq!(status, 0);

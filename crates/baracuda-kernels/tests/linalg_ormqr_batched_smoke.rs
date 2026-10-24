@@ -11,8 +11,6 @@
 //! Gated behind the `device-tests` feature — requires a real CUDA device.
 #![cfg(feature = "device-tests")]
 
-use core::ffi::c_void;
-
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
     BatchedOrmqrArgs, BatchedOrmqrDescriptor, BatchedOrmqrOp, BatchedOrmqrPlan, BatchedOrmqrSide,
@@ -174,7 +172,7 @@ fn cusolver_ormqr_per_slot_f32(
     side: BatchedOrmqrSide,
     op: BatchedOrmqrOp,
 ) -> Vec<f32> {
-    let stream_ptr = stream.as_raw() as *mut c_void;
+    let stream_ptr = stream.as_raw();
     let mut handle: cusolverDnHandle_t = core::ptr::null_mut();
     let s = unsafe { cusolverDnCreate(&mut handle as *mut _) };
     assert_eq!(s, 0);
@@ -277,7 +275,7 @@ fn cusolver_ormqr_per_slot_f64(
     side: BatchedOrmqrSide,
     op: BatchedOrmqrOp,
 ) -> Vec<f64> {
-    let stream_ptr = stream.as_raw() as *mut c_void;
+    let stream_ptr = stream.as_raw();
     let mut handle: cusolverDnHandle_t = core::ptr::null_mut();
     let s = unsafe { cusolverDnCreate(&mut handle as *mut _) };
     assert_eq!(s, 0);
@@ -640,7 +638,7 @@ fn run_cusolver_geqrf_per_slot_complex32(
     m: i32,
     n: i32,
 ) -> (Vec<Complex64>, Vec<Complex64>) {
-    let stream_ptr = stream.as_raw() as *mut c_void;
+    let stream_ptr = stream.as_raw();
     let mut handle: cusolverDnHandle_t = core::ptr::null_mut();
     let s = unsafe { cusolverDnCreate(&mut handle as *mut _) };
     assert_eq!(s, 0);
@@ -714,7 +712,7 @@ fn run_cusolver_geqrf_per_slot_complex64(
     m: i32,
     n: i32,
 ) -> (Vec<Complex128>, Vec<Complex128>) {
-    let stream_ptr = stream.as_raw() as *mut c_void;
+    let stream_ptr = stream.as_raw();
     let mut handle: cusolverDnHandle_t = core::ptr::null_mut();
     let s = unsafe { cusolverDnCreate(&mut handle as *mut _) };
     assert_eq!(s, 0);
@@ -795,7 +793,7 @@ fn cusolver_unmqr_per_slot_complex32(
     side: BatchedOrmqrSide,
     op: BatchedOrmqrOp,
 ) -> Vec<Complex64> {
-    let stream_ptr = stream.as_raw() as *mut c_void;
+    let stream_ptr = stream.as_raw();
     let mut handle: cusolverDnHandle_t = core::ptr::null_mut();
     let s = unsafe { cusolverDnCreate(&mut handle as *mut _) };
     assert_eq!(s, 0);
@@ -888,7 +886,7 @@ fn cusolver_unmqr_per_slot_complex64(
     side: BatchedOrmqrSide,
     op: BatchedOrmqrOp,
 ) -> Vec<Complex128> {
-    let stream_ptr = stream.as_raw() as *mut c_void;
+    let stream_ptr = stream.as_raw();
     let mut handle: cusolverDnHandle_t = core::ptr::null_mut();
     let s = unsafe { cusolverDnCreate(&mut handle as *mut _) };
     assert_eq!(s, 0);
