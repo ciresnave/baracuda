@@ -176,3 +176,11 @@ or licence change lands: `kernels/gguf/{mmvq_batched,mmvq_multim,quantize_q8_1}.
 `kernels/include/baracuda_{cp_async,fp_bits}.cuh` (Ootomo cutf, MIT);
 `crates/baracuda-kernels-bench/external/cuda-l2-probes/*.cu` (CUDA-L2, MIT). Paths are under
 `crates/baracuda-kernels-sys/` except the probes.
+
+## 6. Non-code assets
+
+| file | maker / tool | date | licence |
+|---|---|---|---|
+| `assets/barracuda.png` (README hero image) | AI-generated: embedded C2PA manifest (OpenAI Media Service, signed OpenAI OpCo, LLC) records `c2pa.created`, softwareAgent `GPT-4o`, digitalSourceType `trainedAlgorithmicMedia`; added by Eric Evans (CireSnave) in the initial commit `e36466e6` | 2026-04-22 (manifest `when` and commit date) | **unknown: pending CireSnave** (not asserted by this repo; the output terms of the generating service were not checked here) |
+
+Method: `git log --follow` for the first-add commit; read-only parse of the PNG chunks (`caBX` = C2PA JUMBF box) at `origin/main` `1dd782a2`. `assets/README.txt` ("Placeholder ... barracuda.jpg ... attached to your Claude chat") is a stale placeholder note that does not describe the current file.
