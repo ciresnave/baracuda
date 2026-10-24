@@ -134,6 +134,7 @@ impl ConvTranspose1dDescriptor {
 }
 
 /// Args bundle for a ConvTranspose1d forward launch.
+#[derive(Debug)]
 pub struct ConvTranspose1dArgs<'a, T: Element> {
     /// Input activations `[N, C_in, L_in]`.
     pub x: TensorRef<'a, T, 3>,
@@ -144,6 +145,7 @@ pub struct ConvTranspose1dArgs<'a, T: Element> {
 }
 
 /// Args bundle for a ConvTranspose1d data-gradient launch.
+#[derive(Debug)]
 pub struct ConvTranspose1dBwArgs<'a, T: Element> {
     /// Filter weights `[C_in, C_out / groups, L_filt]`.
     pub w: TensorRef<'a, T, 3>,
@@ -154,6 +156,7 @@ pub struct ConvTranspose1dBwArgs<'a, T: Element> {
 }
 
 /// Args bundle for a ConvTranspose1d filter-gradient launch.
+#[derive(Debug)]
 pub struct ConvTranspose1dDwArgs<'a, T: Element> {
     /// Input activations `[N, C_in, L_in]`.
     pub x: TensorRef<'a, T, 3>,
@@ -165,6 +168,7 @@ pub struct ConvTranspose1dDwArgs<'a, T: Element> {
 
 /// 1-D transposed-convolution plan (cuDNN-backed). See the module
 /// docs for the role-swap strategy.
+#[derive(Debug)]
 pub struct ConvTranspose1dPlan<T: Element> {
     desc: ConvTranspose1dDescriptor,
     sku: KernelSku,
@@ -609,7 +613,7 @@ impl<T: Element> ConvTranspose1dPlan<T> {
     }
 
     fn bind_stream(&self, h: cudnnHandle_t, stream: &Stream) -> Result<()> {
-        let status = unsafe { cudnnSetStream(h, stream.as_raw() as *mut c_void) };
+        let status = unsafe { cudnnSetStream(h, stream.as_raw()) };
         if status != 0 {
             return Err(Error::CutlassInternal(-status));
         }

@@ -110,6 +110,7 @@ impl FractionalMaxPool3dDescriptor {
 }
 
 /// Args bundle for the 3-D forward launch.
+#[derive(Debug)]
 pub struct FractionalMaxPool3dFwArgs<'a, T: Element> {
     /// Input `[N, C, D_in, H_in, W_in]`.
     pub x: TensorRef<'a, T, 5>,
@@ -124,6 +125,7 @@ pub struct FractionalMaxPool3dFwArgs<'a, T: Element> {
 /// Args bundle for the 3-D backward launch.
 ///
 /// **Caller must zero `dx` before calling.**
+#[derive(Debug)]
 pub struct FractionalMaxPool3dBwArgs<'a, T: Element> {
     /// Upstream gradient `[N, C, D_out, H_out, W_out]`.
     pub dy: TensorRef<'a, T, 5>,
@@ -134,6 +136,7 @@ pub struct FractionalMaxPool3dBwArgs<'a, T: Element> {
 }
 
 /// 3-D fractional max-pool plan (bespoke kernel).
+#[derive(Debug)]
 pub struct FractionalMaxPool3dPlan<T: Element> {
     desc: FractionalMaxPool3dDescriptor,
     sku: KernelSku,
@@ -182,7 +185,7 @@ impl<T: Element> FractionalMaxPool3dPlan<T> {
         args: FractionalMaxPool3dFwArgs<'_, T>,
     ) -> Result<()> {
         check_fw_args(&self.desc, &args)?;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let x = args.x.data().as_raw().0 as *const c_void;
         let y = args.y.data().as_raw().0 as *mut c_void;
         let indices = args.indices.data().as_raw().0 as *mut c_void;
@@ -279,7 +282,7 @@ impl<T: Element> FractionalMaxPool3dPlan<T> {
         args: FractionalMaxPool3dBwArgs<'_, T>,
     ) -> Result<()> {
         check_bw_args(&self.desc, &args)?;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let dy = args.dy.data().as_raw().0 as *const c_void;
         let indices = args.indices.data().as_raw().0 as *const c_void;
         let dx = args.dx.data().as_raw().0 as *mut c_void;

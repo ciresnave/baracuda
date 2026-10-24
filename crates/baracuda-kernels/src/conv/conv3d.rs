@@ -167,6 +167,7 @@ impl Conv3dDescriptor {
 }
 
 /// Args bundle for a Conv3d forward launch.
+#[derive(Debug)]
 pub struct Conv3dArgs<'a, T: Element> {
     /// Input activations `[N, C_in, D_in, H_in, W_in]`.
     pub x: TensorRef<'a, T, 5>,
@@ -177,6 +178,7 @@ pub struct Conv3dArgs<'a, T: Element> {
 }
 
 /// Args bundle for a Conv3d data-gradient launch.
+#[derive(Debug)]
 pub struct Conv3dBwArgs<'a, T: Element> {
     /// Filter weights `[C_out, C_in/groups, D_filt, H_filt, W_filt]`.
     pub w: TensorRef<'a, T, 5>,
@@ -187,6 +189,7 @@ pub struct Conv3dBwArgs<'a, T: Element> {
 }
 
 /// Args bundle for a Conv3d filter-gradient launch.
+#[derive(Debug)]
 pub struct Conv3dDwArgs<'a, T: Element> {
     /// Input activations `[N, C_in, D_in, H_in, W_in]`.
     pub x: TensorRef<'a, T, 5>,
@@ -204,6 +207,7 @@ pub struct Conv3dDwArgs<'a, T: Element> {
 /// FW = `IMPLICIT_GEMM` (algo 0), BW-data / BW-filter = `ALGO_1`.
 ///
 /// Gated under `feature = "cudnn"` at the crate root.
+#[derive(Debug)]
 pub struct Conv3dPlan<T: Element> {
     desc: Conv3dDescriptor,
     sku: KernelSku,
@@ -649,7 +653,7 @@ impl<T: Element> Conv3dPlan<T> {
     }
 
     fn bind_stream(&self, h: cudnnHandle_t, stream: &Stream) -> Result<()> {
-        let status = unsafe { cudnnSetStream(h, stream.as_raw() as *mut c_void) };
+        let status = unsafe { cudnnSetStream(h, stream.as_raw()) };
         if status != 0 {
             return Err(Error::CutlassInternal(-status));
         }

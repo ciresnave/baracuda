@@ -221,7 +221,7 @@ impl<T: Element> CascadeAttentionPlan<T> {
         }
         #[cfg(feature = "flashinfer")]
         {
-            let stream_ptr = stream.as_raw() as *mut c_void;
+            let stream_ptr = stream.as_raw();
             let v_ptr = args.v.data().as_raw().0 as *mut c_void;
             let s_ptr = args.s.data().as_raw().0 as *mut c_void;
             let v_other_ptr = args.v_other.data().as_raw().0 as *const c_void;
@@ -474,7 +474,7 @@ impl<T: Element> CascadeMergeStatesPlan<T> {
         }
         #[cfg(feature = "flashinfer")]
         {
-            let stream_ptr = stream.as_raw() as *mut c_void;
+            let stream_ptr = stream.as_raw();
             let v_ptr = args.v.data().as_raw().0 as *const c_void;
             let s_ptr = args.s.data().as_raw().0 as *const c_void;
             let v_merged_ptr = args.v_merged.data().as_raw().0 as *mut c_void;

@@ -28,6 +28,7 @@ use super::pool_nd::{
 ///
 /// `select` requires `descriptor.mode` to be one of
 /// [`super::PoolMode::AvgIncludePad`] or [`super::PoolMode::AvgExcludePad`].
+#[derive(Debug)]
 pub struct AvgPool1dPlan<T: Element> {
     desc: Pool1dDescriptor,
     sku: KernelSku,

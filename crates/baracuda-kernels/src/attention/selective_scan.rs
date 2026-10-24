@@ -105,6 +105,7 @@ pub struct SelectiveScanDescriptor {
 }
 
 /// Args bundle for a Mamba-1 selective_scan FW launch.
+#[derive(Debug)]
 pub struct SelectiveScanArgs<'a, T: Element> {
     /// Input — shape `[B, L, D]`, contiguous.
     pub u: TensorRef<'a, T, 3>,
@@ -133,6 +134,7 @@ pub struct SelectiveScanArgs<'a, T: Element> {
 /// Mamba-1 selective_scan forward plan.
 ///
 /// See module docs for the shape contract and algorithm summary.
+#[derive(Debug)]
 pub struct SelectiveScanPlan<T: Element> {
     desc: SelectiveScanDescriptor,
     sku: KernelSku,
@@ -326,7 +328,7 @@ impl<T: Element> SelectiveScanPlan<T> {
         if self.desc.batch_size == 0 || self.desc.seq_len == 0 || self.desc.dim == 0 {
             return Ok(());
         }
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let u_ptr = args.u.data().as_raw().0 as *const c_void;
         let delta_ptr = args.delta.data().as_raw().0 as *const c_void;
         let a_ptr = args.a.data().as_raw().0 as *const c_void;
@@ -465,6 +467,7 @@ pub struct SelectiveScanBackwardDescriptor {
 /// initialized before launch — these are accumulated via `atomicAdd`
 /// inside the kernel. `du`, `d_delta`, `dz` are deterministic (one
 /// writer per cell) and may carry any prior value.
+#[derive(Debug)]
 pub struct SelectiveScanBackwardArgs<'a, T: Element> {
     /// Input (saved) — shape `[B, L, D]`.
     pub u: TensorRef<'a, T, 3>,
@@ -509,6 +512,7 @@ pub struct SelectiveScanBackwardArgs<'a, T: Element> {
 }
 
 /// Mamba-1 selective_scan backward plan.
+#[derive(Debug)]
 pub struct SelectiveScanBackwardPlan<T: Element> {
     desc: SelectiveScanBackwardDescriptor,
     sku: KernelSku,
@@ -616,7 +620,7 @@ impl<T: Element> SelectiveScanBackwardPlan<T> {
         if self.desc.batch_size == 0 || self.desc.seq_len == 0 || self.desc.dim == 0 {
             return Ok(());
         }
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let (ws_ptr, ws_bytes) = match workspace {
             Workspace::Borrowed(buf) => (buf.as_raw().0 as *mut c_void, buf.len()),
             Workspace::None => (core::ptr::null_mut(), 0usize),
@@ -669,11 +673,11 @@ impl<T: Element> SelectiveScanBackwardPlan<T> {
             .unwrap_or(core::ptr::null());
         let dy_ptr = args.dy.data().as_raw().0 as *const c_void;
         let du_ptr = args.du.data().as_raw().0 as *mut c_void;
-        let dB_ptr = args.d_b.data().as_raw().0 as *mut c_void;
-        let dC_ptr = args.d_c.data().as_raw().0 as *mut c_void;
+        let d_b_ptr = args.d_b.data().as_raw().0 as *mut c_void;
+        let d_c_ptr = args.d_c.data().as_raw().0 as *mut c_void;
         let ddelta_ptr = args.d_delta.data().as_raw().0 as *mut c_void;
-        let dA_ptr = args.d_a.data().as_raw().0 as *mut c_void;
-        let dD_ptr = args
+        let d_a_ptr = args.d_a.data().as_raw().0 as *mut c_void;
+        let d_d_ptr = args
             .d_d
             .as_mut()
             .map(|d| d.data().as_raw().0 as *mut c_void)
@@ -708,11 +712,11 @@ impl<T: Element> SelectiveScanBackwardPlan<T> {
                     db_ptr,
                     dy_ptr,
                     du_ptr,
-                    dB_ptr,
-                    dC_ptr,
+                    d_b_ptr,
+                    d_c_ptr,
                     ddelta_ptr,
-                    dA_ptr,
-                    dD_ptr,
+                    d_a_ptr,
+                    d_d_ptr,
                     dz_ptr,
                     ddb_ptr,
                     ws_ptr,
@@ -737,11 +741,11 @@ impl<T: Element> SelectiveScanBackwardPlan<T> {
                     db_ptr,
                     dy_ptr,
                     du_ptr,
-                    dB_ptr,
-                    dC_ptr,
+                    d_b_ptr,
+                    d_c_ptr,
                     ddelta_ptr,
-                    dA_ptr,
-                    dD_ptr,
+                    d_a_ptr,
+                    d_d_ptr,
                     dz_ptr,
                     ddb_ptr,
                     ws_ptr,
@@ -766,11 +770,11 @@ impl<T: Element> SelectiveScanBackwardPlan<T> {
                     db_ptr,
                     dy_ptr,
                     du_ptr,
-                    dB_ptr,
-                    dC_ptr,
+                    d_b_ptr,
+                    d_c_ptr,
                     ddelta_ptr,
-                    dA_ptr,
-                    dD_ptr,
+                    d_a_ptr,
+                    d_d_ptr,
                     dz_ptr,
                     ddb_ptr,
                     ws_ptr,

@@ -157,6 +157,7 @@ impl Conv2dDescriptor {
 }
 
 /// Args bundle for a Conv2d forward launch.
+#[derive(Debug)]
 pub struct Conv2dArgs<'a, T: Element> {
     /// Input activations `[N, C_in, H_in, W_in]` NCHW contiguous.
     pub x: TensorRef<'a, T, 4>,
@@ -171,6 +172,7 @@ pub struct Conv2dArgs<'a, T: Element> {
 ///
 /// Computes `dx = conv_T(w, dy)`. Output `dx` matches the forward `x`
 /// shape and is fully overwritten (alpha = 1, beta = 0).
+#[derive(Debug)]
 pub struct Conv2dBwArgs<'a, T: Element> {
     /// Filter weights `[C_out, C_in, H_filt, W_filt]` — same tensor as
     /// in the forward pass.
@@ -187,6 +189,7 @@ pub struct Conv2dBwArgs<'a, T: Element> {
 ///
 /// Computes `dw = conv_grad(x, dy)`. Output `dw` matches the forward
 /// `w` shape and is fully overwritten.
+#[derive(Debug)]
 pub struct Conv2dDwArgs<'a, T: Element> {
     /// Input activations `[N, C_in, H_in, W_in]` — same tensor as in the
     /// forward pass.
@@ -236,6 +239,7 @@ pub struct Conv2dDwArgs<'a, T: Element> {
 /// workspace-size caches (`!Sync` / `!Send`). All released on `Drop`.
 ///
 /// Gated under `feature = "cudnn"` at the crate root.
+#[derive(Debug)]
 pub struct Conv2dPlan<T: Element> {
     desc: Conv2dDescriptor,
     sku: KernelSku,
@@ -694,7 +698,7 @@ impl<T: Element> Conv2dPlan<T> {
     }
 
     fn bind_stream(&self, h: cudnnHandle_t, stream: &Stream) -> Result<()> {
-        let status = unsafe { cudnnSetStream(h, stream.as_raw() as *mut c_void) };
+        let status = unsafe { cudnnSetStream(h, stream.as_raw()) };
         if status != 0 {
             return Err(Error::CutlassInternal(-status));
         }

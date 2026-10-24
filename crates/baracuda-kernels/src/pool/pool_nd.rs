@@ -11,8 +11,8 @@
 //! - 1-D: `[N, C, L]` (NCL).
 //! - 3-D: `[N, C, D, H, W]` (NCDHW).
 //!
-//! The 2-D plans continue to use the legacy `cudnnSetTensor4dDescriptor`
-//! + `cudnnSetPooling2dDescriptor` path — this module is **only** for
+//! The 2-D plans continue to use the legacy `cudnnSetTensor4dDescriptor` +
+//! `cudnnSetPooling2dDescriptor` path — this module is **only** for
 //! the rank-3 and rank-5 plans.
 
 use core::cell::Cell;
@@ -57,7 +57,7 @@ pub(crate) fn ensure_handle(handle: &Cell<cudnnHandle_t>) -> Result<cudnnHandle_
 
 /// Bind the handle to the caller's CUDA stream on every launch.
 pub(crate) fn bind_stream(h: cudnnHandle_t, stream: &Stream) -> Result<()> {
-    let status = unsafe { cudnnSetStream(h, stream.as_raw() as *mut c_void) };
+    let status = unsafe { cudnnSetStream(h, stream.as_raw()) };
     if status != 0 {
         return Err(Error::CutlassInternal(-status));
     }

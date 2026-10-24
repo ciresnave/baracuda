@@ -89,6 +89,7 @@ pub struct CtcLossCudnnDescriptor {
 }
 
 /// Args bundle for a fused cuDNN CTC FW+BW launch.
+#[derive(Debug)]
 pub struct CtcLossCudnnArgs<'a, T: Element> {
     /// Log-probabilities `[T, B, C]` device tensor. cuDNN applies an
     /// internal log-softmax to recover the normalization (matching
@@ -114,6 +115,7 @@ pub struct CtcLossCudnnArgs<'a, T: Element> {
 /// API contract is honored), one CTC-loss descriptor, and a
 /// workspace-size cache. Lifecycle parity with
 /// [`super::super::conv::Conv2dPlan`].
+#[derive(Debug)]
 pub struct CtcLossCudnnPlan<T: Element> {
     desc: CtcLossCudnnDescriptor,
     sku: KernelSku,
@@ -360,7 +362,7 @@ impl<T: Element> CtcLossCudnnPlan<T> {
     }
 
     fn bind_stream(&self, h: cudnnHandle_t, stream: &Stream) -> Result<()> {
-        let status = unsafe { cudnnSetStream(h, stream.as_raw() as *mut c_void) };
+        let status = unsafe { cudnnSetStream(h, stream.as_raw()) };
         if status != 0 {
             return Err(Error::CutlassInternal(-status));
         }

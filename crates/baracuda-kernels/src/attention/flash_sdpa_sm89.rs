@@ -77,6 +77,7 @@ pub struct FlashSdpaSm89Descriptor {
 /// the innermost head_dim axis is stride=1. GQA broadcast is supported
 /// via `k.stride[1] == 0` (or `v.stride[1] == 0`). `lse` stays contig
 /// (BW path routes through the sm_80 baseline).
+#[derive(Debug)]
 pub struct FlashSdpaSm89Args<'a, T: Element> {
     /// Query tensor — shape `[B, H, Q, D_k]`. Outer strides arbitrary;
     /// head_dim axis (`stride[3]`) must be 1.
@@ -95,6 +96,7 @@ pub struct FlashSdpaSm89Args<'a, T: Element> {
 }
 
 /// Flash Attention forward plan, sm_89 specialization.
+#[derive(Debug)]
 pub struct FlashSdpaSm89Plan<T: Element> {
     desc: FlashSdpaSm89Descriptor,
     sku: KernelSku,
@@ -338,7 +340,7 @@ impl<T: Element> FlashSdpaSm89Plan<T> {
         if args.y.numel() == 0 {
             return Ok(());
         }
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let q_ptr = args.q.data().as_raw().0 as *const c_void;
         let k_ptr = args.k.data().as_raw().0 as *const c_void;
         let v_ptr = args.v.data().as_raw().0 as *const c_void;

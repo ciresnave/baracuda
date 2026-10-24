@@ -54,6 +54,7 @@ pub struct Im2Col1dDescriptor {
 }
 
 /// Args bundle for an `Im2Col1d` launch.
+#[derive(Debug)]
 pub struct Im2Col1dArgs<'a, T: Element> {
     /// Input activations `[N, C, L_in]` NCL contiguous.
     pub input: TensorRef<'a, T, 3>,
@@ -69,6 +70,7 @@ pub struct Im2Col1dArgs<'a, T: Element> {
 /// free copy (one thread per output cell). No accumulation.
 ///
 /// **Workspace**: none.
+#[derive(Debug)]
 pub struct Im2Col1dPlan<T: Element> {
     desc: Im2Col1dDescriptor,
     l_out: i32,
@@ -130,7 +132,7 @@ impl<T: Element> Im2Col1dPlan<T> {
         check_args_1d(&self.desc, self.l_out, &args)?;
         let input_ptr = args.input.data().as_raw().0 as *const c_void;
         let output_ptr = args.output.data().as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let d = &self.desc;
         let status = match T::KIND {
             ElementKind::F32 => unsafe {

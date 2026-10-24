@@ -237,6 +237,10 @@ jobs:
         env:
           DOCS_RS: "1"
         run: cargo clippy --locked -p baracuda-kernels --tests -- -D warnings
+      - name: clippy baracuda-kernels (DOCS_RS, all features)
+        env:
+          DOCS_RS: "1"
+        run: cargo clippy --locked -p baracuda-kernels --all-features -- -D warnings
       - name: test cuda-seam
         run: cargo test --locked -p baracuda-cuda-seam
       - name: clippy cuda-emit convert (feature-gated)

@@ -129,6 +129,7 @@ impl Pool3dDescriptor {
 }
 
 /// Args bundle for a 3-D pooling forward launch.
+#[derive(Debug)]
 pub struct Pool3dFwArgs<'a, T: Element> {
     /// Input `[N, C, D_in, H_in, W_in]` NCDHW contiguous.
     pub x: TensorRef<'a, T, 5>,
@@ -137,6 +138,7 @@ pub struct Pool3dFwArgs<'a, T: Element> {
 }
 
 /// Args bundle for a 3-D pooling backward launch.
+#[derive(Debug)]
 pub struct Pool3dBwArgs<'a, T: Element> {
     /// Saved forward output `[N, C, D_out, H_out, W_out]`.
     pub y: TensorRef<'a, T, 5>,
@@ -149,6 +151,7 @@ pub struct Pool3dBwArgs<'a, T: Element> {
 }
 
 /// 3-D max-pool plan (cuDNN-backed). FW + BW over NCDHW.
+#[derive(Debug)]
 pub struct MaxPool3dPlan<T: Element> {
     desc: Pool3dDescriptor,
     sku: KernelSku,

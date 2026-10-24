@@ -72,6 +72,7 @@ pub struct Im2ColDescriptor {
 }
 
 /// Args bundle for an `Im2Col` (2-D) launch.
+#[derive(Debug)]
 pub struct Im2ColArgs<'a, T: Element> {
     /// Input activations `[N, C, H_in, W_in]` NCHW contiguous.
     pub input: TensorRef<'a, T, 4>,
@@ -93,6 +94,7 @@ pub struct Im2ColArgs<'a, T: Element> {
 /// cell). No accumulation, no atomicAdd.
 ///
 /// **Workspace**: none.
+#[derive(Debug)]
 pub struct Im2ColPlan<T: Element> {
     desc: Im2ColDescriptor,
     h_out: i32,
@@ -202,7 +204,7 @@ impl<T: Element> Im2ColPlan<T> {
         self.check_args(&args)?;
         let input_ptr = args.input.data().as_raw().0 as *const c_void;
         let output_ptr = args.output.data().as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let d = &self.desc;
         let status = match T::KIND {
             ElementKind::F32 => unsafe {

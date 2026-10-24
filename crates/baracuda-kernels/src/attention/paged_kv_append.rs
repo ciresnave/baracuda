@@ -210,7 +210,7 @@ impl<T: Element> PagedKvAppendPlan<T> {
         }
         #[cfg(feature = "flashinfer")]
         {
-            let stream_ptr = stream.as_raw() as *mut c_void;
+            let stream_ptr = stream.as_raw();
             let key_ptr = args.key.data().as_raw().0 as *const c_void;
             let value_ptr = args.value.data().as_raw().0 as *const c_void;
             let k_ptr = args.k_data.data().as_raw().0 as *mut c_void;

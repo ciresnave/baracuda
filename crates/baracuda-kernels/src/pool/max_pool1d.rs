@@ -101,6 +101,7 @@ impl Pool1dDescriptor {
 }
 
 /// Args bundle for a 1-D pooling forward launch.
+#[derive(Debug)]
 pub struct Pool1dFwArgs<'a, T: Element> {
     /// Input activations `[N, C, L_in]` row-major contiguous.
     pub x: TensorRef<'a, T, 3>,
@@ -113,6 +114,7 @@ pub struct Pool1dFwArgs<'a, T: Element> {
 /// As with the 2-D path, **both** `y` (saved FW output) and `x` (saved
 /// FW input) must be retained — cuDNN needs both to recover the
 /// per-window argmax for max-pool.
+#[derive(Debug)]
 pub struct Pool1dBwArgs<'a, T: Element> {
     /// Saved forward output `[N, C, L_out]`.
     pub y: TensorRef<'a, T, 3>,
@@ -128,6 +130,7 @@ pub struct Pool1dBwArgs<'a, T: Element> {
 ///
 /// `select` requires `descriptor.mode == PoolMode::Max`. Use
 /// [`super::AvgPool1dPlan`] for average-pool.
+#[derive(Debug)]
 pub struct MaxPool1dPlan<T: Element> {
     desc: Pool1dDescriptor,
     sku: KernelSku,

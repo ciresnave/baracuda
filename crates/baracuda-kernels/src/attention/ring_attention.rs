@@ -448,7 +448,7 @@ impl<T: Element> RingAttentionPlan<T> {
             ));
         }
 
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let kv_scratch_elems = self.kv_scratch_elements();
         let k_chunk_elems = kv_scratch_elems / 2;
         // Caller has pre-staged this rank's initial K/V into

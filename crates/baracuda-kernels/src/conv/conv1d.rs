@@ -131,6 +131,7 @@ impl Conv1dDescriptor {
 }
 
 /// Args bundle for a Conv1d forward launch.
+#[derive(Debug)]
 pub struct Conv1dArgs<'a, T: Element> {
     /// Input activations `[N, C_in, L_in]` NCL contiguous.
     pub x: TensorRef<'a, T, 3>,
@@ -142,6 +143,7 @@ pub struct Conv1dArgs<'a, T: Element> {
 
 /// Args bundle for a Conv1d data-gradient launch (BW w.r.t. the input
 /// activations). Computes `dx = conv_T(w, dy)`.
+#[derive(Debug)]
 pub struct Conv1dBwArgs<'a, T: Element> {
     /// Filter weights `[C_out, C_in / groups, L_filt]`.
     pub w: TensorRef<'a, T, 3>,
@@ -153,6 +155,7 @@ pub struct Conv1dBwArgs<'a, T: Element> {
 
 /// Args bundle for a Conv1d filter-gradient launch (BW w.r.t. the
 /// filter weights). Computes `dw = conv_grad(x, dy)`.
+#[derive(Debug)]
 pub struct Conv1dDwArgs<'a, T: Element> {
     /// Input activations `[N, C_in, L_in]`.
     pub x: TensorRef<'a, T, 3>,
@@ -184,6 +187,7 @@ pub struct Conv1dDwArgs<'a, T: Element> {
 /// `query_*_workspace_size(stream)` accessor before launching.
 ///
 /// Gated under `feature = "cudnn"` at the crate root.
+#[derive(Debug)]
 pub struct Conv1dPlan<T: Element> {
     desc: Conv1dDescriptor,
     sku: KernelSku,
@@ -624,7 +628,7 @@ impl<T: Element> Conv1dPlan<T> {
     }
 
     fn bind_stream(&self, h: cudnnHandle_t, stream: &Stream) -> Result<()> {
-        let status = unsafe { cudnnSetStream(h, stream.as_raw() as *mut c_void) };
+        let status = unsafe { cudnnSetStream(h, stream.as_raw()) };
         if status != 0 {
             return Err(Error::CutlassInternal(-status));
         }

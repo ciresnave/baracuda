@@ -251,7 +251,7 @@ impl<T: Element> BatchPagedDecodeFp8Plan<T> {
         #[cfg(feature = "flashinfer")]
         {
             let d = &self.desc;
-            let stream_ptr = stream.as_raw() as *mut c_void;
+            let stream_ptr = stream.as_raw();
             let q_ptr = args.q.data().as_raw().0 as *const c_void;
             let k_ptr = args.k_data.data().as_raw().0 as *mut c_void;
             let v_ptr = args.v_data.data().as_raw().0 as *mut c_void;

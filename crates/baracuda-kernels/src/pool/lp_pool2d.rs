@@ -109,6 +109,7 @@ impl LpPool2dDescriptor {
 }
 
 /// Args bundle for an `LpPool2d` forward launch.
+#[derive(Debug)]
 pub struct LpPool2dFwArgs<'a, T: Element> {
     /// Input `[N, C, H_in, W_in]` NCHW contiguous.
     pub x: TensorRef<'a, T, 4>,
@@ -117,6 +118,7 @@ pub struct LpPool2dFwArgs<'a, T: Element> {
 }
 
 /// `LPPool2d` plan — bespoke fused FW.
+#[derive(Debug)]
 pub struct LpPool2dPlan<T: Element> {
     pub(super) desc: LpPool2dDescriptor,
     pub(super) h_out: i32,
@@ -178,7 +180,7 @@ impl<T: Element> LpPool2dPlan<T> {
         check_fw_args_lp2d(&self.desc, self.h_out, self.w_out, &args)?;
         let x_ptr = args.x.data().as_raw().0 as *const c_void;
         let y_ptr = args.y.data().as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let ceil_flag = if self.desc.ceil_mode { 1 } else { 0 };
 
         let status = match T::KIND {
