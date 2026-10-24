@@ -17,10 +17,10 @@ use half::{bf16, f16};
 
 const F16_EPS: f32 = 9.77e-4;
 const BF16_EPS: f32 = 7.81e-3;
-const SCALE_F32: f32 = 1.05070098735548049342;
-const ALPHA_F32: f32 = 1.67326324235437728481;
-const SCALE_F64: f64 = 1.05070098735548049342;
-const ALPHA_F64: f64 = 1.67326324235437728481;
+const SCALE_F32: f32 = 1.050_701;
+const ALPHA_F32: f32 = 1.673_263_2;
+const SCALE_F64: f64 = 1.050_700_987_355_480_5;
+const ALPHA_F64: f64 = 1.673_263_242_354_377_2;
 
 fn setup() -> (Context, Stream) {
     init().expect("driver init");

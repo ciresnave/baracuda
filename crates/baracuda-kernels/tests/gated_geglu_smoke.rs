@@ -13,8 +13,8 @@ use half::{bf16, f16};
 
 const F16_EPS: f32 = 9.77e-4;
 const BF16_EPS: f32 = 7.81e-3;
-const INV_SQRT2_F: f32 = 0.70710678118654752440;
-const INV_SQRT2_D: f64 = 0.70710678118654752440;
+const INV_SQRT2_F: f32 = std::f32::consts::FRAC_1_SQRT_2;
+const INV_SQRT2_D: f64 = std::f64::consts::FRAC_1_SQRT_2;
 
 fn setup() -> (Context, Stream) {
     init().expect("driver init");

@@ -1117,9 +1117,9 @@ fn ormqr_batched_f32_right_n() {
     let n: i32 = 4; // cols of C == size of Q
     let k = n; // K = N for Right-side
     // Factor a square [B, N, N] to get the packed Householder Q.
-    let a_host = build_matrix_f32(b as usize, n as usize, n as usize, 0x10_2030_40);
+    let a_host = build_matrix_f32(b as usize, n as usize, n as usize, 0x1020_3040);
     let (a_packed, tau) = run_batched_qr_f32(&ctx, &stream, &a_host, b, n, n);
-    let c_init = build_matrix_f32(b as usize, m as usize, n as usize, 0x50_6070_80);
+    let c_init = build_matrix_f32(b as usize, m as usize, n as usize, 0x5060_7080);
 
     let op = BatchedOrmqrOp::N;
     let side = BatchedOrmqrSide::Right;
@@ -1145,9 +1145,9 @@ fn ormqr_batched_f32_right_t() {
     let m: i32 = 3;
     let n: i32 = 4;
     let k = n;
-    let a_host = build_matrix_f32(b as usize, n as usize, n as usize, 0x11_1111_11);
+    let a_host = build_matrix_f32(b as usize, n as usize, n as usize, 0x1111_1111);
     let (a_packed, tau) = run_batched_qr_f32(&ctx, &stream, &a_host, b, n, n);
-    let c_init = build_matrix_f32(b as usize, m as usize, n as usize, 0x22_2222_22);
+    let c_init = build_matrix_f32(b as usize, m as usize, n as usize, 0x2222_2222);
 
     let op = BatchedOrmqrOp::T;
     let side = BatchedOrmqrSide::Right;
@@ -1173,9 +1173,9 @@ fn ormqr_batched_f64_right_n() {
     let m: i32 = 3;
     let n: i32 = 4;
     let k = n;
-    let a_host = build_matrix_f64(b as usize, n as usize, n as usize, 0x33_3333_33);
+    let a_host = build_matrix_f64(b as usize, n as usize, n as usize, 0x3333_3333);
     let (a_packed, tau) = run_batched_qr_f64(&ctx, &stream, &a_host, b, n, n);
-    let c_init = build_matrix_f64(b as usize, m as usize, n as usize, 0x44_4444_44);
+    let c_init = build_matrix_f64(b as usize, m as usize, n as usize, 0x4444_4444);
 
     let op = BatchedOrmqrOp::N;
     let side = BatchedOrmqrSide::Right;
@@ -1201,9 +1201,9 @@ fn ormqr_batched_f64_right_t() {
     let m: i32 = 3;
     let n: i32 = 4;
     let k = n;
-    let a_host = build_matrix_f64(b as usize, n as usize, n as usize, 0x55_5555_55);
+    let a_host = build_matrix_f64(b as usize, n as usize, n as usize, 0x5555_5555);
     let (a_packed, tau) = run_batched_qr_f64(&ctx, &stream, &a_host, b, n, n);
-    let c_init = build_matrix_f64(b as usize, m as usize, n as usize, 0x66_6666_66);
+    let c_init = build_matrix_f64(b as usize, m as usize, n as usize, 0x6666_6666);
 
     let op = BatchedOrmqrOp::T;
     let side = BatchedOrmqrSide::Right;
@@ -1233,9 +1233,9 @@ fn ormqr_batched_complex32_left_n() {
     let m: i32 = 4;
     let n: i32 = 3;
     let k = m.min(n);
-    let a_host = build_matrix_complex32(b as usize, m as usize, n as usize, 0x77_7777_77);
+    let a_host = build_matrix_complex32(b as usize, m as usize, n as usize, 0x7777_7777);
     let (a_packed, tau) = run_cusolver_geqrf_per_slot_complex32(&ctx, &stream, &a_host, b, m, n);
-    let c_init = build_matrix_complex32(b as usize, m as usize, n as usize, 0x88_8888_88);
+    let c_init = build_matrix_complex32(b as usize, m as usize, n as usize, 0x8888_8888);
 
     let op = BatchedOrmqrOp::N;
     let side = BatchedOrmqrSide::Left;
@@ -1261,9 +1261,9 @@ fn ormqr_batched_complex32_left_c() {
     let m: i32 = 4;
     let n: i32 = 3;
     let k = m.min(n);
-    let a_host = build_matrix_complex32(b as usize, m as usize, n as usize, 0x99_9999_99);
+    let a_host = build_matrix_complex32(b as usize, m as usize, n as usize, 0x9999_9999);
     let (a_packed, tau) = run_cusolver_geqrf_per_slot_complex32(&ctx, &stream, &a_host, b, m, n);
-    let c_init = build_matrix_complex32(b as usize, m as usize, n as usize, 0xAA_AAAA_AA);
+    let c_init = build_matrix_complex32(b as usize, m as usize, n as usize, 0xAAAA_AAAA);
 
     let op = BatchedOrmqrOp::C;
     let side = BatchedOrmqrSide::Left;
@@ -1289,9 +1289,9 @@ fn ormqr_batched_complex64_left_n() {
     let m: i32 = 4;
     let n: i32 = 3;
     let k = m.min(n);
-    let a_host = build_matrix_complex64(b as usize, m as usize, n as usize, 0xBB_BBBB_BB);
+    let a_host = build_matrix_complex64(b as usize, m as usize, n as usize, 0xBBBB_BBBB);
     let (a_packed, tau) = run_cusolver_geqrf_per_slot_complex64(&ctx, &stream, &a_host, b, m, n);
-    let c_init = build_matrix_complex64(b as usize, m as usize, n as usize, 0xCC_CCCC_CC);
+    let c_init = build_matrix_complex64(b as usize, m as usize, n as usize, 0xCCCC_CCCC);
 
     let op = BatchedOrmqrOp::N;
     let side = BatchedOrmqrSide::Left;
@@ -1317,9 +1317,9 @@ fn ormqr_batched_complex64_left_c() {
     let m: i32 = 4;
     let n: i32 = 3;
     let k = m.min(n);
-    let a_host = build_matrix_complex64(b as usize, m as usize, n as usize, 0xDD_DDDD_DD);
+    let a_host = build_matrix_complex64(b as usize, m as usize, n as usize, 0xDDDD_DDDD);
     let (a_packed, tau) = run_cusolver_geqrf_per_slot_complex64(&ctx, &stream, &a_host, b, m, n);
-    let c_init = build_matrix_complex64(b as usize, m as usize, n as usize, 0xEE_EEEE_EE);
+    let c_init = build_matrix_complex64(b as usize, m as usize, n as usize, 0xEEEE_EEEE);
 
     let op = BatchedOrmqrOp::C;
     let side = BatchedOrmqrSide::Left;
@@ -1349,9 +1349,9 @@ fn ormqr_batched_complex32_right_n() {
     let m: i32 = 3;
     let n: i32 = 4;
     let k = n;
-    let a_host = build_matrix_complex32(b as usize, n as usize, n as usize, 0x12_3456_78);
+    let a_host = build_matrix_complex32(b as usize, n as usize, n as usize, 0x1234_5678);
     let (a_packed, tau) = run_cusolver_geqrf_per_slot_complex32(&ctx, &stream, &a_host, b, n, n);
-    let c_init = build_matrix_complex32(b as usize, m as usize, n as usize, 0x9A_BCDE_F0);
+    let c_init = build_matrix_complex32(b as usize, m as usize, n as usize, 0x9ABC_DEF0);
 
     let op = BatchedOrmqrOp::N;
     let side = BatchedOrmqrSide::Right;
@@ -1377,9 +1377,9 @@ fn ormqr_batched_complex32_right_c() {
     let m: i32 = 3;
     let n: i32 = 4;
     let k = n;
-    let a_host = build_matrix_complex32(b as usize, n as usize, n as usize, 0x21_4365_87);
+    let a_host = build_matrix_complex32(b as usize, n as usize, n as usize, 0x2143_6587);
     let (a_packed, tau) = run_cusolver_geqrf_per_slot_complex32(&ctx, &stream, &a_host, b, n, n);
-    let c_init = build_matrix_complex32(b as usize, m as usize, n as usize, 0xA9_CBED_0F);
+    let c_init = build_matrix_complex32(b as usize, m as usize, n as usize, 0xA9CB_ED0F);
 
     let op = BatchedOrmqrOp::C;
     let side = BatchedOrmqrSide::Right;
@@ -1405,9 +1405,9 @@ fn ormqr_batched_complex64_right_n() {
     let m: i32 = 3;
     let n: i32 = 4;
     let k = n;
-    let a_host = build_matrix_complex64(b as usize, n as usize, n as usize, 0xFE_DCBA_98);
+    let a_host = build_matrix_complex64(b as usize, n as usize, n as usize, 0xFEDC_BA98);
     let (a_packed, tau) = run_cusolver_geqrf_per_slot_complex64(&ctx, &stream, &a_host, b, n, n);
-    let c_init = build_matrix_complex64(b as usize, m as usize, n as usize, 0x76_5432_10);
+    let c_init = build_matrix_complex64(b as usize, m as usize, n as usize, 0x7654_3210);
 
     let op = BatchedOrmqrOp::N;
     let side = BatchedOrmqrSide::Right;
@@ -1433,9 +1433,9 @@ fn ormqr_batched_complex64_right_c() {
     let m: i32 = 3;
     let n: i32 = 4;
     let k = n;
-    let a_host = build_matrix_complex64(b as usize, n as usize, n as usize, 0xEF_CDAB_89);
+    let a_host = build_matrix_complex64(b as usize, n as usize, n as usize, 0xEFCD_AB89);
     let (a_packed, tau) = run_cusolver_geqrf_per_slot_complex64(&ctx, &stream, &a_host, b, n, n);
-    let c_init = build_matrix_complex64(b as usize, m as usize, n as usize, 0x67_4523_01);
+    let c_init = build_matrix_complex64(b as usize, m as usize, n as usize, 0x6745_2301);
 
     let op = BatchedOrmqrOp::C;
     let side = BatchedOrmqrSide::Right;

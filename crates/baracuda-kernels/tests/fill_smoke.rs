@@ -5,6 +5,8 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test fill_smoke --features device-tests`.
 #![cfg(feature = "device-tests")]
+// approx_constant: `3.14`/`3.14159` are arbitrary test values, not pi; std::f32::consts::PI would change the data under test.
+#![allow(clippy::approx_constant)]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{

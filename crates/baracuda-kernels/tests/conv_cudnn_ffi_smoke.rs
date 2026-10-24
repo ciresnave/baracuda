@@ -539,7 +539,7 @@ fn ffi_conv_transpose_2d_f32_fw_matches_plan() {
     let x_numel = (n * c_in * h_in * w_in) as usize;
     let w_numel = (c_in * (c_out / groups) * h_filt * w_filt) as usize;
     let y_numel = (n * c_out * h_out * w_out) as usize;
-    let host_x = deterministic_f32(x_numel, 0xC0FFEE_01);
+    let host_x = deterministic_f32(x_numel, 0xC0FF_EE01);
     let host_w = deterministic_f32(w_numel, 0xDEAD_BEEF);
 
     // --- Rust plan reference ---
