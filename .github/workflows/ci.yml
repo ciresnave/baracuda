@@ -522,4 +522,4 @@ jobs:
     name: Portfolio checks (advisory)
     permissions:
       contents: read
-    uses: ciresnave/coderipper/.github/workflows/portfolio.yml@d14a22b67e5533d0188f067e01693878065ca071 # 0.9.14
+    uses: ciresnave/coderipper/.github/workflows/portfolio.yml@e40c8557f27a797879973b9a011bd6583f5d88ca # 0.9.20
