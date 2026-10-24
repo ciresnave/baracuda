@@ -16,6 +16,10 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.13 - 2026-10-24
+
+No API or behaviour change; CI only. The advisory `portfolio` job is repinned from CodeRipper `d14a22b6` (0.9.14) to `e40c8557` (0.9.20), which installs CodeRipper with `cargo check` instead of a link, to clear the "linking with cc failed" errors on `baracuda-kernels` and `baracuda-kernels-bench` under `DOCS_RS=1`.
+
 ## 0.1.0-alpha.12 - 2026-10-24
 
 Docs only. `PROVENANCE.md` section 6 now records the maker and licence of `assets/barracuda.png`: made by CireSnave with GPT-4o (C2PA manifest), licence per OpenAI's row Terms of Use, which assign output rights to the user (quoted verbatim; replaces "unknown: pending CireSnave"). No code change.
