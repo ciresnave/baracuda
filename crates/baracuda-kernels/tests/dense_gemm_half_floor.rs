@@ -38,45 +38,80 @@ impl Lcg {
     }
 }
 
-/// `(max abs err / max|ref|, rounding-floor of the same measure)` for one shape.
-fn measure<T, FI, FO>(
-    ctx: &Context,
-    stream: &Stream,
-    (m, n, k): (usize, usize, usize),
-    to_half: FI,
-    from_half: FO,
-) -> (f64, f64)
-where
-    T: baracuda_kernels::Element + Copy + Default + 'static,
-    FI: Fn(f32) -> T,
-    FO: Fn(T) -> f32,
-{
-    use baracuda_kernels::ScalarType;
+/// A half storage dtype: conversion in and out of f32.
+trait Half: baracuda_kernels::Element + Copy + Default + 'static {
+    fn make(v: f32) -> Self;
+    fn value(self) -> f32;
+}
 
+impl Half for f16 {
+    fn make(v: f32) -> Self {
+        f16::from_f32(v)
+    }
+    fn value(self) -> f32 {
+        self.to_f32()
+    }
+}
+
+impl Half for bf16 {
+    fn make(v: f32) -> Self {
+        bf16::from_f32(v)
+    }
+    fn value(self) -> f32 {
+        self.to_f32()
+    }
+}
+
+/// Half inputs plus the f64 reference of their product and its rounding floor.
+struct Problem<T> {
+    a: Vec<T>,
+    b: Vec<T>,
+    want: Vec<f64>,
+    max_ref: f64,
+    floor: f64,
+}
+
+fn problem<T: Half>((m, n, k): (usize, usize, usize)) -> Problem<T> {
     let mut rng = Lcg(0x9e37_79b9_7f4a_7c15 ^ (m * 31 + n * 7 + k) as u64);
-    let a_h: Vec<T> = (0..m * k).map(|_| to_half(rng.next())).collect();
-    let b_h: Vec<T> = (0..k * n).map(|_| to_half(rng.next())).collect();
-    let a: Vec<f64> = a_h.iter().map(|&v| from_half(v) as f64).collect();
-    let b: Vec<f64> = b_h.iter().map(|&v| from_half(v) as f64).collect();
-
+    let a: Vec<T> = (0..m * k).map(|_| T::make(rng.next())).collect();
+    let b: Vec<T> = (0..k * n).map(|_| T::make(rng.next())).collect();
+    let af: Vec<f64> = a.iter().map(|&v| v.value() as f64).collect();
+    let bf: Vec<f64> = b.iter().map(|&v| v.value() as f64).collect();
     let mut want = vec![0f64; m * n];
     for i in 0..m {
         for p in 0..k {
-            let av = a[i * k + p];
+            let av = af[i * k + p];
             for j in 0..n {
-                want[i * n + j] += av * b[p * n + j];
+                want[i * n + j] += av * bf[p * n + j];
             }
         }
     }
     let max_ref = want.iter().fold(0f64, |x, &v| x.max(v.abs()));
     let floor = want
         .iter()
-        .map(|&v| (from_half(to_half(v as f32)) as f64 - v).abs())
+        .map(|&v| (T::make(v as f32).value() as f64 - v).abs())
         .fold(0f64, f64::max)
         / max_ref;
+    Problem {
+        a,
+        b,
+        want,
+        max_ref,
+        floor,
+    }
+}
 
-    let dev_a = DeviceBuffer::from_slice(ctx, &a_h).expect("upload A");
-    let dev_b = DeviceBuffer::from_slice(ctx, &b_h).expect("upload B");
+/// Run the facade-backed plan on the problem's inputs and download D.
+fn run_plan<T: Half>(
+    ctx: &Context,
+    stream: &Stream,
+    (m, n, k): (usize, usize, usize),
+    p: &Problem<T>,
+) -> Vec<T> {
+    use baracuda_kernels::ScalarType;
+
+    let dev_a = DeviceBuffer::from_slice(ctx, &p.a).expect("upload A");
+    let dev_b = DeviceBuffer::from_slice(ctx, &p.b).expect("upload B");
     let mut dev_d: DeviceBuffer<T> = DeviceBuffer::zeros(ctx, m * n).expect("alloc D");
     let desc = DenseGemmDescriptor {
         m: m as i32,
@@ -100,29 +135,34 @@ where
     plan.run(stream, Workspace::None, args)
         .expect("dense half run");
     stream.synchronize().expect("stream sync");
-
     let mut got = vec![T::default(); m * n];
     dev_d.copy_to_host(&mut got).expect("download D");
+    got
+}
+
+/// `(max abs err / max|ref|, rounding floor of the same measure)` for one shape.
+fn measure<T: Half>(ctx: &Context, stream: &Stream, shape: (usize, usize, usize)) -> (f64, f64) {
+    let p = problem::<T>(shape);
+    let got = run_plan(ctx, stream, shape, &p);
     let err = got
         .iter()
-        .zip(&want)
-        .map(|(&g, &w)| (from_half(g) as f64 - w).abs())
+        .zip(&p.want)
+        .map(|(&g, &w)| (g.value() as f64 - w).abs())
         .fold(0f64, f64::max)
-        / max_ref;
-    (err, floor)
+        / p.max_ref;
+    (err, p.floor)
 }
 
 fn sweep(ctx: &Context, stream: &Stream, label: &str) -> Vec<(String, f64, f64)> {
     let mut out = Vec::new();
     for shape in SHAPES {
-        let (e, f) = measure::<f16, _, _>(ctx, stream, shape, f16::from_f32, |v| v.to_f32());
+        let (e, f) = measure::<f16>(ctx, stream, shape);
         out.push((format!("f16 {label} {shape:?}"), e, f));
-        let (e, f) = measure::<bf16, _, _>(ctx, stream, shape, bf16::from_f32, |v| v.to_f32());
+        let (e, f) = measure::<bf16>(ctx, stream, shape);
         out.push((format!("bf16 {label} {shape:?}"), e, f));
     }
     out
 }
-
 #[test]
 fn half_gemm_large_k_reaches_output_rounding_floor() {
     init().expect("driver init");

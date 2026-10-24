@@ -12,72 +12,86 @@ use half::f16;
 
 const CALLS: usize = 40;
 
+const M: usize = 31;
+const N: usize = 512;
+const K: usize = 2048;
+
+/// One f16 facade call on `ctx`; returns the facade status.
+fn f16_call(ctx: &Context, stream: &Stream) -> i32 {
+    let a = DeviceBuffer::from_slice(ctx, &vec![f16::from_f32(0.5); M * K]).expect("A");
+    let b = DeviceBuffer::from_slice(ctx, &vec![f16::from_f32(0.25); K * N]).expect("B");
+    let d: DeviceBuffer<f16> = DeviceBuffer::zeros(ctx, M * N).expect("D");
+    // SAFETY: the three buffers are sized for an RRR M x K . K x N -> M x N problem and outlive
+    // the caller's synchronize; `stream` belongs to `ctx`, which is current.
+    unsafe {
+        baracuda_kernels_sys::baracuda_kernels_gemm_dense_f16_run(
+            M as i32,
+            N as i32,
+            K as i32,
+            1,
+            0,
+            1.0,
+            0.0,
+            a.as_raw().0 as _,
+            K as i64,
+            0,
+            b.as_raw().0 as _,
+            N as i64,
+            0,
+            d.as_raw().0 as _,
+            N as i64,
+            0,
+            core::ptr::null_mut(),
+            0,
+            stream.as_raw() as _,
+        )
+    }
+}
+
+/// One f32 facade call on `ctx`; returns the facade status.
+fn f32_call(ctx: &Context, stream: &Stream) -> i32 {
+    let a = DeviceBuffer::from_slice(ctx, &vec![0.5f32; M * K]).expect("A");
+    let b = DeviceBuffer::from_slice(ctx, &vec![0.25f32; K * N]).expect("B");
+    let d: DeviceBuffer<f32> = DeviceBuffer::zeros(ctx, M * N).expect("D");
+    // SAFETY: the three buffers are sized for an RRR M x K . K x N -> M x N problem and outlive
+    // the caller's synchronize; `stream` belongs to `ctx`, which is current.
+    unsafe {
+        baracuda_kernels_sys::baracuda_kernels_gemm_dense_f32_run(
+            M as i32,
+            N as i32,
+            K as i32,
+            1,
+            0,
+            1.0,
+            0.0,
+            a.as_raw().0 as _,
+            K as i64,
+            0,
+            b.as_raw().0 as _,
+            N as i64,
+            0,
+            d.as_raw().0 as _,
+            N as i64,
+            0,
+            core::ptr::null_mut(),
+            0,
+            stream.as_raw() as _,
+        )
+    }
+}
+
 /// One f16 (even `i`) or f32 (odd `i`) facade call on a context made just for it; returns the
 /// facade status, or -1 if the stream failed to synchronize.
 fn call_on_fresh_context(dev: &Device, i: usize) -> i32 {
     let ctx = Context::new(dev).expect("context");
     let stream = Stream::new(&ctx).expect("stream");
-    let (m, n, k) = (31usize, 512usize, 2048usize);
-    let mut status = if i.is_multiple_of(2) {
-        let a = DeviceBuffer::from_slice(&ctx, &vec![f16::from_f32(0.5); m * k]).expect("A");
-        let b = DeviceBuffer::from_slice(&ctx, &vec![f16::from_f32(0.25); k * n]).expect("B");
-        let d: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, m * n).expect("D");
-        // SAFETY: the three buffers are sized for an RRR m x k . k x n -> m x n problem and live
-        // until after the synchronize below; `stream` belongs to the current context.
-        unsafe {
-            baracuda_kernels_sys::baracuda_kernels_gemm_dense_f16_run(
-                m as i32,
-                n as i32,
-                k as i32,
-                1,
-                0,
-                1.0,
-                0.0,
-                a.as_raw().0 as _,
-                k as i64,
-                0,
-                b.as_raw().0 as _,
-                n as i64,
-                0,
-                d.as_raw().0 as _,
-                n as i64,
-                0,
-                core::ptr::null_mut(),
-                0,
-                stream.as_raw() as _,
-            )
-        }
+    let status = if i.is_multiple_of(2) {
+        f16_call(&ctx, &stream)
     } else {
-        let a = DeviceBuffer::from_slice(&ctx, &vec![0.5f32; m * k]).expect("A");
-        let b = DeviceBuffer::from_slice(&ctx, &vec![0.25f32; k * n]).expect("B");
-        let d: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, m * n).expect("D");
-        // SAFETY: as above, for f32.
-        unsafe {
-            baracuda_kernels_sys::baracuda_kernels_gemm_dense_f32_run(
-                m as i32,
-                n as i32,
-                k as i32,
-                1,
-                0,
-                1.0,
-                0.0,
-                a.as_raw().0 as _,
-                k as i64,
-                0,
-                b.as_raw().0 as _,
-                n as i64,
-                0,
-                d.as_raw().0 as _,
-                n as i64,
-                0,
-                core::ptr::null_mut(),
-                0,
-                stream.as_raw() as _,
-            )
-        }
+        f32_call(&ctx, &stream)
     };
     if status == 0 && stream.synchronize().is_err() {
-        status = -1;
+        return -1;
     }
     status
 }
