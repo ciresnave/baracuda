@@ -116,11 +116,12 @@
 //! no-context sentinel, which would strand slots and risk
 //! cross-context revival.
 //!
-//! Hazard (shared with Phase 30): if a CUDA context is destroyed and a
-//! NEW context is later allocated at the same address, a stale pooled
-//! handle could be revived against the new context. Don't destroy
-//! contexts mid-process while continuing to call these symbols from
-//! other contexts at the same address; tear-down-then-exit is fine.
+//! Pool key: the context's `cuCtxGetId` (unique, never reused), falling back to its address only
+//! if the id is unavailable. Keyed on the address (before alpha.16) a context destroyed and
+//! recreated at the same address revived a handle bound to the dead context, and every call after
+//! the first returned status 5 (reproduced with a fresh context per call). A destroyed context's
+//! pooled handle is never reused now, but its slot stays claimed: after `POOL_SLOTS` distinct
+//! contexts every further context takes the transient create/destroy path (correct, slower).
 //!
 //! ## Stream capture
 //!
@@ -162,6 +163,10 @@ unsafe extern "C" {
     /// only as the handle-pool cache key — never to mutate context
     /// state.
     fn cuCtxGetCurrent(ctx: *mut *mut c_void) -> i32;
+
+    /// `cuCtxGetId` (CUDA 12.0+): a process-unique 64-bit id that is never reused after the
+    /// context is destroyed, unlike the context's address.
+    fn cuCtxGetId(ctx: *mut c_void, id: *mut u64) -> i32;
 }
 
 // =============================================================================
@@ -215,7 +220,14 @@ fn current_ctx_key() -> usize {
     let mut ctx: *mut c_void = ptr::null_mut();
     let st = unsafe { cuCtxGetCurrent(&mut ctx as *mut _) };
     if st != 0 || ctx.is_null() {
-        usize::MAX
+        return usize::MAX;
+    }
+    // Key on the context's unique id, not its address: a destroyed context's address is reused by
+    // the next `cuCtxCreate`, which revived a pooled handle bound to the dead context (every call
+    // after the first returned status 5 when a caller made a fresh context per call).
+    let mut id: u64 = 0;
+    if unsafe { cuCtxGetId(ctx, &mut id as *mut _) } == 0 && id != 0 && id as usize != usize::MAX {
+        id as usize
     } else {
         ctx as usize
     }
