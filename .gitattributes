@@ -40,3 +40,8 @@ docs/measurements/kiss-329-cuda-nan-payload/* text eol=lf
 # the digest is over the manifest bytes, so a CRLF checkout would change every
 # hash. Pin the whole dir to LF, as the #329 measurement already is.
 docs/measurements/kiss-6.8-0017-vulkan-reproduction/* text eol=lf
+
+# All CUDA sources are LF in the repo AND the working tree: nvcc output and the
+# emitter goldens are byte-compared, and one workspace-wide rule beats per-dir pins
+# (ROADMAP SA-19; docs/design/2026-08-06-unpopped-extraction-plan.md:142).
+*.cu text eol=lf
