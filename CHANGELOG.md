@@ -16,6 +16,10 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.8 - 2026-10-24
+
+No API or behaviour change; `baracuda-kernels` test-target clippy, family B (`clippy::unnecessary_cast`): 308 casts removed. Every one is a same-type cast clippy proved identical (278 `*mut c_void` -> `*mut c_void` on `stream.as_raw()`, 15 `i32` -> `i32`, 13 `usize` -> `usize`, 2 `i64` -> `i64`), so no value, width or rounding changes. Follow-on `unused_parens` / `unused_imports` from the removals fixed. `--all-features --tests` errors 521 -> 213 (`--keep-going`, alpha.8 tree).
+
 ## 0.1.0-alpha.7 - 2026-10-24
 
 No API or behaviour change; `baracuda-kernels` test-target clippy, family A (mechanical, non-numeric): `unused_parens`/`double_parens`, `let_and_return`, `useless_vec`, `unused_mut`, `unused_braces`, `unused_imports`, `doc_lazy_continuation`, `redundant_closure`, `manual_range_contains`, `manual_is_multiple_of` (asserts on non-zero divisors), and the `selective_scan_bw_smoke` snake-case renames (test fn `selective_scan_bw_missing_dD_when_d_given_errors` is now `..._missing_d_d_when_d_given_errors`). `--all-features --tests` errors 789 -> 521 (`--keep-going`, alpha.7 tree); numeric families (casts, float precision, byte groupings, identity ops) follow in their own PRs.
