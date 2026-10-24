@@ -223,12 +223,20 @@ jobs:
         run: cargo clippy --locked -p baracuda-cuda-seam --tests -- -D warnings
       # The nvcc `-sys` crates are outside the --all-features clippy step (they need the toolkit);
       # DOCS_RS=1 skips their nvcc build, so clippy still lints their Rust. Default features, lib
-      # only: `--all-features` and `--tests` for baracuda-kernels(-sys) still have findings, see the
-      # ROADMAP row.
+      # only; the next two steps add `-sys --all-features --tests` and `baracuda-kernels --tests`.
+      # `baracuda-kernels --all-features` still has findings, see the ROADMAP row.
       - name: clippy nvcc crates (DOCS_RS, no CUDA)
         env:
           DOCS_RS: "1"
         run: cargo clippy --locked -p baracuda-kernels-sys -p baracuda-cutlass-sys -p baracuda-cutlass-kernels-sys -p baracuda-kernels -- -D warnings
+      - name: clippy nvcc -sys crates (DOCS_RS, all features, tests)
+        env:
+          DOCS_RS: "1"
+        run: cargo clippy --locked -p baracuda-kernels-sys -p baracuda-cutlass-sys -p baracuda-cutlass-kernels-sys --all-features --tests -- -D warnings
+      - name: clippy baracuda-kernels (DOCS_RS, tests)
+        env:
+          DOCS_RS: "1"
+        run: cargo clippy --locked -p baracuda-kernels --tests -- -D warnings
       - name: test cuda-seam
         run: cargo test --locked -p baracuda-cuda-seam
       - name: clippy cuda-emit convert (feature-gated)

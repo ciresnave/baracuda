@@ -25,8 +25,8 @@
 //! build-time parameter -- not worth the churn for a latent path. This
 //! test instead encodes the exact row/grid arithmetic from
 //! `kernels/gguf/mmvq.cu`'s K-quant launchers (`block_num_y =
-//! ceil_div_host(nrows, GGML_CUDA_MMV_Y)`, `row = blockIdx.x * blockDim.y
-//! + threadIdx.y`) as plain host-side integer math, and proves: (a) under
+//! ceil_div_host(nrows, GGML_CUDA_MMV_Y)`, `row = blockIdx.x * blockDim.y +
+//! threadIdx.y`) as plain host-side integer math, and proves: (a) under
 //! today's `GGML_CUDA_MMV_Y = 1`, the old and new guards are
 //! observationally identical (confirming the "currently latent" claim is
 //! not just asserted but demonstrated), and (b) under a hypothetical

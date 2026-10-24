@@ -1298,7 +1298,8 @@ macro_rules! conv1d_bw_data_impl {
     ($name:ident, $dt:expr) => {
         /// Conv1d backward-data. See [`baracuda_kernels_conv_2d_fw_f32_run`].
         ///
-        /// # Safety: as the Conv1d FW.
+        /// # Safety
+        /// As the Conv1d FW.
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn $name(
             batch: i32,
@@ -1348,7 +1349,8 @@ macro_rules! conv1d_bw_filter_impl {
     ($name:ident, $dt:expr) => {
         /// Conv1d backward-filter. See [`baracuda_kernels_conv_2d_fw_f32_run`].
         ///
-        /// # Safety: as the Conv1d FW.
+        /// # Safety
+        /// As the Conv1d FW.
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn $name(
             batch: i32,
@@ -1725,7 +1727,8 @@ macro_rules! conv3d_dir_impl {
     ($name:ident, $dt:expr, $dir:expr, $a:ident, $b:ident, $c:ident) => {
         /// Conv3d direction.
         ///
-        /// # Safety: all pointers must be live device memory; `stream` valid.
+        /// # Safety
+        /// All pointers must be live device memory; `stream` valid.
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn $name(
             batch: i32,
@@ -2356,7 +2359,8 @@ macro_rules! convt2d_dir_impl {
     ($name:ident, $dt:expr, $runner:ident, $a:ident, $b:ident, $c:ident) => {
         /// ConvTranspose2d direction.
         ///
-        /// # Safety: all pointers must be live device memory; `stream` valid.
+        /// # Safety
+        /// All pointers must be live device memory; `stream` valid.
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn $name(
             batch: i32,
@@ -2909,7 +2913,8 @@ macro_rules! convt1d_dir_impl {
     ($name:ident, $dt:expr, $runner:ident, $a:ident, $b:ident, $c:ident) => {
         /// ConvTranspose1d direction.
         ///
-        /// # Safety: all pointers must be live device memory; `stream` valid.
+        /// # Safety
+        /// All pointers must be live device memory; `stream` valid.
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn $name(
             batch: i32,
@@ -3496,7 +3501,8 @@ macro_rules! convt3d_dir_impl {
     ($name:ident, $dt:expr, $runner:ident, $a:ident, $b:ident, $c:ident) => {
         /// ConvTranspose3d direction.
         ///
-        /// # Safety: all pointers must be live device memory; `stream` valid.
+        /// # Safety
+        /// All pointers must be live device memory; `stream` valid.
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn $name(
             batch: i32,
