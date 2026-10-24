@@ -74,7 +74,7 @@ fn run_f32_contig<const N: usize>(shape: [i32; N]) {
     let (ctx, stream) = setup();
     let numel: usize = shape.iter().map(|&d| d as usize).product();
 
-    let host_x: Vec<f32> = (0..numel).map(|i| ((i as f32) * 0.0625 + 0.5)).collect();
+    let host_x: Vec<f32> = (0..numel).map(|i| (i as f32) * 0.0625 + 0.5).collect();
     let expected: Vec<f32> = host_x.iter().map(|x| (*x).sqrt().recip()).collect();
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("upload x");
@@ -110,7 +110,7 @@ fn run_f16_contig_3d(shape: [i32; 3]) {
     let numel: usize = shape.iter().map(|&d| d as usize).product();
 
     let host_x: Vec<f16> = (0..numel)
-        .map(|i| f16::from_f32(((i as f32) * 0.0625 + 0.5)))
+        .map(|i| f16::from_f32((i as f32) * 0.0625 + 0.5))
         .collect();
     let host_expected: Vec<f16> = host_x
         .iter()
@@ -150,7 +150,7 @@ fn run_bf16_contig_3d(shape: [i32; 3]) {
     let numel: usize = shape.iter().map(|&d| d as usize).product();
 
     let host_x: Vec<bf16> = (0..numel)
-        .map(|i| bf16::from_f32(((i as f32) * 0.0625 + 0.5)))
+        .map(|i| bf16::from_f32((i as f32) * 0.0625 + 0.5))
         .collect();
     let host_expected: Vec<bf16> = host_x
         .iter()
@@ -189,7 +189,7 @@ fn run_f64_contig_3d(shape: [i32; 3]) {
     let (ctx, stream) = setup();
     let numel: usize = shape.iter().map(|&d| d as usize).product();
 
-    let host_x: Vec<f64> = (0..numel).map(|i| ((i as f64) * 0.0625 + 0.5)).collect();
+    let host_x: Vec<f64> = (0..numel).map(|i| (i as f64) * 0.0625 + 0.5).collect();
     let expected: Vec<f64> = host_x.iter().map(|x| (*x).sqrt().recip()).collect();
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("upload x");
@@ -229,7 +229,7 @@ fn rsqrt_f32_strided_transposed() {
     let n = N_DIM as i32;
 
     let x_buf: Vec<f32> = (0..(N_DIM * M))
-        .map(|i| ((i as f32) * 0.0625 + 0.5))
+        .map(|i| (i as f32) * 0.0625 + 0.5)
         .collect();
     let x_shape = [m, n];
     let x_stride = [1i64, M as i64]; // transposed

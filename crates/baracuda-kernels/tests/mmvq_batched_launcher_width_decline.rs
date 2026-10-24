@@ -193,7 +193,7 @@ fn q2_k_batched_ncols256_via_raw_ffi_computes() {
     // Use an all-zero block (d=0): deterministic zero output, just proving
     // "accepted and ran" rather than exercising the full k-quant dequant math
     // (that's covered elsewhere; this test is purely about the width gate).
-    let weight = vec![0u8; 84];
+    let weight = [0u8; 84];
     let activation = vec![0.0f32; ncols as usize];
 
     let host_weight: Vec<U8> = weight.iter().copied().map(U8).collect();

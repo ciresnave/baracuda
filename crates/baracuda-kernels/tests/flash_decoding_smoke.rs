@@ -39,7 +39,7 @@ fn sdpa_decode_cpu(
     d: usize,
     scale: f32,
 ) -> (Vec<f32>, Vec<f32>) {
-    assert!(h_q % h_kv == 0);
+    assert!(h_q.is_multiple_of(h_kv));
     let group_size = h_q / h_kv;
     let mut y = vec![0.0_f32; b * h_q * d];
     // Per-key attention weights a[b, h_q, k_len] = softmax(q·kᵀ·scale) over the
@@ -587,7 +587,7 @@ fn head_mean_ref(a: &[f32], b: usize, h: usize, k_len: usize) -> Vec<f32> {
 
 /// Head-mean `[B,Sk]` output: correctness vs the CPU reference (incl. multi-split)
 /// + the config-2 (a only) vs config-3 (a + head-mean) cost delta on the 4070.
-/// Gated behind the `device-tests` feature — run with `--features device-tests -- --nocapture`.
+///   Gated behind the `device-tests` feature — run with `--features device-tests -- --nocapture`.
 #[test]
 fn flash_decoding_head_mean_f16() {
     use std::time::Instant;
@@ -941,6 +941,7 @@ fn flash_decoding_a_cost_gqa_sweep_f16() {
 ///   - `a_mean` requested without `a` (its input),
 ///   - non-contiguous `a`,
 ///   - non-contiguous `a_mean`,
+///
 /// plus a positive control that a well-formed `a` + `a_mean` passes.
 /// Gated behind the `device-tests` feature — needs a device for `select` / buffer allocation.
 #[test]

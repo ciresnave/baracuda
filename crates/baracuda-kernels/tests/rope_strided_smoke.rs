@@ -139,8 +139,8 @@ fn rope_strided_contig_f32() {
 }
 
 /// 2. Transposed view: physical buffer is `[B, S, H, D]` (seq and heads
-/// swapped). We pretend it's `[B, H, S, D]` by reordering the strides.
-/// This exercises the strided FFI: outer-dim strides are non-canonical.
+///    swapped). We pretend it's `[B, H, S, D]` by reordering the strides.
+///    This exercises the strided FFI: outer-dim strides are non-canonical.
 #[test]
 fn rope_strided_transposed_view_f32() {
     let (ctx, stream) = setup();

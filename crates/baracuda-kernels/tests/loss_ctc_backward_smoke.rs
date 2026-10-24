@@ -333,7 +333,7 @@ fn fd_check_f32(eps: f32, tol: f32) {
         (2, 0, 0),                // sample 0, t=2, c=0 (blank)
         (1, 1, 2),                // sample 1, t=1, c=2 (target class)
     ];
-    let lp_at = |t: usize, n_: usize, c_: usize, lp: &[f32]| -> usize {
+    let lp_at = |t: usize, n_: usize, c_: usize, _lp: &[f32]| -> usize {
         t * n as usize * c as usize + n_ * c as usize + c_
     };
     for &(t, n_, c_) in &pick {

@@ -40,7 +40,7 @@ fn setup() -> (Context, Stream) {
 // `c` values stay in [-1.5, -0.5] U [0.5, 1.5] — well away from zero.
 fn gen_c_f32(i: usize) -> f32 {
     let m = ((i % 17) as f32) * 0.0625 + 0.5; // [0.5, 1.5]
-    if i % 2 == 0 { m } else { -m }
+    if i.is_multiple_of(2) { m } else { -m }
 }
 
 #[test]
@@ -56,7 +56,7 @@ fn addcdiv_backward_f32_3d() {
     let host_b: Vec<f32> = (0..numel)
         .map(|i| ((i % 29) as f32) * 0.0625 - 1.0)
         .collect();
-    let host_c: Vec<f32> = (0..numel).map(|i| gen_c_f32(i)).collect();
+    let host_c: Vec<f32> = (0..numel).map(gen_c_f32).collect();
     let dev_dy = DeviceBuffer::from_slice(&ctx, &host_dy).unwrap();
     let dev_a = DeviceBuffer::from_slice(&ctx, &host_a).unwrap();
     let dev_b = DeviceBuffer::from_slice(&ctx, &host_b).unwrap();

@@ -54,7 +54,7 @@ fn flip_2d_axis_1() {
     let shape = [4i32, 8];
     let host_x: Vec<f32> = (0..32).map(|i| (i as f32) * 0.5).collect();
     // Flip along axis 1 — reverse each row.
-    let mut expected = vec![0f32; 32];
+    let mut expected = [0f32; 32];
     for i in 0..4 {
         for j in 0..8 {
             expected[(i * 8 + j) as usize] = host_x[(i * 8 + (7 - j)) as usize];

@@ -82,7 +82,7 @@ fn roi_pool_full_image_f32_smoke() {
     assert_eq!(got, vec![6.0, 8.0, 14.0, 16.0]);
     // argmax must all be in [0, 16).
     for &a in &argmax {
-        assert!(a >= 0 && a < 16);
+        assert!((0..16).contains(&a));
     }
 }
 

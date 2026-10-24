@@ -22,7 +22,7 @@ fn roll_1d_positive() {
     let shifts = [3i32];
     let host_x: Vec<f32> = (0..8).map(|i| i as f32).collect();
     // y[c] = x[(c - 3) mod 8]
-    let mut expected = vec![0f32; 8];
+    let mut expected = [0f32; 8];
     for c in 0i32..8 {
         let src = (c - 3).rem_euclid(8) as usize;
         expected[c as usize] = host_x[src];
@@ -58,7 +58,7 @@ fn roll_1d_negative() {
     let shape = [8i32];
     let shifts = [-2i32];
     let host_x: Vec<f32> = (0..8).map(|i| i as f32).collect();
-    let mut expected = vec![0f32; 8];
+    let mut expected = [0f32; 8];
     for c in 0i32..8 {
         let src = (c - (-2)).rem_euclid(8) as usize;
         expected[c as usize] = host_x[src];
@@ -94,7 +94,7 @@ fn roll_2d_mixed() {
     let shape = [4i32, 8];
     let shifts = [1i32, -3];
     let host_x: Vec<f32> = (0..32).map(|i| (i as f32) * 0.25).collect();
-    let mut expected = vec![0f32; 32];
+    let mut expected = [0f32; 32];
     for i in 0i32..4 {
         for j in 0i32..8 {
             let src_i = (i - 1).rem_euclid(4);

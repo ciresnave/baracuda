@@ -280,7 +280,7 @@ fn arbmask_tree_attention_pattern() {
         &[0, 1],
         &[0, 2],
         &[0, 1, 3],
-        &[0, 1, 2, 4][..2].split_at(2).0, // unused; redefining below
+        [0, 1, 2, 4][..2].split_at(2).0, // unused; redefining below
     ];
     let _ = ancestors;
     let ancestors: [Vec<i32>; 5] = [

@@ -239,7 +239,7 @@ fn cumsum_bw_f64_1d() {
     let shape = [16i32];
     let host_dy: Vec<f64> = (0..16).map(|i| (i as f64) * 0.125 - 1.0).collect();
     // BW of forward cumsum (fw_reverse=false) = reverse cumsum of dy.
-    let mut expected = vec![0f64; 16];
+    let mut expected = [0f64; 16];
     for k in 0..16 {
         let mut acc = 0f64;
         for j in (k..16).rev() {

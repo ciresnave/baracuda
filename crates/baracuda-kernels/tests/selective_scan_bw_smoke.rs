@@ -291,11 +291,11 @@ fn selective_scan_bw_with_d_skip_dz_ddelta_bias_runs_finite() {
     let dy_dev = DeviceBuffer::from_slice(&ctx, &dy_host).expect("dy");
 
     let mut du_dev = DeviceBuffer::<f32>::zeros(&ctx, BSZ * L * DIM).expect("du");
-    let mut dB_dev = DeviceBuffer::<f32>::zeros(&ctx, BSZ * L * DSTATE).expect("dB");
-    let mut dC_dev = DeviceBuffer::<f32>::zeros(&ctx, BSZ * L * DSTATE).expect("dC");
+    let mut d_b_dev = DeviceBuffer::<f32>::zeros(&ctx, BSZ * L * DSTATE).expect("dB");
+    let mut d_c_dev = DeviceBuffer::<f32>::zeros(&ctx, BSZ * L * DSTATE).expect("dC");
     let mut ddelta_dev = DeviceBuffer::<f32>::zeros(&ctx, BSZ * L * DIM).expect("ddelta");
-    let mut dA_dev = DeviceBuffer::<f32>::zeros(&ctx, DIM * DSTATE).expect("dA");
-    let mut dD_dev = DeviceBuffer::<f32>::zeros(&ctx, DIM).expect("dD");
+    let mut d_a_dev = DeviceBuffer::<f32>::zeros(&ctx, DIM * DSTATE).expect("dA");
+    let mut d_d_dev = DeviceBuffer::<f32>::zeros(&ctx, DIM).expect("dD");
     let mut dz_dev = DeviceBuffer::<f32>::zeros(&ctx, BSZ * L * DIM).expect("dz");
     let mut ddb_dev = DeviceBuffer::<f32>::zeros(&ctx, DIM).expect("ddb");
 
@@ -337,13 +337,13 @@ fn selective_scan_bw_with_d_skip_dz_ddelta_bias_runs_finite() {
                 ),
                 dy: TensorRef::new(dy_dev.as_slice(), s_ud, contiguous_stride(s_ud)).unwrap(),
                 du: TensorMut::new(du_dev.as_slice_mut(), s_ud, contiguous_stride(s_ud)).unwrap(),
-                d_b: TensorMut::new(dB_dev.as_slice_mut(), s_bc, contiguous_stride(s_bc)).unwrap(),
-                d_c: TensorMut::new(dC_dev.as_slice_mut(), s_bc, contiguous_stride(s_bc)).unwrap(),
+                d_b: TensorMut::new(d_b_dev.as_slice_mut(), s_bc, contiguous_stride(s_bc)).unwrap(),
+                d_c: TensorMut::new(d_c_dev.as_slice_mut(), s_bc, contiguous_stride(s_bc)).unwrap(),
                 d_delta: TensorMut::new(ddelta_dev.as_slice_mut(), s_ud, contiguous_stride(s_ud))
                     .unwrap(),
-                d_a: TensorMut::new(dA_dev.as_slice_mut(), s_a, contiguous_stride(s_a)).unwrap(),
+                d_a: TensorMut::new(d_a_dev.as_slice_mut(), s_a, contiguous_stride(s_a)).unwrap(),
                 d_d: Some(
-                    TensorMut::new(dD_dev.as_slice_mut(), s_d, contiguous_stride(s_d)).unwrap(),
+                    TensorMut::new(d_d_dev.as_slice_mut(), s_d, contiguous_stride(s_d)).unwrap(),
                 ),
                 dz: Some(
                     TensorMut::new(dz_dev.as_slice_mut(), s_ud, contiguous_stride(s_ud)).unwrap(),
@@ -370,7 +370,7 @@ fn selective_scan_bw_with_d_skip_dz_ddelta_bias_runs_finite() {
     for v in &all {
         assert!(v.is_finite(), "dz non-finite");
     }
-    dD_dev.copy_to_host(&mut tmp_d).expect("dl");
+    d_d_dev.copy_to_host(&mut tmp_d).expect("dl");
     for v in &tmp_d {
         assert!(v.is_finite(), "dD non-finite");
     }
@@ -381,7 +381,7 @@ fn selective_scan_bw_with_d_skip_dz_ddelta_bias_runs_finite() {
 }
 
 #[test]
-fn selective_scan_bw_missing_dD_when_d_given_errors() {
+fn selective_scan_bw_missing_d_d_when_d_given_errors() {
     // Topology check: if FW D given, BW must supply dD or error.
     let (ctx, stream) = setup();
     let u_host = vec![0.1f32; BSZ * L * DIM];
@@ -401,10 +401,10 @@ fn selective_scan_bw_missing_dD_when_d_given_errors() {
     let dy_dev = DeviceBuffer::from_slice(&ctx, &dy_host).expect("dy");
 
     let mut du_dev = DeviceBuffer::<f32>::zeros(&ctx, BSZ * L * DIM).expect("du");
-    let mut dB_dev = DeviceBuffer::<f32>::zeros(&ctx, BSZ * L * DSTATE).expect("dB");
-    let mut dC_dev = DeviceBuffer::<f32>::zeros(&ctx, BSZ * L * DSTATE).expect("dC");
+    let mut d_b_dev = DeviceBuffer::<f32>::zeros(&ctx, BSZ * L * DSTATE).expect("dB");
+    let mut d_c_dev = DeviceBuffer::<f32>::zeros(&ctx, BSZ * L * DSTATE).expect("dC");
     let mut ddelta_dev = DeviceBuffer::<f32>::zeros(&ctx, BSZ * L * DIM).expect("ddelta");
-    let mut dA_dev = DeviceBuffer::<f32>::zeros(&ctx, DIM * DSTATE).expect("dA");
+    let mut d_a_dev = DeviceBuffer::<f32>::zeros(&ctx, DIM * DSTATE).expect("dA");
 
     let bw_desc = SelectiveScanBackwardDescriptor {
         batch_size: BSZ as i32,
@@ -439,11 +439,11 @@ fn selective_scan_bw_missing_dD_when_d_given_errors() {
             delta_bias: None,
             dy: TensorRef::new(dy_dev.as_slice(), s_ud, contiguous_stride(s_ud)).unwrap(),
             du: TensorMut::new(du_dev.as_slice_mut(), s_ud, contiguous_stride(s_ud)).unwrap(),
-            d_b: TensorMut::new(dB_dev.as_slice_mut(), s_bc, contiguous_stride(s_bc)).unwrap(),
-            d_c: TensorMut::new(dC_dev.as_slice_mut(), s_bc, contiguous_stride(s_bc)).unwrap(),
+            d_b: TensorMut::new(d_b_dev.as_slice_mut(), s_bc, contiguous_stride(s_bc)).unwrap(),
+            d_c: TensorMut::new(d_c_dev.as_slice_mut(), s_bc, contiguous_stride(s_bc)).unwrap(),
             d_delta: TensorMut::new(ddelta_dev.as_slice_mut(), s_ud, contiguous_stride(s_ud))
                 .unwrap(),
-            d_a: TensorMut::new(dA_dev.as_slice_mut(), s_a, contiguous_stride(s_a)).unwrap(),
+            d_a: TensorMut::new(d_a_dev.as_slice_mut(), s_a, contiguous_stride(s_a)).unwrap(),
             d_d: None, // intentionally missing while FW d_skip is Some(_)
             dz: None,
             d_delta_bias: None,

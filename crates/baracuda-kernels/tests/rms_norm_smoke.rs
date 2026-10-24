@@ -188,7 +188,7 @@ fn rms_norm_f64_no_gamma() {
     let eps = 1e-6f32;
     // CPU ref in f64
     let mut expected_y = vec![0f64; numel];
-    let mut expected_rms = vec![0f64; 2];
+    let mut expected_rms = [0f64; 2];
     for i in 0..2 {
         let mut sum_sq = 0f64;
         for j in 0..extent {

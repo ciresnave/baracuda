@@ -46,7 +46,7 @@ fn rfft3_irfft3_roundtrip_f32() {
         }
     }
 
-    let mut dev_x = DeviceBuffer::from_slice(&ctx, &x_host).expect("upload x");
+    let dev_x = DeviceBuffer::from_slice(&ctx, &x_host).expect("upload x");
     let mut dev_y: DeviceBuffer<Complex64> =
         DeviceBuffer::zeros(&ctx, total_complex).expect("alloc y");
     let mut dev_xr: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, total_real).expect("alloc xr");
@@ -119,7 +119,7 @@ fn rfft3_irfft3_roundtrip_f64() {
         }
     }
 
-    let mut dev_x = DeviceBuffer::from_slice(&ctx, &x_host).expect("upload x");
+    let dev_x = DeviceBuffer::from_slice(&ctx, &x_host).expect("upload x");
     let mut dev_y: DeviceBuffer<Complex128> =
         DeviceBuffer::zeros(&ctx, total_complex).expect("alloc y");
     let mut dev_xr: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, total_real).expect("alloc xr");

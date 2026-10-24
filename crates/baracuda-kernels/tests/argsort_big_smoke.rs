@@ -126,7 +126,7 @@ fn argsort_big_f32_row_32000_descending() {
     let (ctx, stream) = setup();
     let row_len = 32000i32;
     let input: Vec<f32> = (0..row_len as usize)
-        .map(|i| (((i as f32) * 0.31).cos() * 1000.0 - ((i as f32) * 0.0007)))
+        .map(|i| ((i as f32) * 0.31).cos() * 1000.0 - ((i as f32) * 0.0007))
         .collect();
 
     let dev_in = DeviceBuffer::from_slice(&ctx, &input).expect("up");

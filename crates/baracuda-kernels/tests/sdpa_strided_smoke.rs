@@ -216,9 +216,9 @@ fn sdpa_strided_contig_f32() {
 }
 
 /// 2. GQA broadcast: K and V have one unique head, Q has multiple. We
-/// store K/V as `[B, 1, K, D]` and view them as `[B, heads, K, D]` with
-/// `stride_h = 0`. Output should match the reference where K/V is
-/// expanded across all Q heads.
+///    store K/V as `[B, 1, K, D]` and view them as `[B, heads, K, D]` with
+///    `stride_h = 0`. Output should match the reference where K/V is
+///    expanded across all Q heads.
 #[test]
 fn sdpa_strided_gqa_broadcast_f32() {
     let (ctx, stream) = setup();
@@ -341,8 +341,8 @@ fn sdpa_strided_gqa_broadcast_f32() {
 }
 
 /// 3. Causal masked path with strided Q (transposed-batch view).
-/// Physical buffer layout is `[H, B, Q, D_k]` (heads outermost), viewed
-/// as `[B, H, Q, D_k]` with permuted strides.
+///    Physical buffer layout is `[H, B, Q, D_k]` (heads outermost), viewed
+///    as `[B, H, Q, D_k]` with permuted strides.
 #[test]
 fn sdpa_strided_causal_transposed_q_f32() {
     let (ctx, stream) = setup();

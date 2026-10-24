@@ -53,7 +53,7 @@ fn run_f32_contig<const N: usize>(shape: [i32; N]) {
     let (ctx, stream) = setup();
     let numel: usize = shape.iter().map(|&d| d as usize).product();
 
-    let host_x: Vec<f32> = (0..numel).map(|i| ((i as f32) * 0.3333 - 10.0)).collect();
+    let host_x: Vec<f32> = (0..numel).map(|i| (i as f32) * 0.3333 - 10.0).collect();
     let expected: Vec<f32> = host_x.iter().map(|x| (*x).floor()).collect();
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("upload x");
@@ -93,12 +93,7 @@ fn run_f16_contig_3d(shape: [i32; 3]) {
         .collect();
     let host_expected: Vec<f16> = host_x
         .iter()
-        .map(|x| {
-            f16::from_f32({
-                let x = x.to_f32().floor();
-                x
-            })
-        })
+        .map(|x| f16::from_f32(x.to_f32().floor()))
         .collect();
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("upload x");
@@ -138,12 +133,7 @@ fn run_bf16_contig_3d(shape: [i32; 3]) {
         .collect();
     let host_expected: Vec<bf16> = host_x
         .iter()
-        .map(|x| {
-            bf16::from_f32({
-                let x = x.to_f32().floor();
-                x
-            })
-        })
+        .map(|x| bf16::from_f32(x.to_f32().floor()))
         .collect();
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("upload x");
@@ -178,7 +168,7 @@ fn run_f64_contig_3d(shape: [i32; 3]) {
     let (ctx, stream) = setup();
     let numel: usize = shape.iter().map(|&d| d as usize).product();
 
-    let host_x: Vec<f64> = (0..numel).map(|i| ((i as f64) * 0.3333 - 10.0)).collect();
+    let host_x: Vec<f64> = (0..numel).map(|i| (i as f64) * 0.3333 - 10.0).collect();
     let expected: Vec<f64> = host_x.iter().map(|x| (*x).floor()).collect();
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("upload x");
@@ -218,7 +208,7 @@ fn floor_f32_strided_transposed() {
     let n = N_DIM as i32;
 
     let x_buf: Vec<f32> = (0..(N_DIM * M))
-        .map(|i| ((i as f32) * 0.3333 - 10.0))
+        .map(|i| (i as f32) * 0.3333 - 10.0)
         .collect();
     let x_shape = [m, n];
     let x_stride = [1i64, M as i64]; // transposed
@@ -231,10 +221,7 @@ fn floor_f32_strided_transposed() {
         for j in 0..N_DIM {
             let x_lin = j * M + i;
             let y_lin = i * N_DIM + j;
-            expected[y_lin] = {
-                let x = x_buf[x_lin].floor();
-                x
-            };
+            expected[y_lin] = x_buf[x_lin].floor();
         }
     }
 

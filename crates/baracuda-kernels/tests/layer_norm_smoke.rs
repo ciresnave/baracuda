@@ -213,8 +213,8 @@ fn layer_norm_f64_no_affine() {
     let eps = 1e-6f32;
     // CPU f64 ref
     let mut expected_y = vec![0f64; numel];
-    let mut expected_mean = vec![0f64; 3];
-    let mut expected_std = vec![0f64; 3];
+    let mut expected_mean = [0f64; 3];
+    let mut expected_std = [0f64; 3];
     for i in 0..3 {
         let mut sum = 0f64;
         for j in 0..extent {

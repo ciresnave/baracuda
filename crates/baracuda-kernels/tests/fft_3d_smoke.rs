@@ -47,8 +47,7 @@ fn fft3_ifft3_roundtrip_complex32() {
         }
     }
 
-    let mut dev_x: DeviceBuffer<Complex64> =
-        DeviceBuffer::from_slice(&ctx, &x_host).expect("upload x");
+    let dev_x: DeviceBuffer<Complex64> = DeviceBuffer::from_slice(&ctx, &x_host).expect("upload x");
     let mut dev_y: DeviceBuffer<Complex64> = DeviceBuffer::zeros(&ctx, total).expect("alloc y");
     let mut dev_xr: DeviceBuffer<Complex64> = DeviceBuffer::zeros(&ctx, total).expect("alloc xr");
 
@@ -129,7 +128,7 @@ fn fft3_ifft3_roundtrip_complex64() {
         }
     }
 
-    let mut dev_x: DeviceBuffer<Complex128> =
+    let dev_x: DeviceBuffer<Complex128> =
         DeviceBuffer::from_slice(&ctx, &x_host).expect("upload x");
     let mut dev_y: DeviceBuffer<Complex128> = DeviceBuffer::zeros(&ctx, total).expect("alloc y");
     let mut dev_xr: DeviceBuffer<Complex128> = DeviceBuffer::zeros(&ctx, total).expect("alloc xr");

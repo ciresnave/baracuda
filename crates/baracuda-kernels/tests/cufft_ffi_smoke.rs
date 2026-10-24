@@ -26,9 +26,9 @@ use baracuda_kernels_sys::{
     baracuda_kernels_fft_1d_c32_run, baracuda_kernels_fft_1d_c32_workspace_size,
     baracuda_kernels_fft_nd_c32_run, baracuda_kernels_fft_nd_c32_workspace_size,
     baracuda_kernels_irfft_1d_f32_run, baracuda_kernels_irfft_1d_f32_workspace_size,
-    baracuda_kernels_irfft_nd_f32_run, baracuda_kernels_irfft_nd_f32_workspace_size,
-    baracuda_kernels_rfft_1d_f32_run, baracuda_kernels_rfft_1d_f32_workspace_size,
-    baracuda_kernels_rfft_nd_f32_run, baracuda_kernels_rfft_nd_f32_workspace_size,
+    baracuda_kernels_irfft_nd_f32_run, baracuda_kernels_rfft_1d_f32_run,
+    baracuda_kernels_rfft_1d_f32_workspace_size, baracuda_kernels_rfft_nd_f32_run,
+    baracuda_kernels_rfft_nd_f32_workspace_size,
 };
 
 // Use the workspace `Complex64` so DeviceBuffer<Complex64> trait bounds

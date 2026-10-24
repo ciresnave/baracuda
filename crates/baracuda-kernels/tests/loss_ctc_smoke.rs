@@ -45,7 +45,7 @@ fn host_ctc_fw_f32(
     targets: &[i64],   // [N, S]
     input_lengths: &[i64],
     target_lengths: &[i64],
-    t_max: usize,
+    _t_max: usize,
     n: usize,
     c: usize,
     s_max: usize,
@@ -333,7 +333,7 @@ fn ctc_fw_f16_general() {
         &ctx,
         &stream,
         ElementKind::F16,
-        |v| f16::from_f32(v),
+        f16::from_f32,
         // Loss is computed in f32 acc; only the input log_probs and the
         // final loss store undergo half-precision rounding. Two rounding
         // hops + accumulated DP error → generous bound.
@@ -344,11 +344,5 @@ fn ctc_fw_f16_general() {
 #[test]
 fn ctc_fw_bf16_general() {
     let (ctx, stream) = setup();
-    run_general_case::<bf16>(
-        &ctx,
-        &stream,
-        ElementKind::Bf16,
-        |v| bf16::from_f32(v),
-        4e-2,
-    );
+    run_general_case::<bf16>(&ctx, &stream, ElementKind::Bf16, bf16::from_f32, 4e-2);
 }

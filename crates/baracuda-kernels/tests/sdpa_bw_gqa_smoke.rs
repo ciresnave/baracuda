@@ -153,7 +153,7 @@ fn expand_kv_f64(
     k_len: usize,
     d: usize,
 ) -> Vec<f64> {
-    assert!(h_full % kv_heads == 0);
+    assert!(h_full.is_multiple_of(kv_heads));
     let group = h_full / kv_heads;
     let mut out = vec![0f64; batch * h_full * k_len * d];
     for b in 0..batch {
@@ -182,7 +182,7 @@ fn collapse_kv_grad_f64(
     k_len: usize,
     d: usize,
 ) -> Vec<f64> {
-    assert!(h_full % kv_heads == 0);
+    assert!(h_full.is_multiple_of(kv_heads));
     let group = h_full / kv_heads;
     let mut out = vec![0f64; batch * kv_heads * k_len * d];
     for b in 0..batch {
@@ -696,8 +696,8 @@ fn sdpa_bw_gqa_broadcast_f16() {
 }
 
 /// 3. No-broadcast strided regression — fast path should still work.
-/// Q layout is `[H, B, Q, D_k]` viewed as `[B, H, Q, D_k]` with permuted
-/// strides; K/V remain contig with non-zero head stride.
+///    Q layout is `[H, B, Q, D_k]` viewed as `[B, H, Q, D_k]` with permuted
+///    strides; K/V remain contig with non-zero head stride.
 #[test]
 fn sdpa_bw_no_broadcast_strided() {
     let (ctx, stream) = setup();

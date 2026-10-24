@@ -31,10 +31,10 @@ fn setup() -> (Context, Stream) {
 }
 
 fn cpu_ref_f32(x: f32) -> f32 {
-    { if x > 20.0 { x } else { (1.0 + x.exp()).ln() } }
+    if x > 20.0 { x } else { (1.0 + x.exp()).ln() }
 }
 fn cpu_ref_f64(x: f64) -> f64 {
-    { if x > 20.0 { x } else { (1.0 + x.exp()).ln() } }
+    if x > 20.0 { x } else { (1.0 + x.exp()).ln() }
 }
 
 fn assert_close_f32(got: f32, expected: f32, idx: usize) {

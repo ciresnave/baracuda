@@ -16,6 +16,10 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.7 - 2026-10-24
+
+No API or behaviour change; `baracuda-kernels` test-target clippy, family A (mechanical, non-numeric): `unused_parens`/`double_parens`, `let_and_return`, `useless_vec`, `unused_mut`, `unused_braces`, `unused_imports`, `doc_lazy_continuation`, `redundant_closure`, `manual_range_contains`, `manual_is_multiple_of` (asserts on non-zero divisors), and the `selective_scan_bw_smoke` snake-case renames (test fn `selective_scan_bw_missing_dD_when_d_given_errors` is now `..._missing_d_d_when_d_given_errors`). `--all-features --tests` errors 789 -> 521 (`--keep-going`, alpha.7 tree); numeric families (casts, float precision, byte groupings, identity ops) follow in their own PRs.
+
 ## 0.1.0-alpha.6 - 2026-10-24
 
 No API change. `baracuda-kernels` `--all-features` lib is clippy-clean and gated by a new CI step: `#[derive(Debug)]` on 84 public Args/Plan types (`missing_debug_implementations`), 54 redundant `stream.as_raw() as *mut c_void` casts dropped, `dA_ptr`..`dD_ptr` renamed to snake case, one doc-list indentation fixed. `--all-features --tests` stays open: with the lib clean, cargo now reaches the ~180 integration-test targets, which report >1000 further errors (see ROADMAP).

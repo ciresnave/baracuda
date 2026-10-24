@@ -26,7 +26,7 @@
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    BlockQ4K, BlockQ8_0, BlockQ8K, GgufBlockFormat, GgufMmvqArgs, GgufMmvqDescriptor, GgufMmvqPlan,
+    BlockQ8_0, BlockQ8K, GgufBlockFormat, GgufMmvqArgs, GgufMmvqDescriptor, GgufMmvqPlan,
     PlanPreference, TensorMut, TensorRef, U8, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};

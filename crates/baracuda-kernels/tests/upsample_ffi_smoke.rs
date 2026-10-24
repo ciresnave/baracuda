@@ -280,7 +280,7 @@ fn ffi_upsample_bilinear_2d_f16_fw_returns_status_zero() {
     // rounding).
     for &v in &got {
         let f = v.to_f32();
-        assert!(f >= 0.95 && f <= 4.05, "f16 FW out-of-range: {f}");
+        assert!((0.95..=4.05).contains(&f), "f16 FW out-of-range: {f}");
     }
 }
 

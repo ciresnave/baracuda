@@ -163,7 +163,7 @@ fn ffi_reduce_sum_to_f32_full_reduce() {
     let out_shape: Vec<i32> = vec![1];
     let in_stride = contig_strides(&in_shape);
     let host_src: Vec<f32> = vec![1.0, 2.0, 3.0, 4.0, 5.0];
-    let expected = vec![15.0_f32];
+    let expected = [15.0_f32];
 
     let dev_src = DeviceBuffer::from_slice(&ctx, &host_src).expect("upload src");
     let mut dev_dst: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 1).expect("alloc dst");
