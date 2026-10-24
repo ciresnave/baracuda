@@ -34,13 +34,6 @@ fn adaptive_avg_pool1d_8_to_4_f32() {
     let desc = AdaptivePool1dDescriptor::new(1, 1, 8, 4, ElementKind::F32);
     let plan = AdaptiveAvgPool1dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
-    // `derived_kernel_stride` was deprecated in Phase 16.1 — the
-    // bespoke kernel uses per-output-cell variable windows; no single
-    // (kernel, stride) pair represents the op. The deprecated getter
-    // returns `(0, 0)` for source-compat.
-    {
-        assert_eq!(plan.derived_kernel_stride(), (0, 0));
-    }
     plan.run_fw(
         &stream,
         Workspace::None,

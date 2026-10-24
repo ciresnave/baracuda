@@ -85,12 +85,7 @@ where
                 Err(_) => continue,
             };
 
-            let desc = GgufMmvqDescriptor {
-                nrows,
-                ncols,
-                block_format: fmt,
-                w_start_byte_offset: 0,
-            };
+            let desc = GgufMmvqDescriptor::new(nrows, ncols, fmt);
             let plan = match GgufMmvqPlan::<T>::select(&stream, &desc, PlanPreference::default()) {
                 Ok(p) => p,
                 Err(_) => continue,
@@ -285,12 +280,7 @@ fn bench_mmvq_multim_for(c: &mut Criterion, fmt: GgufBlockFormat) {
             });
 
             // ----- baseline: per-token loop over the M=1 GgufMmvqPlan -----
-            let desc_baseline = GgufMmvqDescriptor {
-                nrows,
-                ncols,
-                block_format: fmt,
-                w_start_byte_offset: 0,
-            };
+            let desc_baseline = GgufMmvqDescriptor::new(nrows, ncols, fmt);
             let plan_baseline = match GgufMmvqPlan::<f32>::select(
                 &stream,
                 &desc_baseline,

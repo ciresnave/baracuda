@@ -42,15 +42,8 @@ fn paged_prefill_plan_select_validates() {
         head_dim: HEAD_DIM as i32,
         element: ElementKind::F16,
     };
-    let desc = BatchPagedPrefillDescriptor {
-        batch_size: 2,
-        total_num_rows: 10,
-        num_qo_heads: 8,
-        sm_scale: 1.0 / (HEAD_DIM as f32).sqrt(),
-        causal: true,
-        enable_kv_split: false,
-        paged_kv: paged,
-    };
+    let desc = BatchPagedPrefillDescriptor::new(2, 10, 8, 1.0 / (HEAD_DIM as f32).sqrt(), paged)
+        .with_causal(true);
     let _plan = BatchPagedPrefillPlan::<f16>::select(&stream, &desc, PlanPreference::default())
         .expect("valid descriptor should select");
 
@@ -131,15 +124,15 @@ fn run_prefill(
         head_dim: HEAD_DIM as i32,
         element: ElementKind::F16,
     };
-    let desc = BatchPagedPrefillDescriptor {
-        batch_size: 1,
-        total_num_rows: qo_len as i32,
-        num_qo_heads: 1,
-        sm_scale: 1.0 / (HEAD_DIM as f32).sqrt(),
-        causal,
-        enable_kv_split: enable_split,
-        paged_kv: paged,
-    };
+    let desc = BatchPagedPrefillDescriptor::new(
+        1,
+        qo_len as i32,
+        1,
+        1.0 / (HEAD_DIM as f32).sqrt(),
+        paged,
+    )
+    .with_causal(causal)
+    .with_enable_kv_split(enable_split);
     let plan = BatchPagedPrefillPlan::<f16>::select(stream, &desc, PlanPreference::default())
         .expect("select");
 

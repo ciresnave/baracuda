@@ -48,12 +48,7 @@ fn setup() -> (Context, Stream) {
 }
 
 fn single(stream: &Stream, fmt: GgufBlockFormat, ncols: i32) -> Result<(), Error> {
-    let desc = GgufMmvqDescriptor {
-        nrows: 1,
-        ncols,
-        block_format: fmt,
-        w_start_byte_offset: 0,
-    };
+    let desc = GgufMmvqDescriptor::new(1, ncols, fmt);
     GgufMmvqPlan::<f32>::select(stream, &desc, PlanPreference::default()).map(|_| ())
 }
 

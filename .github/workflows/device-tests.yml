@@ -37,7 +37,10 @@ jobs:
       # if any test fails, if a required device resource is absent, or if 0 tests passed.
       - name: cargo gpu-test (baracuda-driver, device-tests)
         shell: bash
-        run: cargo gpu-test -p baracuda-driver --features device-tests
+        run: |
+          WSVER="$(sed -n 's/^version = "\(.*\)"/\1/p' crates/baracuda-types/Cargo.toml | head -1)"
+          [ -n "$WSVER" ] || { echo "cannot derive the workspace version"; exit 1; }
+          cargo gpu-test -p baracuda-driver@$WSVER --features device-tests
       - name: cargo gpu-test (baracuda-kernels, device-tests)
         shell: bash
         env:

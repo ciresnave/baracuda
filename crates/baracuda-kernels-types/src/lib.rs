@@ -44,11 +44,27 @@ pub mod operand_desc_ext;
 pub mod plan;
 pub mod tensor;
 
-// The classifier vocabulary now lives in `unpopped-vocab`. Re-export it
-// wholesale — flat items and module paths both — so this crate's public surface
-// is unchanged. The local `plan` module (device-coupled `Workspace`) shadows the
-// glob-imported vocabulary `plan` module and re-exports its descriptors.
-pub use unpopped_vocab::*;
+// The classifier vocabulary lives in `unpopped-vocab`. API-freeze R3: re-export an EXPLICIT list
+// instead of the old `pub use unpopped_vocab::*;`, so an item Unpopped adds or removes no longer
+// moves this crate's public surface without a baracuda diff. The list is every vocabulary name
+// the workspace uses through this path, plus the seven Fuel uses (`ElementKind`, `OperandDesc`,
+// `ArchSku`, `TargetId`, `MAX_RANK`, `OpCategory`, `structure_key_token`; guarded by
+// `tests/fuel_reexport_paths.rs`). A new name is one line here. The local `plan` module
+// (device-coupled `Workspace`) re-exports the vocabulary descriptors itself.
+pub use unpopped_vocab::{
+    ActivationKind, ArchSku, ArgReduceKind, AttentionKind, AxisMask, BackendKind, BiasElement,
+    BiasElementKind, Bin, BinElement, BinaryCmpKind, BinaryKind, Bool, CandidateResult, Complex64,
+    Complex128, ConvKind, CrossEntropyTargetKind, DispatchEntry, DispatchTable, Element,
+    ElementKind, EmbeddingKind, EpilogueKind, F32Strict, FftKind, FillMode, Fp8E4M3FN, Fp8E5M2,
+    FpElement, GatedActivationKind, GgufBlockFormat, HwStamp, ImageKind, Implementor, IndexElement,
+    IndexElementKind, IndexOutputElement, IndexOutputKind, IndexingKind, IntElement, KernelDtype,
+    KernelSku, LayoutSku, LinalgKind, LossKind, LossReduction, MAX_RANK, MathPrecision, MoeKind,
+    NormalizationKind, OpCategory, OperandDesc, PadMode, PlanPreference, PoolKind,
+    PrecisionGuarantee, Provenance, QuantizeKind, RandomKind, ReduceKind, ReduceToOp, S4, S8,
+    ScalarType, ScanKind, SegmentKind, ShapeLayoutKind, SoftmaxKind, SortKind, StructureKey,
+    TargetId, TernaryKind, U4, U8, UnaryKind, element, layout, merge, sku, structure_key,
+    structure_key_token, winner_of,
+};
 
 pub use matrix::{MatrixMut, MatrixRef, VectorRef};
 pub use operand_desc_ext::OperandDescExt;

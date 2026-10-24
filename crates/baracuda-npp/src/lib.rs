@@ -411,13 +411,3 @@ pub mod image {
         }
     }
 }
-
-/// Deprecated top-level alias for [`signal::add_32f_in_place`].
-#[deprecated(since = "0.2.0", note = "use baracuda_npp::signal::add_32f_in_place")]
-pub fn adds_32f_in_place(
-    src: &DeviceBuffer<f32>,
-    src_dst: &mut DeviceBuffer<f32>,
-    n: i32,
-) -> Result<()> {
-    signal::add_32f_in_place(src, src_dst, n)
-}

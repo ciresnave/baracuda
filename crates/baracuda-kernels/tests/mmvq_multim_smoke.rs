@@ -305,12 +305,7 @@ fn run_per_format(fmt: GgufBlockFormat, m: i32) {
     let mut dev_out_1: DeviceBuffer<f32> =
         DeviceBuffer::zeros(&ctx, nrows as usize).expect("alloc out1");
 
-    let desc_base = GgufMmvqDescriptor {
-        nrows,
-        ncols,
-        block_format: fmt,
-        w_start_byte_offset: 0,
-    };
+    let desc_base = GgufMmvqDescriptor::new(nrows, ncols, fmt);
     let plan_base = GgufMmvqPlan::<f32>::select(&stream, &desc_base, PlanPreference::default())
         .expect("base plan select");
 
