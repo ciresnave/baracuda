@@ -74,7 +74,21 @@
 //! `cublasSetMathMode(CUBLAS_TF32_TENSOR_OP_MATH)` on a handle it owns;
 //! the facade's own handles are left in the default mode.
 //! f16 / bf16 accumulate in
-//! f32, matching the reduce family's convention. Run-to-run
+//! f32, matching the reduce family's convention.
+//!
+//! ## Half-precision split-K reduction (accurate by default)
+//!
+//! On a default-math handle cuBLAS may split K across thread blocks and combine the
+//! partials in the OUTPUT dtype (f16 / bf16), losing the f32 accumulation. Measured on an
+//! RTX 4070 Laptop (cuBLAS 13.5.1) against an f64 reference, uniform [-1, 1) inputs: at
+//! `m >= 32, k >= 4096` the max error over `max|ref|` was 4.1e-4 (f16, floor 3.2e-4) and
+//! 3.4e-3 (bf16 m64 k8192, floor 1.8e-3); with the reduction kept in f32 every cell sat on
+//! the output-rounding floor. So the half-precision entry points set
+//! `CUBLAS_MATH_DISALLOW_REDUCED_PRECISION_REDUCTION` on every call. The fast split-K
+//! path is opt-in per process: `baracuda_kernels_gemm_dense_set_allow_reduced_precision_reduction(1)`
+//! (it costs nothing on most shapes and 4-10% on `m = 512..2048, k = 11008`; see CHANGELOG).
+//! The f32 / f64 entry points are unaffected (their handle math mode is reset to default
+//! on every call, since pooled handles are shared across dtypes). Run-to-run
 //! determinism follows cuBLAS's guarantee, INCLUDING its condition:
 //! bitwise-reproducible for identical (shape, dtype, arch, SM count,
 //! toolkit version) launches **only while a single CUDA stream is
@@ -149,12 +163,13 @@
 
 use core::ffi::c_void;
 use core::ptr;
-use core::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering};
 
 use super::{
     CUBLAS_COMPUTE_32F, CUBLAS_COMPUTE_64F, CUBLAS_GEMM_DEFAULT, CUBLAS_OP_N, CUBLAS_OP_T,
     CUDA_R_16BF, CUDA_R_16F, CUDA_R_32F, CUDA_R_64F, cublasCreate_v2, cublasDestroy_v2,
-    cublasGemmEx, cublasGemmStridedBatchedEx, cublasHandle_t, cublasSetStream_v2,
+    cublasGemmEx, cublasGemmStridedBatchedEx, cublasHandle_t, cublasSetMathMode,
+    cublasSetStream_v2,
 };
 
 unsafe extern "C" {
@@ -167,6 +182,44 @@ unsafe extern "C" {
     /// `cuCtxGetId` (CUDA 12.0+): a process-unique 64-bit id that is never reused after the
     /// context is destroyed, unlike the context's address.
     fn cuCtxGetId(ctx: *mut c_void, id: *mut u64) -> i32;
+}
+
+// =============================================================================
+// Half-precision reduction policy
+// =============================================================================
+
+/// `CUBLAS_DEFAULT_MATH`.
+const MATH_DEFAULT: i32 = 0;
+/// `CUBLAS_MATH_DISALLOW_REDUCED_PRECISION_REDUCTION`.
+const MATH_DISALLOW_REDUCED_PRECISION_REDUCTION: i32 = 16;
+
+/// Process-wide opt-in to cuBLAS's reduced-precision (output-dtype) split-K reduction for
+/// the f16 / bf16 entry points. Off by default: the accurate path.
+static ALLOW_REDUCED_PRECISION_REDUCTION: AtomicBool = AtomicBool::new(false);
+
+/// Opt in (`allow != 0`) or out (`0`, the default) of cuBLAS's reduced-precision split-K
+/// reduction for the f16 / bf16 dense GEMM entry points. Process-wide; takes effect on the
+/// next launch. Faster on some prefill shapes, less accurate at large `k` (module docs).
+#[unsafe(no_mangle)]
+pub extern "C" fn baracuda_kernels_gemm_dense_set_allow_reduced_precision_reduction(allow: i32) {
+    ALLOW_REDUCED_PRECISION_REDUCTION.store(allow != 0, Ordering::Relaxed);
+}
+
+/// Current setting of the opt-in above: `1` allowed, `0` (default) disallowed.
+#[unsafe(no_mangle)]
+pub extern "C" fn baracuda_kernels_gemm_dense_allow_reduced_precision_reduction() -> i32 {
+    i32::from(ALLOW_REDUCED_PRECISION_REDUCTION.load(Ordering::Relaxed))
+}
+
+/// Math mode for one launch. Set on every call because pooled handles are shared across
+/// dtypes and the opt-in can flip between calls.
+fn math_mode_for(data_type: i32) -> i32 {
+    let half = data_type == CUDA_R_16F || data_type == CUDA_R_16BF;
+    if half && !ALLOW_REDUCED_PRECISION_REDUCTION.load(Ordering::Relaxed) {
+        MATH_DISALLOW_REDUCED_PRECISION_REDUCTION
+    } else {
+        MATH_DEFAULT
+    }
 }
 
 // =============================================================================
@@ -438,6 +491,11 @@ unsafe fn gemm_dense_run_impl(
         key
     };
     let st = unsafe { cublasSetStream_v2(handle, stream) };
+    let st = if st == 0 {
+        unsafe { cublasSetMathMode(handle, math_mode_for(data_type)) }
+    } else {
+        st
+    };
     if st != 0 {
         // Don't pool a handle whose state we couldn't establish.
         unsafe {

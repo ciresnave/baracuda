@@ -54098,6 +54098,9 @@ unsafe extern "C" {
     /// `cublasSetStream_v2` — bind a CUDA stream to the cuBLAS handle.
     pub fn cublasSetStream_v2(handle: cublasHandle_t, stream: *mut c_void) -> i32;
 
+    /// `cublasSetMathMode` — set the handle's math mode (a `cublasMath_t` bitmask).
+    pub fn cublasSetMathMode(handle: cublasHandle_t, mode: i32) -> i32;
+
     // ----- Strided-batched GEMM: cublas{S,D}gemmStridedBatched (f32 / f64) -----
     //
     // Single-launch batched GEMM where each batch slot has identical
