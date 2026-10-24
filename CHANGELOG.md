@@ -16,6 +16,10 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.2 - 2026-10-24
+
+`baracuda-cuda-seam`: `fuel-kernel-seam` and `fuel-kernel-seam-types` `0.23.0` -> `0.24.0` (the 0.24 seam crates no longer depend on `baracuda-kernels-types`). No API change; no ABI change.
+
 ## 0.1.0-alpha.1 - 2026-10-23 (BREAKING: the single pre-beta.0 window: R2 retrofit, R3 explicit re-export list, R5 removals)
 
 Version `0.1.0-alpha.1` allocated by the PM (second number moves: a breaking change pre-1.0). `baracuda-cuda-emit` / `baracuda-cuda-parse` keep Unpopped's number (0.22.0). The C ABI is untouched: `ABI_VERSION` stays 1 and `scripts/check-abi-manifest.py --base` reports `+0 -0 ~0` against main.
