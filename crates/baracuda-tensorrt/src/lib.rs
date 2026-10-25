@@ -2,8 +2,9 @@
 //!
 //! Scope is inference only: load a serialized engine (e.g. produced by
 //! `trtexec` or the TRT Python API), build an execution context, bind tensor
-//! addresses, and enqueue execution on a CUDA stream. Engine construction
-//! (the builder / network definition API) is C++-only and is not wrapped here.
+//! addresses, and enqueue execution on a CUDA stream. Engine construction (the
+//! builder / network definition API) lives in the sibling crate
+//! `baracuda-tensorrt-builder`.
 //!
 //! # How it links: dynamic libnvinfer + a C++ shim
 //!
