@@ -30,6 +30,10 @@ at alpha.82.
 
 ## 0.1.0-alpha.33 - 2026-10-25
 
+### Fixed
+
+- `baracuda-cuda-seam`: `fuel-kernel-seam` and `fuel-kernel-seam-types` are pinned `0.26.12` (caret) instead of `=0.26.12`. Fuel's own workspace carries newer 0.26 patch releases of the same crates, and an exact pin cannot unify with them: cargo held two copies and `BaracudaSynthesizer` stopped implementing Fuel's `Synthesizer` (E0308 at `lib.rs:275,283`). Proof: a scratch crate depending on `baracuda-cuda-seam` and on `fuel-kernel-seam` 0.26.13 (the 0.26.12 sources re-versioned and patched in) fails to resolve with the old pin ("versions that meet the requirements `=0.26.12` ... conflict with previously selected packages") and, with the caret pins, builds and passes `BaracudaSynthesizer` where Fuel's `Synthesizer` is required; `cargo tree -i fuel-kernel-seam` shows one copy. New test `tests/seam_pin.rs` fails when the pin is `=0.26.12`. Not run on device (no GPU code).
+
 ### Added
 
 - New crate `baracuda-tensorrt-builder` (ROADMAP SA-33, builder row): `Builder`, `BuilderConfig` (memory-pool limits, builder flags, optimization level), `Network` with layers for elementwise, activation, unary, matrix multiply, constant (`f32` / `i32`, weights kept alive until build), shuffle (reshape and transposes), reduce, softmax, concatenation, cast and identity, and `Builder::build_serialized`, whose plan `Runtime::deserialize_engine` loads. The shim gained the matching `trtBuilder*`, `trtConfig*`, `trtNetwork*`, `trtLayer*` and `trtTensor*` symbols; the loader resolves `createInferBuilder_INTERNAL`. The API needs the `shim` feature. Device-verified on sm_89 (RTX 4070), TensorRT 10.16.1.11: `cargo gpu-test -p baracuda-tensorrt-builder --features shim,device-tests`, 8 passed, 0 failed, 0 declared skips; each network's output is compared with a CPU reference (elementwise sum, matmul + ReLU, constant * x then sqrt, softmax, transpose + reduce, concatenation), and a network with no outputs fails to build while an identical one with an output builds.
