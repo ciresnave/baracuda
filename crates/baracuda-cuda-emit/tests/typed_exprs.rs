@@ -11,12 +11,13 @@
 
 use ElementKind::*;
 use baracuda_cuda_emit::{Cuda, NvrtcCompiler};
-use baracuda_driver::{Context, Device, DeviceBuffer, Module, Stream, init};
+use baracuda_driver::{Context, Device, DeviceBuffer, Function, Module, Stream, init};
+use unpopped::backend::GeneratedKernel;
 use unpopped::ir::{Expr, OpDef, RoundMode, Saturation, input, konst};
 use unpopped::jit::Compiler;
 use unpopped::oracle::{TypedBuffer, evaluate};
 use unpopped::{build_plan, try_generate};
-use unpopped_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
+use unpopped_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key};
 
 struct Case {
     tag: String,
@@ -70,27 +71,32 @@ fn same(a: Result<i128, f64>, b: Result<i128, f64>) -> bool {
     }
 }
 
-fn run_case(
-    ctx: &Context,
-    stream: &Stream,
-    cc: &NvrtcCompiler,
-    c: &Case,
-) -> Result<Vec<String>, String> {
+/// Everything one case needs before it touches the device.
+struct Prepared {
+    op: OpDef,
+    key: StructureKey,
+    operands: Vec<OperandDesc>,
+    kernel: GeneratedKernel,
+    /// The input columns actually used (padded to an odd lane count).
+    xs: Vec<Vec<f64>>,
+}
+
+fn prepare(c: &Case) -> Result<Prepared, String> {
     // An odd lane count keeps the planner on the scalar schedule.
     let mut xs = c.xs.clone();
-    if xs[0].len() % 2 == 0 {
+    if xs[0].len().is_multiple_of(2) {
         for x in &mut xs {
             x.push(7.0);
         }
     }
-    let n = xs[0].len();
+    let n = xs[0].len() as i64;
     let n_in = xs.len() as u8;
     let mut op = OpDef::elementwise(&c.tag, n_in, &[c.dt], c.body.clone());
     if c.out != c.dt {
         op.out_dtype = Some(c.out);
     }
-    let a = OperandDesc::new(1, &[n as i64], &[1], c.dt, 256);
-    let o = OperandDesc::new(1, &[n as i64], &[1], c.out, 256);
+    let a = OperandDesc::new(1, &[n], &[1], c.dt, 256);
+    let o = OperandDesc::new(1, &[n], &[1], c.out, 256);
     let mut operands = vec![a; usize::from(n_in)];
     operands.push(o);
     let category = if n_in == 1 {
@@ -101,31 +107,44 @@ fn run_case(
     let key = structure_key(category, &operands, ArchSku::Sm89);
     let kernel =
         try_generate(&op, &key, &Cuda).map_err(|e| format!("{}: generate: {e:?}", c.tag))?;
-    let ptx = cc
-        .compile(&kernel.source, &kernel.name, 5000)
-        .map_err(|e| format!("{}: nvrtc: {e}\n{}", c.tag, kernel.source))?;
-    let ptx = String::from_utf8(ptx).map_err(|e| format!("{}: ptx utf8: {e}", c.tag))?;
-    let module = Module::load_ptx(ctx, &ptx).map_err(|e| format!("{}: load: {e:?}", c.tag))?;
-    let func = module
-        .get_function(&kernel.name)
-        .map_err(|e| format!("{}: function: {e:?}", c.tag))?;
+    Ok(Prepared {
+        op,
+        key,
+        operands,
+        kernel,
+        xs,
+    })
+}
 
-    let d_in: Vec<DeviceBuffer<u8>> = xs
-        .iter()
-        .map(|col| {
-            let bytes: Vec<u8> = col.iter().flat_map(|v| encode(*v, c.dt)).collect();
-            DeviceBuffer::from_slice(ctx, &bytes).expect("upload")
-        })
-        .collect();
-    let out_len = n * bytes_of(c.out);
-    let d_out: DeviceBuffer<u8> = DeviceBuffer::zeros(ctx, out_len).expect("alloc out");
-    let nn = n as i64;
+fn load_kernel(
+    ctx: &Context,
+    cc: &NvrtcCompiler,
+    tag: &str,
+    k: &GeneratedKernel,
+) -> Result<(Module, String), String> {
+    let ptx = cc
+        .compile(&k.source, &k.name, 5000)
+        .map_err(|e| format!("{tag}: nvrtc: {e}\n{}", k.source))?;
+    let ptx = String::from_utf8(ptx).map_err(|e| format!("{tag}: ptx utf8: {e}"))?;
+    let module = Module::load_ptx(ctx, &ptx).map_err(|e| format!("{tag}: load: {e:?}"))?;
+    Ok((module, k.name.clone()))
+}
+
+/// Launch the generated scalar kernel `(const T* in0.., OT* out, long long n)`.
+fn launch_kernel(
+    func: &Function,
+    stream: &Stream,
+    ins: &[DeviceBuffer<u8>],
+    out: &DeviceBuffer<u8>,
+    n: i64,
+) -> Result<(), String> {
     let block = 256u32;
     let grid = (n as u32).div_ceil(block);
-    let in_ptrs: Vec<_> = d_in.iter().map(DeviceBuffer::as_raw).collect();
-    let out_ptr = d_out.as_raw();
-    // SAFETY: the generated scalar kernel's signature is (const T* in0.., OT* out, long long n)
-    // and the arguments below match it in order and type.
+    let in_ptrs: Vec<_> = ins.iter().map(DeviceBuffer::as_raw).collect();
+    let out_ptr = out.as_raw();
+    // SAFETY: the kernel's signature is (const T* in0.., OT* out, long long n); the arguments
+    // are pushed in that order with those types, every buffer outlives the launch (the caller
+    // synchronizes the stream before dropping them), and `n` is the element count of each.
     unsafe {
         let mut l = func
             .launch()
@@ -136,10 +155,35 @@ fn run_case(
             l = l.arg(p);
         }
         l.arg(&out_ptr)
-            .arg(&nn)
+            .arg(&n)
             .launch()
-            .map_err(|e| format!("{}: launch: {e:?}", c.tag))?;
+            .map_err(|e| format!("launch: {e:?}"))
     }
+}
+
+/// Run the prepared kernel on the device and return the raw output bytes.
+fn run_on_device(
+    ctx: &Context,
+    stream: &Stream,
+    cc: &NvrtcCompiler,
+    c: &Case,
+    p: &Prepared,
+) -> Result<Vec<u8>, String> {
+    let (module, name) = load_kernel(ctx, cc, &c.tag, &p.kernel)?;
+    let func = module
+        .get_function(&name)
+        .map_err(|e| format!("{}: function: {e:?}", c.tag))?;
+    let n = p.xs[0].len();
+    let d_in: Vec<DeviceBuffer<u8>> =
+        p.xs.iter()
+            .map(|col| {
+                let bytes: Vec<u8> = col.iter().flat_map(|v| encode(*v, c.dt)).collect();
+                DeviceBuffer::from_slice(ctx, &bytes).expect("upload")
+            })
+            .collect();
+    let out_len = n * bytes_of(c.out);
+    let d_out: DeviceBuffer<u8> = DeviceBuffer::zeros(ctx, out_len).expect("alloc out");
+    launch_kernel(&func, stream, &d_in, &d_out, n as i64).map_err(|e| format!("{}: {e}", c.tag))?;
     stream
         .synchronize()
         .map_err(|e| format!("{}: sync: {e:?}", c.tag))?;
@@ -147,35 +191,54 @@ fn run_case(
     d_out
         .copy_to_host(&mut got)
         .map_err(|e| format!("{}: download: {e:?}", c.tag))?;
+    Ok(got)
+}
 
-    let plan = build_plan(&op, &key);
-    let bufs: Vec<TypedBuffer> = xs
-        .iter()
-        .map(|col| {
-            if c.dt == F32 || c.dt == F32Strict {
-                TypedBuffer::from_f32(
-                    &[n as i64],
-                    &col.iter().map(|v| *v as f32).collect::<Vec<_>>(),
-                )
-            } else {
-                TypedBuffer::from_f64(&[n as i64], col)
-            }
-        })
-        .collect();
-    let want = evaluate(&plan, &operands, &bufs, &[])
+/// The oracle's output for the prepared case.
+fn oracle_output(c: &Case, p: &Prepared) -> TypedBuffer {
+    let n = p.xs[0].len() as i64;
+    let to_buf = |col: &Vec<f64>| {
+        if c.dt == F32 || c.dt == F32Strict {
+            let col32: Vec<f32> = col.iter().map(|v| *v as f32).collect();
+            TypedBuffer::from_f32(&[n], &col32)
+        } else {
+            TypedBuffer::from_f64(&[n], col)
+        }
+    };
+    let bufs: Vec<TypedBuffer> = p.xs.iter().map(to_buf).collect();
+    let plan = build_plan(&p.op, &p.key);
+    evaluate(&plan, &p.operands, &bufs, &[])
         .into_iter()
         .next()
-        .expect("one output");
+        .expect("one output")
+}
+
+/// The little-endian `i`-th element of `bytes`, `w` bytes wide, as raw bits.
+fn bits_of(bytes: &[u8], i: usize, w: usize) -> u128 {
+    bytes[i * w..(i + 1) * w]
+        .iter()
+        .enumerate()
+        .fold(0u128, |acc, (k, b)| acc | (u128::from(*b) << (8 * k)))
+}
+
+fn run_case(
+    ctx: &Context,
+    stream: &Stream,
+    cc: &NvrtcCompiler,
+    c: &Case,
+) -> Result<Vec<String>, String> {
+    let p = prepare(c)?;
+    let got = run_on_device(ctx, stream, cc, c, &p)?;
+    let want = oracle_output(c, &p);
     let w = bytes_of(c.out);
     let mut diffs = Vec::new();
-    for i in 0..n {
-        let mut bits = 0u128;
-        for (k, byte) in got[i * w..(i + 1) * w].iter().enumerate() {
-            bits |= u128::from(*byte) << (8 * k);
-        }
-        let (g, e) = (value(bits, c.out), value(want.bits_at(i), c.out));
+    for i in 0..p.xs[0].len() {
+        let (g, e) = (
+            value(bits_of(&got, i, w), c.out),
+            value(want.bits_at(i), c.out),
+        );
         if !same(g, e) {
-            let inputs: Vec<f64> = xs.iter().map(|col| col[i]).collect();
+            let inputs: Vec<f64> = p.xs.iter().map(|col| col[i]).collect();
             diffs.push(format!(
                 "  {}: x = {inputs:?} -> device {g:?}, oracle {e:?}",
                 c.tag
@@ -208,57 +271,60 @@ fn run_cases(cases: Vec<Case>) {
 }
 
 /// Edge inputs for an f32 compute dtype (each is rounded to f32 on both sides).
+const EDGE_VALUES: &[f64] = &[
+    0.0,
+    -0.0,
+    0.5,
+    -0.5,
+    1.0,
+    -1.0,
+    1.5,
+    -1.5,
+    2.5,
+    -2.5,
+    3.99,
+    -3.99,
+    126.5,
+    127.0,
+    127.5,
+    128.0,
+    -128.0,
+    -128.5,
+    -129.0,
+    254.5,
+    255.0,
+    255.5,
+    256.0,
+    -1.0e-3,
+    32767.5,
+    32768.0,
+    -32768.0,
+    -32769.0,
+    65535.0,
+    65535.5,
+    65536.0,
+    16777216.0,
+    16777217.0,
+    2147483520.0,
+    2147483648.0,
+    -2147483648.0,
+    -2147483904.0,
+    4294967040.0,
+    4294967296.0,
+    9_223_372_036_854_775_808.0,
+    -9_223_372_036_854_775_808.0,
+    1.8446744073709552e19,
+    3.4028234663852886e38,
+    -3.4028234663852886e38,
+    1.0e-30,
+    f64::INFINITY,
+    f64::NEG_INFINITY,
+    f64::NAN,
+];
+
+/// [`EDGE_VALUES`] plus the two f32 neighbours of one half.
 fn edges() -> Vec<f64> {
-    let mut v = vec![
-        0.0,
-        -0.0,
-        0.5,
-        -0.5,
-        1.0,
-        -1.0,
-        1.5,
-        -1.5,
-        2.5,
-        -2.5,
-        3.99,
-        -3.99,
-        126.5,
-        127.0,
-        127.5,
-        128.0,
-        -128.0,
-        -128.5,
-        -129.0,
-        254.5,
-        255.0,
-        255.5,
-        256.0,
-        -1.0e-3,
-        32767.5,
-        32768.0,
-        -32768.0,
-        -32769.0,
-        65535.0,
-        65535.5,
-        65536.0,
-        16777216.0,
-        16777217.0,
-        2147483520.0,
-        2147483648.0,
-        -2147483648.0,
-        -2147483904.0,
-        4294967040.0,
-        4294967296.0,
-        9_223_372_036_854_775_808.0,
-        -9_223_372_036_854_775_808.0,
-        1.8446744073709552e19,
-        3.4028234663852886e38,
-        -3.4028234663852886e38,
-        1.0e-30,
-        f64::INFINITY,
-        f64::NEG_INFINITY,
-        f64::NAN,
-    ];
+    let mut v = EDGE_VALUES.to_vec();
     v.push(f64::from(f32::from_bits(0x3eff_ffff))); // 0.49999997
     v.push(f64::from(f32::from_bits(0x3f00_0001))); // 0.50000006
     v
