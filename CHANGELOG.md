@@ -16,15 +16,19 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.30 - 2026-10-25
+
+### Fixed
+
+- `baracuda-tensorrt`: the logger callback took TensorRT's severity as a Rust enum by value, so an out-of-range value from C++ would have been undefined behaviour (Pip review of #262). `trtLogCallback` now takes an `i32`; `severity_from_raw` maps `0..=4` and reports anything else as `InternalError`. Tests: `severity_from_raw_maps_every_documented_value_and_clamps_the_rest` and `trampoline_accepts_an_out_of_range_severity` (calls the trampoline with 99).
+
 ## 0.1.0-alpha.33 - 2026-10-25
 
 ### Added
 
 - `baracuda-tensorrt-builder`: optimization profiles (ROADMAP SA-33 row 3). `Builder::create_optimization_profile`, `OptimizationProfile::{set_dimensions, dimensions, is_valid}`, `BuilderConfig::{add_optimization_profile, num_optimization_profiles}`. `baracuda-tensorrt`: `Engine::profile_shape`, `ExecutionContext::{set_optimization_profile_async, optimization_profile}` and `OptProfileSelector`. Device-verified on sm_89 (RTX 4070), TensorRT 10.16.1.11: `cargo gpu-test -p baracuda-tensorrt-builder --features shim,device-tests`, 12 passed, 0 failed, 0 declared skips (4 new in `profiles_smoke.rs`): one dynamic-batch engine runs at batches 2, 5, 8 and 1 against a CPU reference and reports its min / opt / max shapes; a shape outside the profile is rejected with the in-range maximum accepted as the control; a two-profile engine refuses batch 6 on profile 0, runs it after `set_optimization_profile_async(1)`, and rejects profile 2; an inconsistent profile (min > max) is refused by `add_optimization_profile` while a valid one returns index 0. With `set_optimization_profile_async` ignoring its index, `contexts_switch_between_two_profiles` fails.
 
-## 0.1.0-alpha.28 - 2026-10-25
-
-
+## 0.1.0-alpha.29 - 2026-10-25
 
 ### Added
 
