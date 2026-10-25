@@ -1,6 +1,6 @@
-# Abstention list + shared provenance/lineage vocab (prep)
+# Abstention list + shared provenance/lineage vocab
 
-**Status:** prep for two co-design artifacts owed to KISS (44elbk9y) and kiss-ref (nnb3tadk). Both go to Eric to bless before they're official (both move Baracuda's freeze-gate voice / touch the provenance surface).
+**Status: OFFICIAL.** Blessed by CireSnave as drafted, 2026-10-25 (decision 283 / SA-3, ruled first-hand in the PM session). Both artifacts below are now official. The abstention list stays an intersection: kiss-ref's half (which section 6.13 decompositions it derived by reading `oracle.rs`) is still owed by the kiss-ref lane. Note: `oracle.rs` now lives in `unpopped` (it left this repo at alpha.79); read `baracuda-kernelgen/src/oracle.rs` below as that file.
 
 ---
 
