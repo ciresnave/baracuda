@@ -70,9 +70,9 @@ checked: reverting the "fail loudly" behavior to a silent fallback breaks
 
 ## Scope note
 
-This covers B1 parts (a) (`BARACUDA_NVRTC_PATH`) and (b) (sm_61 toolchain
-selection) only. Part (c) — honoring `KernelPlan::half_arith()`'s `ViaF32`
-decision — needs Unpopped's `half_arith()`, merged on Unpopped's `main` but
-not yet published to crates.io (board item 136); per the PM's 2026-10-07
-ruling it is NOT git-rev-pinned (CireSnave: "I don't even like depending on
-things on GitHub if I can avoid it") and instead waits on that publish.
+This covers B1 parts (a) (`BARACUDA_NVRTC_PATH`), (b) (sm_61 toolchain
+selection) and, since alpha.20, (c): `baracuda-cuda-emit` honours
+`KernelPlan::half_arith()`'s `ViaF32` decision by skipping the packed
+`__half2`/`__nv_bfloat162` paths (`bodies_pack` in `cuda.rs`), so an sm_61
+kernel computes in f32. Unpopped 0.22.0 publishes `half_arith`. Not yet run
+on an sm_61 device.
