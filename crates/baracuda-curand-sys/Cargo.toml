@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-curand-sys"
-version = "0.1.0-alpha.24"
+version = "0.1.0-alpha.25"
 description = "Raw FFI bindings and dynamic loader for NVIDIA cuRAND."
 edition.workspace = true
 license.workspace = true
