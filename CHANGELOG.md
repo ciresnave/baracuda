@@ -16,6 +16,8 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.29 - 2026-10-25
+
 ## 0.1.0-alpha.32 - 2026-10-25
 
 Docs only. No code, no device run.
@@ -34,11 +36,7 @@ Docs only. No code, no device run.
 - New crate `baracuda-tensorrt-builder` (ROADMAP SA-33, builder row): `Builder`, `BuilderConfig` (memory-pool limits, builder flags, optimization level), `Network` with layers for elementwise, activation, unary, matrix multiply, constant (`f32` / `i32`, weights kept alive until build), shuffle (reshape and transposes), reduce, softmax, concatenation, cast and identity, and `Builder::build_serialized`, whose plan `Runtime::deserialize_engine` loads. The shim gained the matching `trtBuilder*`, `trtConfig*`, `trtNetwork*`, `trtLayer*` and `trtTensor*` symbols; the loader resolves `createInferBuilder_INTERNAL`. The API needs the `shim` feature. Device-verified on sm_89 (RTX 4070), TensorRT 10.16.1.11: `cargo gpu-test -p baracuda-tensorrt-builder --features shim,device-tests`, 8 passed, 0 failed, 0 declared skips; each network's output is compared with a CPU reference (elementwise sum, matmul + ReLU, constant * x then sqrt, softmax, transpose + reduce, concatenation), and a network with no outputs fails to build while an identical one with an output builds.
 - Not yet in the builder (later SA-33 rows): optimization profiles, the ONNX parser, INT8 calibration, the plugin registry, convolution / pooling and the remaining layer types.
 
-## 0.1.0-alpha.26 - 2026-10-25
-
-
-
-### Added
+## 0.1.0-alpha.28 - 2026-10-25### Added
 
 - `baracuda-tensorrt`: a safe `Logger` (ROADMAP SA-33, first row). The shim gained `trtLoggerCreate` / `trtLoggerDestroy`, a C++ `ILogger` that calls a Rust closure; `Logger::new(closure)` and `Logger::stderr(min)` wrap it, `Runtime::with_logger(Arc<Logger>)` keeps it alive for the runtime's life, and a panic in the closure is caught at the boundary. TensorRT keeps one logger per process and ignores a second one while a builder or runtime exists (its own warning, "logger ... differs from one already registered"), so every `Logger` shares one process-wide `ILogger` that is never freed and fans each message out to the live `Logger`s; a dropped logger can therefore never be left dangling inside TensorRT. Design change: the dangling-logger crash itself was NOT reproduced (`a_later_logger_survives_the_first_one_being_dropped` passes on the old per-`Logger` design too, so it is not evidence of a fix). What is demonstrated is the routing defect: `every_live_logger_hears_a_message_from_any_runtime` fails on the old design ("the other live logger heard no error") and passes on this one. Device-verified against TensorRT 10.16.1.11 on sm_89 (RTX 4070): `cargo gpu-test -p baracuda-tensorrt --features shim,device-tests`, 6 passed, 0 failed, 0 declared skips; with the trampoline's call to the closure removed, `logger_forwards_messages_to_the_closure` fails.
 

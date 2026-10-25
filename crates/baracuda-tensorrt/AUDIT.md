@@ -153,7 +153,7 @@ machine. To finish validation:
 - ~~A typed `Logger`~~ — done in alpha.28 (`Logger`, `Runtime::with_logger`, shim
   `trtLoggerCreate`). TensorRT 10.16 refuses a null logger, so `with_null_logger`
   returns `NullHandle`.
-- ~~Builder path~~ — `baracuda-tensorrt-builder` (alpha.28) covers `IBuilder`,
+- ~~Builder path~~ — `baracuda-tensorrt-builder` (alpha.29) covers `IBuilder`,
   `IBuilderConfig` and `INetworkDefinition` with 12 layer kinds; the ONNX `IParser`
   is still to do.
 - INT8 calibration + plugin registry — Tier-2.
