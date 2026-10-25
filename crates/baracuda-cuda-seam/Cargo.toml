@@ -27,10 +27,10 @@ unpopped = { workspace = true }
 unpopped-vocab = { workspace = true }
 # The §5 shared wire grammar + live-call envelope Fuel calls: registry versions
 # (standing rule: no git deps). 0.22 added `JitRequest::target` and
-# `OpAttrs::region_key()`; 0.25.10 is the current release. Both crates must be the SAME
+# `OpAttrs::region_key()`; 0.26.12 is the current release (first on unpopped-vocab 0.24). Both crates must be the SAME
 # version so the graph holds one copy of `fuel-kernel-seam-types`.
-fuel-kernel-seam-types = "0.25.10"
-fuel-kernel-seam = "0.25.10"
+fuel-kernel-seam-types = "0.26.12"
+fuel-kernel-seam = "0.26.12"
 
 [lints]
 workspace = true
