@@ -2,9 +2,14 @@
 
 Baseline generated for **baracuda-kernels** on **RTX 4070 (sm_89)**; the body
 has since been re-annotated with the **baracuda-kernelgen op-matrix audit**
-(rounds through **2026-07-03**). The workspace is now at **v0.0.1-alpha.85**
-(2026-10-03); this audit body reflects the alpha.77 line — re-audit for
-alpha.78–84 deltas.
+(rounds through **2026-07-03**). The workspace was at **0.1.0-alpha.28**
+(2026-10-25). The body reflects the alpha.77 line, with these items re-checked
+against the code at `origin/main` on 2026-10-25 (ROADMAP SA-37): the
+`RepeatPlan` / `InterpolatePlan` dtypes, the `ArgsortPlan` row length, adaptive
+pool, and strided siblings. The other rows have **not** been re-audited for
+alpha.78 onward. `baracuda-kernelgen` has since left this repo (it lives in
+`unpopped` / `unpopped-vocab`), so read its "Kernelgen audit" notes below as
+historical.
 See the per-op "Kernelgen audit" notes below for the generated-vs-bespoke
 dispatch calls.
 
@@ -91,7 +96,7 @@ measurement; the on-device bench gate (v1) and the Fuel `dispatch_record` feed
 | `RollPlan<T, N>` | Bespoke | FP-family | rank N | ✓ | ✓ via `RollBackwardPlan` | BW reuses FW kernel with negated shifts. |
 | `PermutePlan<T, N>` | Bespoke | FP-family | rank N | ✓ | ✓ via `PermuteBackwardPlan` | BW reuses FW kernel with inverse permutation. |
 | `PadPlan<T, N>` | Bespoke | FP-family | rank N | ✓ | ✓ via `PadBackwardPlan` (all four modes; Reflect needs pad <= extent - 1) | Modes: `{Constant, Reflect, Replicate, Circular}` (Reflect/Replicate/Circular = f16 ∪ f32 ∪ f64 only — bf16 deferred). BW only for Constant (slice operation). |
-| `RepeatPlan<T, N>` | Bespoke | `{f32, f16, f64}` (no bf16) | rank N | ✓ | ✓ via `RepeatBackwardPlan` | f16/f64 added in Phase 3.5 fanout. |
+| `RepeatPlan<T, N>` | Bespoke | `{f32, f64, f16, bf16}` | rank N | ✓ | ✓ via `RepeatBackwardPlan` | f16/f64 added in Phase 3.5 fanout; bf16 dispatches to `baracuda_kernels_repeat_bf16_run` (`repeat.rs:229`). |
 | `ConcatPlan<T, N>` | Bespoke | FP-family | rank N | ✓ | ✓ via `ConcatBackwardPlan` | Multi-input concat along one axis. |
 | `FillPlan<T>` | Bespoke | `{f32, f64, f16, bf16, i32, i64}` | numel ≥ 0 | ✓ | N/A | Scalar fill. No Bool. |
 | `WriteSlicePlan<T, N>` | Bespoke | byte-aligned dtypes (5 byte-width symbols) + S4/U4 nibble | rank 1-8 | ✓ | N/A | Phase 13.1. In-place rectangular slab assignment (not add). Fast paths: full-dest cuMemcpyDtoDAsync + KV-cache contiguous-chunk cuMemcpyDtoDAsync. S4/U4 requires even start/end on innermost axis. No BW (non-differentiable per Fuel's IR). |
@@ -264,8 +269,9 @@ cuDNN-backed. Gated by `cudnn` cargo feature. Conv2d / Pool2d shipped in
 Phase 7; Phase 11.8 added 1D / 3D + Adaptive fanout via the rank-agnostic
 `cudnnPoolingNdDescriptor`. Adaptive pool uses the
 `kernel = ceil(in/out); stride = floor(in/out); pad = 0` approximation —
-diverges from PyTorch by ±1 input cell when `in_i % out_i != 0` (bit-exact
-adaptive pool deferred — see [`ROADMAP.md`](ROADMAP.md)). FractionalMaxPool
+diverges from PyTorch by ±1 input cell when `in_i % out_i != 0`. That is the
+cuDNN-backed path only: the bit-exact bespoke `AdaptiveAvgPool{1,2,3}dPlan` /
+`AdaptiveMaxPool{1,2,3}dPlan` shipped in Phase 16.1 (rows below). FractionalMaxPool
 (Phase 16.3) and LpPool (Phase 16.2) ship as bespoke kernels — see the rows
 below and the "shipped" reconciliation list further down.
 
@@ -400,7 +406,7 @@ Block-bitonic sort + topk: one block per row. `row_len ≤ SORT_MAX_ROW = 1024`,
 | Op | Backend | Dtypes | Shapes / Limits | FW | BW | Notes |
 |----|---------|--------|-----------------|----|----|-------|
 | `SortPlan<T>` | Bespoke | FW: `{f32, f64, i32, i64}` | `row_len ≤ 1024` | ✓ | ✓ via `SortBackwardPlan` (`{f32, f64}` only) | Block-bitonic. |
-| `ArgsortPlan<T>` | Bespoke | FW: `{f32, f64, i32, i64}` | `row_len ≤ 1024` | ✓ | N/A | Returns sorted indices. |
+| `ArgsortPlan<T>` | Bespoke | FW: `{f32, f64, i32, i64}` | any `row_len`: `≤ 1024` block-bitonic (no workspace), `> 1024` multi-block CUB radix (needs a workspace) | ✓ | N/A | Returns sorted indices (`argsort.rs:9-15`). |
 | `MsortPlan<T>` | Bespoke | `{f32, f64}` | `row_len ≤ 1024` | ✓ | ✓ via `MsortBackwardPlan` | Multi-segment sort. |
 | `TopkPlan<T>` | Bespoke | `{f32, f64}` | `k ≤ 64`, `row_len ≤ 1024` | ✓ | ✓ via `TopkBackwardPlan` | |
 | `KthvaluePlan<T>` | Bespoke | `{f32, f64}` | `k+1 ≤ 64`, `row_len ≤ 1024` | ✓ | ✓ via `KthvalueBackwardPlan` | |
@@ -420,7 +426,7 @@ f16 + bf16 (memory-bound, no math).
 
 | Op | Backend | Dtypes | Shapes / Limits | FW | BW | Notes |
 |----|---------|--------|-----------------|----|----|-------|
-| `InterpolatePlan<T>` | Bespoke | `{f32, f64}` | NCHW 4-D | ✓ | ✓ via `InterpolateBackwardPlan` | Modes: bilinear 2-D. |
+| `InterpolatePlan<T>` | Bespoke | `{f32, f64, f16, bf16}` (halves accumulate in f32) | NCHW 4-D | ✓ | ✓ via `InterpolateBackwardPlan` | Modes: bilinear 2-D (`interpolate.rs:226`). |
 | `GridSamplePlan<T>` | Bespoke | `{f32, f64}` | NCHW 4-D + `[N, H_out, W_out, 2]` grid | ✓ | ✓ via `GridSampleBackwardPlan` | |
 | `AffineGridPlan<T>` | Bespoke | `{f32, f64}` | `[N, 2, 3]` theta → `[N, H, W, 2]` grid | ✓ | N/A | Pairs with `GridSample`. |
 | `PixelShufflePlan<T>` | Bespoke | FP-family | NCHW 4-D | ✓ | N/A (use `PixelUnshufflePlan`) | Memory-bound; FP-family supported. |
@@ -447,10 +453,11 @@ The live backlog with priority + effort estimates lives in
   alpha.64 fanout; measured 2026-08-27 it is now realized for the large
   majority — **~2747 of ~2912** distinct `_run` symbols (grep-measured, so
   approximate), a ~165-symbol tail rather than the original ~2000.
-- **Strided FFI siblings** for normalizer / shape ops
+- ✓ **Strided FFI siblings** for normalizer / shape ops
   (`rms_norm` / `layer_norm` / `softmax` / `log_softmax` / `flip` /
-  `roll` / `permute`) — 4 contig dtypes each, no strided siblings.
-  Tracked as a future fanout phase.
+  `roll` / `permute`) — shipped: each has `baracuda_kernels_<op>_<dtype>_strided_run`
+  for `f32` / `f16` / `bf16` / `f64` (counted in `baracuda-kernels-sys/src/lib.rs`
+  at `origin/main`, 2026-10-25: 4 symbols per op, all 7 ops).
 - **Long-arc roadmap items** (from the original comprehensive plan,
   pre-empted by Fuel-driven Phase 11+ work):
   - sm_90a (Hopper async) specialization + Blackwell forward-compat
