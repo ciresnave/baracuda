@@ -132,3 +132,39 @@ fn panicking_logger_does_not_unwind_into_cpp() {
     );
     assert!(rt.deserialize_engine(&[0u8; 32]).is_err());
 }
+
+/// TensorRT keeps one logger per process and ignores later ones while a runtime
+/// exists. Everything built from the first logger is dropped here while the
+/// second runtime is still alive; the second logger must still hear TensorRT,
+/// and TensorRT must not be left calling a freed logger.
+#[test]
+#[cfg(feature = "device-tests")]
+fn a_later_logger_survives_the_first_one_being_dropped() {
+    let first = require_optional!(
+        Logger::stderr(Severity::Error).map(Arc::new),
+        "C-ABI shim (Logger::new)"
+    );
+    let first_rt = require_optional!(
+        Runtime::with_logger(first),
+        "TensorRT runtime (Runtime::with_logger)"
+    );
+
+    let seen: Arc<Mutex<Vec<(Severity, String)>>> = Arc::default();
+    let sink = Arc::clone(&seen);
+    let second =
+        Logger::new(move |severity, msg| sink.lock().unwrap().push((severity, msg.to_owned())))
+            .map(Arc::new)
+            .expect("second logger");
+    let second_rt = Runtime::with_logger(second).expect("second runtime");
+
+    // Drop the first runtime and, with it, the last handle to the first logger.
+    drop(first_rt);
+
+    assert!(second_rt.deserialize_engine(&[0u8; 32]).is_err());
+    let seen = seen.lock().unwrap();
+    assert!(
+        seen.iter()
+            .any(|(s, _)| (*s as i32) <= (Severity::Error as i32)),
+        "the second logger heard nothing after the first was dropped; saw {seen:?}"
+    );
+}

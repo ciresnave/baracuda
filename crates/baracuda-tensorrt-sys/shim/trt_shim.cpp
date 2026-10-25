@@ -38,8 +38,9 @@ using namespace nvinfer1;
 namespace {
 
 // An `ILogger` that forwards every message to a Rust callback. TensorRT keeps
-// the `ILogger*` it is handed for the object's whole life, so the Rust side
-// owns this object and drops it only after everything built from it.
+// one logger per process and may keep the `ILogger*` it was first handed for as
+// long as any builder or runtime lives, so the Rust side creates exactly one of
+// these and never destroys it.
 class CallbackLogger final : public ILogger {
 public:
     using Callback = void (*)(std::int32_t severity, const char* msg, void* user);
