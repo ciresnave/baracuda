@@ -10,6 +10,7 @@ use crate::cfamily_shadow::{
     cast_scalar, demote_store_f32, out_ctype_of, param_ctype, promote_load_f32, scalar_ctype,
     store_expr_of,
 };
+use crate::typed;
 use unpopped::backend::{
     Backend, Decline, DeclinedOp, DtypeSupport, GeneratedKernel, LowerError, Lowering, Spelling,
     Variant, VariantFidelity, lower_dag, lower_dag_all, lower_dag_multi, lower_expr,
@@ -506,11 +507,25 @@ fn cuda_lowering<'a>(
     unary: &'a dyn Fn(UnaryOp, String) -> Result<Spelling, LowerError>,
     binary: &'a dyn Fn(BinaryOp, String, String) -> Result<Spelling, LowerError>,
     select: &'a dyn Fn(String, String, String) -> Result<Spelling, LowerError>,
+    dtype: ElementKind,
 ) -> Lowering<'a> {
+    // Fma / Cast / Bitcast (SA-43 / SA-44): spelled exactly or declined, see `typed`.
+    // The Fma spelling depends on the compute dtype, so it is picked here as a fn item
+    // (a capturing closure could not outlive this function).
+    let fma: &'a dyn Fn(String, String, String) -> Result<Spelling, LowerError> = match dtype {
+        ElementKind::F32 | ElementKind::F32Strict => &typed::fma_f32,
+        ElementKind::F64 => &typed::fma_f64,
+        _ => &typed::fma_decline,
+    };
     Lowering::builder(leaf, unary, binary)
         .reduced(reduced)
         .coord(coord)
         .select(select)
+        .fma(fma)
+        .cast(&typed::cast)
+        .bitcast(&typed::bitcast)
+        .compute_dtype(dtype)
+        .type_name(&typed::type_name)
         .build()
 }
 
@@ -610,6 +625,10 @@ fn body_packs(e: &ScalarExpr) -> bool {
         // any select with a konst/cmp already falls to scalar via the leaf
         // rule above), so a select body declines to the scalar/strided path.
         ScalarExpr::Select(..) => false,
+        // Fma / Cast / Bitcast never pack either: the packed pair path has no
+        // pair-split spelling for a fused op or a type change, so these decline to
+        // the scalar path (SA-43 / SA-44).
+        ScalarExpr::Fma(..) | ScalarExpr::Cast(..) | ScalarExpr::Bitcast(..) => false,
     }
 }
 
@@ -771,6 +790,7 @@ fn emit_vectorized(
                 &|op, x| cuda_unary(op, x, plan.dtype, bit_move),
                 &|op, a, b| cuda_binary(op, a, b, plan.dtype, bit_move),
                 &|c, a, b| cuda_select(c, a, b, plan.dtype),
+                plan.dtype,
             ),
         )?;
         if prelude.is_empty() {
@@ -878,6 +898,7 @@ fn emit_vectorized_packed(
                             .to_string(),
                     }))
                 },
+                plan.dtype,
             ),
         )?;
         if prelude.is_empty() {
@@ -944,6 +965,7 @@ fn emit_scalar(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKernel, Lo
             &|op, x| cuda_unary(op, x, plan.dtype, bit_move),
             &|op, a, b| cuda_binary(op, a, b, plan.dtype, bit_move),
             &|c, a, b| cuda_select(c, a, b, plan.dtype),
+            plan.dtype,
         ),
     )?;
     let store = store_expr_of(plan, 0, root);
@@ -1275,6 +1297,7 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKernel, L
             &|op, x| cuda_unary(op, x, plan.dtype, bit_move),
             &|op, a, b| cuda_binary(op, a, b, plan.dtype, bit_move),
             &|c, a, b| cuda_select(c, a, b, plan.dtype),
+            plan.dtype,
         ),
     )?;
     for decl in &prelude {
@@ -2023,6 +2046,7 @@ fn emit_scalar_multi(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKern
             &|op, x| cuda_unary(op, x, plan.dtype, bit_move),
             &|op, a, b| cuda_binary(op, a, b, plan.dtype, bit_move),
             &|c, a, b| cuda_select(c, a, b, plan.dtype),
+            plan.dtype,
         ),
         false,
     )?;
@@ -2147,6 +2171,7 @@ fn emit_strided_multi(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKer
             &|op, x| cuda_unary(op, x, plan.dtype, bit_move),
             &|op, a, b| cuda_binary(op, a, b, plan.dtype, bit_move),
             &|c, a, b| cuda_select(c, a, b, plan.dtype),
+            plan.dtype,
         ),
         false,
     )?;
@@ -2241,6 +2266,7 @@ fn emit_vectorized_multi(
                 &|op, x| cuda_unary(op, x, plan.dtype, bit_move),
                 &|op, a, b| cuda_binary(op, a, b, plan.dtype, bit_move),
                 &|c, a, b| cuda_select(c, a, b, plan.dtype),
+                plan.dtype,
             ),
             false,
         )?;
@@ -2343,6 +2369,7 @@ fn emit_vectorized_packed_multi(
                             .to_string(),
                     }))
                 },
+                plan.dtype,
             ),
             true,
         )?;
@@ -2712,6 +2739,7 @@ fn emit_reduction(
                         Ok(Spelling::Spelled(select_f32(c, a, b)))
                     }
                 },
+                plan.dtype,
             ),
         )?
         .spelled()?,
@@ -2854,6 +2882,7 @@ fn emit_reduction(
                             Ok(Spelling::Spelled(select_f32(c, a, b)))
                         }
                     },
+                    plan.dtype,
                 ),
             )?
             .spelled()?,
@@ -3503,6 +3532,7 @@ fn reduction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
                     select_f32(c, a, b)
                 }))
             },
+            plan.dtype,
         ),
     )
     .ok()
@@ -3860,6 +3890,7 @@ fn emit_contraction(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKerne
                     select_f32(c, a, b)
                 }))
             },
+            plan.dtype,
         ),
     )?
     .spelled()?;
@@ -4106,6 +4137,7 @@ fn contraction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
                     select_f32(c, a, b)
                 }))
             },
+            plan.dtype,
         ),
     )
     .ok()
@@ -4272,9 +4304,10 @@ fn contains_subexpr(e: &ScalarExpr, t: &ScalarExpr) -> bool {
         | ScalarExpr::Mul(a, b)
         | ScalarExpr::Div(a, b)
         | ScalarExpr::Binary(_, a, b) => contains_subexpr(a, t) || contains_subexpr(b, t),
-        ScalarExpr::Select(c, a, b) => {
+        ScalarExpr::Select(c, a, b) | ScalarExpr::Fma(c, a, b) => {
             contains_subexpr(c, t) || contains_subexpr(a, t) || contains_subexpr(b, t)
         }
+        ScalarExpr::Cast(x, _) | ScalarExpr::Bitcast(x, _) => contains_subexpr(x, t),
     }
 }
 
@@ -4298,6 +4331,9 @@ fn substitute_subexpr(e: &ScalarExpr, t: &ScalarExpr, marker: u8) -> ScalarExpr 
         ScalarExpr::Div(a, b) => ScalarExpr::Div(bx(a), bx(b)),
         ScalarExpr::Binary(op, a, b) => ScalarExpr::Binary(*op, bx(a), bx(b)),
         ScalarExpr::Select(c, a, b) => ScalarExpr::Select(bx(c), bx(a), bx(b)),
+        ScalarExpr::Fma(a, b, c) => ScalarExpr::Fma(bx(a), bx(b), bx(c)),
+        ScalarExpr::Cast(x, spec) => ScalarExpr::Cast(bx(x), *spec),
+        ScalarExpr::Bitcast(x, to) => ScalarExpr::Bitcast(bx(x), *to),
     }
 }
 
@@ -4543,6 +4579,7 @@ fn emit_row_reduce_impl(
                         select_f32(c, a, b)
                     }))
                 },
+                plan.dtype,
             ),
         )?
         .spelled()?)
@@ -5246,6 +5283,7 @@ fn emit_scan_impl(
                     Ok(Spelling::Spelled(select_f32(c, a, b)))
                 }
             },
+            plan.dtype,
         ),
     )?
     .spelled()?;
@@ -5316,6 +5354,7 @@ fn emit_scan_impl(
                     Ok(Spelling::Spelled(select_f32(c, a, b)))
                 }
             },
+            plan.dtype,
         ),
     )?
     .spelled()?;
@@ -5902,6 +5941,7 @@ fn emit_window(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKernel, Lo
                     Ok(Spelling::Spelled(select_f32(c, a, b)))
                 }
             },
+            plan.dtype,
         ),
     )?
     .spelled()?;
@@ -5971,6 +6011,7 @@ fn emit_window(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKernel, Lo
                     Ok(Spelling::Spelled(select_f32(c, a, b)))
                 }
             },
+            plan.dtype,
         ),
     )?
     .spelled()?;
@@ -8027,11 +8068,12 @@ fn assert_coord_lowerable(e: &ScalarExpr, plan: &KernelPlan<'_>) -> Result<(), L
             assert_coord_lowerable(a, plan)?;
             assert_coord_lowerable(b, plan)?;
         }
-        ScalarExpr::Select(c, a, b) => {
+        ScalarExpr::Select(c, a, b) | ScalarExpr::Fma(c, a, b) => {
             assert_coord_lowerable(c, plan)?;
             assert_coord_lowerable(a, plan)?;
             assert_coord_lowerable(b, plan)?;
         }
+        ScalarExpr::Cast(x, _) | ScalarExpr::Bitcast(x, _) => assert_coord_lowerable(x, plan)?,
     }
     Ok(())
 }
