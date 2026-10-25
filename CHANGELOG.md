@@ -16,7 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
-## 0.1.0-alpha.29 - 2026-10-25
+## 0.1.0-alpha.33 - 2026-10-25
+
+### Added
+
+- New crate `baracuda-tensorrt-builder` (ROADMAP SA-33, builder row): `Builder`, `BuilderConfig` (memory-pool limits, builder flags, optimization level), `Network` with layers for elementwise, activation, unary, matrix multiply, constant (`f32` / `i32`, weights kept alive until build), shuffle (reshape and transposes), reduce, softmax, concatenation, cast and identity, and `Builder::build_serialized`, whose plan `Runtime::deserialize_engine` loads. The shim gained the matching `trtBuilder*`, `trtConfig*`, `trtNetwork*`, `trtLayer*` and `trtTensor*` symbols; the loader resolves `createInferBuilder_INTERNAL`. The API needs the `shim` feature. Device-verified on sm_89 (RTX 4070), TensorRT 10.16.1.11: `cargo gpu-test -p baracuda-tensorrt-builder --features shim,device-tests`, 8 passed, 0 failed, 0 declared skips; each network's output is compared with a CPU reference (elementwise sum, matmul + ReLU, constant * x then sqrt, softmax, transpose + reduce, concatenation), and a network with no outputs fails to build while an identical one with an output builds.
+- Not yet in the builder (later SA-33 rows): optimization profiles, the ONNX parser, INT8 calibration, the plugin registry, convolution / pooling and the remaining layer types.
 
 ### Fixed
 
@@ -32,13 +37,6 @@ Docs only. No code, no device run.
 - ROADMAP SA-37 / SA-38 record what is done and what is still open.
 - New `docs/PATENT-SWEEP.md` (board 286): the due-diligence patent sweep of baracuda's own mechanisms (14 ideas, 10 hits assessed, and claim charts for the Google / PeakStream family US 8,458,680, 8,146,066, 8,584,106 and 8,261,270: all `design-around`). Not legal advice.
 
-
-## 0.1.0-alpha.28 - 2026-10-25
-
-### Added
-
-- New crate `baracuda-tensorrt-builder` (ROADMAP SA-33, builder row): `Builder`, `BuilderConfig` (memory-pool limits, builder flags, optimization level), `Network` with layers for elementwise, activation, unary, matrix multiply, constant (`f32` / `i32`, weights kept alive until build), shuffle (reshape and transposes), reduce, softmax, concatenation, cast and identity, and `Builder::build_serialized`, whose plan `Runtime::deserialize_engine` loads. The shim gained the matching `trtBuilder*`, `trtConfig*`, `trtNetwork*`, `trtLayer*` and `trtTensor*` symbols; the loader resolves `createInferBuilder_INTERNAL`. The API needs the `shim` feature. Device-verified on sm_89 (RTX 4070), TensorRT 10.16.1.11: `cargo gpu-test -p baracuda-tensorrt-builder --features shim,device-tests`, 8 passed, 0 failed, 0 declared skips; each network's output is compared with a CPU reference (elementwise sum, matmul + ReLU, constant * x then sqrt, softmax, transpose + reduce, concatenation), and a network with no outputs fails to build while an identical one with an output builds.
-- Not yet in the builder (later SA-33 rows): optimization profiles, the ONNX parser, INT8 calibration, the plugin registry, convolution / pooling and the remaining layer types.
 
 ## 0.1.0-alpha.28 - 2026-10-25
 
