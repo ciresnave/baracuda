@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-npp-sys"
-version = "0.1.0-alpha.21"
+version = "0.1.0-alpha.22"
 description = "Raw FFI bindings and dynamic loader for NVIDIA NPP (Performance Primitives)."
 edition.workspace = true
 license.workspace = true

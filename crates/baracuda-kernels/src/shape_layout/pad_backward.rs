@@ -7,10 +7,13 @@
 //! those cells of `dy` are discarded. Bit-exact across all wired
 //! dtypes — pure element copy, no arithmetic.
 //!
-//! Today only [`PadMode::Constant`] is wired in BW. The non-constant
-//! modes (Reflect / Replicate / Circular) require a scatter-add
-//! backward — multiple pad cells in `dy` can map to the same input
-//! coord in `dx` — and ship in a later fanout.
+//! The non-constant modes (Reflect / Replicate / Circular) are the
+//! adjoint of a many-to-one forward map — several pad cells in `dy`
+//! can land on the same input coord in `dx` — so they sum. They run as a
+//! deterministic gather (one thread per `dx` cell, fixed summation
+//! order; f16 / bf16 accumulate in f32), not an atomic scatter. Reflect
+//! needs `pad_low, pad_high <= extent - 1` on every axis of extent > 1
+//! (a single reflection); `select()` declines larger pads.
 
 use core::ffi::c_void;
 use core::marker::PhantomData;
@@ -26,13 +29,11 @@ use baracuda_kernels_types::{
 ///
 /// Mirrors [`crate::PadDescriptor`] for the params the BW actually
 /// needs: `input_shape` (= dx shape), `pad_low` (slice offset), and
-/// `pad_high` (only used to derive dy shape for the args check).
-/// `value` is irrelevant for the BW — the constant gradient is zero by
-/// construction. `mode` must be `Constant` today.
+/// `pad_high` (derives the dy shape). `value` is irrelevant for the BW:
+/// the constant gradient is zero by construction.
 #[derive(Copy, Clone, Debug)]
 pub struct PadBackwardDescriptor<const N: usize> {
-    /// Padding mode that was used in the forward. Today only
-    /// `Constant` is wired in BW.
+    /// Padding mode that was used in the forward. All four are wired.
     pub mode: PadMode,
     /// Input tensor shape (= dx shape).
     pub input_shape: [i32; N],
@@ -74,13 +75,14 @@ pub struct PadBackwardArgs<'a, T: Element, const N: usize> {
 
 /// `pad` backward plan.
 ///
-/// Adjoint of [`crate::PadPlan`] in `Constant` mode:
+/// Adjoint of [`crate::PadPlan`]. In `Constant` mode:
 /// `dx = dy[pad_low : pad_low + input_shape]` per axis — a pure
 /// slice. Pad-region cells of `dy` are discarded (their FW values
-/// were a constant, independent of `x`).
+/// were a constant, independent of `x`). In `Reflect` / `Replicate` /
+/// `Circular` mode each `dx` cell is the sum of every `dy` cell the
+/// forward read it into.
 ///
-/// **When to use**: BW for [`PadPlan`](crate::PadPlan) in
-/// `Constant` mode.
+/// **When to use**: BW for [`PadPlan`](crate::PadPlan), any mode.
 ///
 /// **Dtypes**: `{f32, f64, f16, bf16}`.
 ///
@@ -89,12 +91,13 @@ pub struct PadBackwardArgs<'a, T: Element, const N: usize> {
 ///
 /// **Workspace**: none.
 ///
-/// **Precision guarantee**: deterministic, bit-stable, bit-exact.
+/// **Precision guarantee**: deterministic and bit-stable. `Constant` is
+/// bit-exact (pure copy); the other modes sum in a fixed order (f32
+/// accumulator for f16 / bf16).
 ///
-/// **Known limitations**: BW for `Reflect` / `Replicate` /
-/// `Circular` modes is not yet wired — those need a scatter-add
-/// (multiple pad cells can map to the same input coord). `select()`
-/// returns `Unsupported` for non-`Constant` modes today.
+/// **Known limitations**: `Reflect` with `pad_low` or `pad_high` greater
+/// than `extent - 1` on an axis of extent > 1 (more than one reflection)
+/// returns `Unsupported` from `select()`.
 #[derive(Debug)]
 pub struct PadBackwardPlan<T: Element, const N: usize> {
     desc: PadBackwardDescriptor<N>,
@@ -123,14 +126,19 @@ impl<T: Element, const N: usize> PadBackwardPlan<T, N> {
             }
         }
 
-        // Today only Constant-mode BW is wired (pure slice). Reflect /
-        // Replicate / Circular BWs need scatter-add (multiple dy cells
-        // can map to the same dx coord) and ship in a later fanout.
-        if !matches!(desc.mode, PadMode::Constant) {
-            return Err(Error::Unsupported(
-                "baracuda-kernels::PadBackwardPlan: today only PadMode::Constant is wired; \
-                 Reflect / Replicate / Circular BWs need scatter-add and land in fanout",
-            ));
+        // The kernel's single-reflection preimage formula (and the
+        // PyTorch contract) needs pad <= extent - 1; the forward clamps
+        // beyond that and its adjoint is not wired.
+        if matches!(desc.mode, PadMode::Reflect) {
+            for d in 0..N {
+                let e = desc.input_shape[d];
+                if e > 1 && (desc.pad_low[d] > e - 1 || desc.pad_high[d] > e - 1) {
+                    return Err(Error::Unsupported(
+                        "baracuda-kernels::PadBackwardPlan: Reflect needs pad_low and pad_high <= extent - 1 
+                         on every axis of extent > 1",
+                    ));
+                }
+            }
         }
 
         let supported = matches!(
@@ -146,7 +154,7 @@ impl<T: Element, const N: usize> PadBackwardPlan<T, N> {
         let precision_guarantee = PrecisionGuarantee {
             math_precision: MathPrecision::F32,
             accumulator: ElementKind::F32,
-            // Pure slice — no arithmetic.
+            // Constant: pure slice. Other modes: fixed-order gather sum.
             bit_stable_on_same_hardware: true,
             deterministic: true,
         };
@@ -243,6 +251,48 @@ impl<T: Element, const N: usize> PadBackwardPlan<T, N> {
         let stride_dy = args.dy.stride();
         let stride_dx = args.dx.stride();
         let rank = N as i32;
+
+        if !matches!(self.desc.mode, PadMode::Constant) {
+            let mode_code: i32 = match self.desc.mode {
+                PadMode::Reflect => 0,
+                PadMode::Replicate => 1,
+                _ => 2,
+            };
+            let output_shape = self.desc.dy_shape();
+            macro_rules! modes_run {
+                ($f:ident) => {
+                    unsafe {
+                        baracuda_kernels_sys::$f(
+                            input_numel,
+                            rank,
+                            mode_code,
+                            input_shape.as_ptr(),
+                            output_shape.as_ptr(),
+                            pad_low.as_ptr(),
+                            stride_dy.as_ptr(),
+                            stride_dx.as_ptr(),
+                            dy_ptr,
+                            dx_ptr,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
+                        )
+                    }
+                };
+            }
+            let status = match T::KIND {
+                ElementKind::F32 => modes_run!(baracuda_kernels_pad_modes_backward_f32_run),
+                ElementKind::F16 => modes_run!(baracuda_kernels_pad_modes_backward_f16_run),
+                ElementKind::Bf16 => modes_run!(baracuda_kernels_pad_modes_backward_bf16_run),
+                ElementKind::F64 => modes_run!(baracuda_kernels_pad_modes_backward_f64_run),
+                _ => {
+                    return Err(Error::Unsupported(
+                        "baracuda-kernels::PadBackwardPlan::run: only f32/f16/bf16/f64 wired today",
+                    ));
+                }
+            };
+            return map_status(status);
+        }
 
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
