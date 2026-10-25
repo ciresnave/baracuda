@@ -276,7 +276,8 @@ impl Builder {
         network: &Network<'_>,
         config: &BuilderConfig<'_>,
     ) -> Result<HostMemory> {
-        // SAFETY: TensorRT returned a fresh `IHostMemory*` that only this value owns (null was rejected above).
+        // SAFETY: `self.raw`, `network.raw` and `config.raw` are live handles (the network and config
+        // borrow this builder); TensorRT reads them for the call and returns a new `IHostMemory*` or null.
         let raw = unsafe { ffi::trtBuilderBuildSerialized(self.raw, network.raw, config.raw) };
         let raw = non_null(raw, "buildSerializedNetwork")?;
         // SAFETY: TensorRT returned a fresh `IHostMemory*` that only this value owns.
