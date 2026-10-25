@@ -18,6 +18,10 @@ at alpha.82.
 
 ## 0.1.0-alpha.29 - 2026-10-25
 
+### Fixed
+
+- `baracuda-tensorrt`: the logger callback took TensorRT's severity as a Rust enum by value, so an out-of-range value from C++ would have been undefined behaviour (Pip review of #262). `trtLogCallback` now takes an `i32`; `severity_from_raw` maps `0..=4` and reports anything else as `InternalError`. Tests: `severity_from_raw_maps_every_documented_value_and_clamps_the_rest` and `trampoline_accepts_an_out_of_range_severity` (calls the trampoline with 99).
+
 ## 0.1.0-alpha.32 - 2026-10-25
 
 Docs only. No code, no device run.

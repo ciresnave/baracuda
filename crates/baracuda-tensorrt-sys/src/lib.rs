@@ -187,9 +187,12 @@ impl CudaStatus for trtStatus_t {
 /// get TensorRT inference library version.
 pub type PFN_getInferLibVersion = unsafe extern "C" fn() -> i32;
 
-/// Logger callback signature (matches `nvinfer1::ILogger::log`).
+/// Logger callback signature (matches `nvinfer1::ILogger::log`). `severity` is a
+/// plain integer, not [`trtSeverity_t`]: the value comes from C++, and a Rust enum
+/// holding a value outside its variants is undefined behaviour, so the callee
+/// validates it (see `Severity::from_raw` in `baracuda-tensorrt`).
 pub type trtLogCallback =
-    unsafe extern "C" fn(severity: trtSeverity_t, msg: *const c_char, user: *mut c_void);
+    unsafe extern "C" fn(severity: i32, msg: *const c_char, user: *mut c_void);
 
 /// `createInferRuntime_INTERNAL(void* logger, int32_t version)` — the real
 /// `extern "C"` factory exported by `libnvinfer`. The `version` argument must
