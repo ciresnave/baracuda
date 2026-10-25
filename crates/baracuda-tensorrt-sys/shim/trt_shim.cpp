@@ -28,6 +28,7 @@
 // NvInferRuntimeBase.h) — see crates/baracuda-tensorrt/AUDIT.md.
 
 #include "NvInfer.h"
+#include "NvOnnxParser.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -361,6 +362,57 @@ void trtShuffleSetSecondTranspose(void* layer, const std::int32_t* order) noexce
         p.order[i] = order[i];
     }
     static_cast<IShuffleLayer*>(asLayer(layer))->setSecondTranspose(p);
+}
+
+// ---- network inputs / outputs by index ----------------------------------
+
+void* trtNetworkGetInput(void* network, std::int32_t index) noexcept {
+    return asNetwork(network)->getInput(index);
+}
+
+void* trtNetworkGetOutput(void* network, std::int32_t index) noexcept {
+    return asNetwork(network)->getOutput(index);
+}
+
+// ---- ONNX parser (nvonnxparser::IParser) --------------------------------
+//
+// Created from Rust through `createNvOnnxParser_INTERNAL` in
+// nvonnxparser_10.dll / libnvonnxparser.so.10; every call here is a vtable
+// dispatch, so this object references no parser symbol either.
+
+static inline nvonnxparser::IParser* asParser(void* p) noexcept {
+    return static_cast<nvonnxparser::IParser*>(p);
+}
+
+void trtOnnxParserDestroy(void* parser) noexcept { delete asParser(parser); }
+
+bool trtOnnxParserParse(void* parser, const void* data, std::size_t size, const char* path) noexcept {
+    return asParser(parser)->parse(data, size, path);
+}
+
+std::int32_t trtOnnxParserGetNbErrors(void* parser) noexcept { return asParser(parser)->getNbErrors(); }
+void trtOnnxParserClearErrors(void* parser) noexcept { asParser(parser)->clearErrors(); }
+
+bool trtOnnxParserSupportsOperator(void* parser, const char* op) noexcept {
+    return asParser(parser)->supportsOperator(op);
+}
+
+// Error `index` fields. Strings are owned by the parser and valid until the
+// next parse or clearErrors.
+std::int32_t trtOnnxParserErrorCode(void* parser, std::int32_t index) noexcept {
+    return static_cast<std::int32_t>(asParser(parser)->getError(index)->code());
+}
+const char* trtOnnxParserErrorDesc(void* parser, std::int32_t index) noexcept {
+    return asParser(parser)->getError(index)->desc();
+}
+std::int32_t trtOnnxParserErrorNode(void* parser, std::int32_t index) noexcept {
+    return asParser(parser)->getError(index)->node();
+}
+const char* trtOnnxParserErrorNodeName(void* parser, std::int32_t index) noexcept {
+    return asParser(parser)->getError(index)->nodeName();
+}
+const char* trtOnnxParserErrorNodeOperator(void* parser, std::int32_t index) noexcept {
+    return asParser(parser)->getError(index)->nodeOperator();
 }
 
 // ---- optimization profiles ----------------------------------------------

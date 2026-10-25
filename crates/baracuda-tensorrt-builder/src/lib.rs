@@ -29,4 +29,8 @@ pub fn shim_built() -> bool {
 #[cfg(feature = "shim")]
 mod api;
 #[cfg(feature = "shim")]
+mod onnx;
+#[cfg(feature = "shim")]
 pub use api::*;
+#[cfg(feature = "shim")]
+pub use onnx::*;
