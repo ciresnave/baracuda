@@ -16,6 +16,16 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.20 - 2026-10-25
+
+### Changed
+
+- `baracuda-cuda-emit`: honour `KernelPlan::half_arith() == HalfArith::ViaF32` (sm_61, ROADMAP SA-12). The packed `__half2`/`__nv_bfloat162` vector paths are skipped on such targets and the scalar kernel (f32 math) is used; `Cuda::effective_count_width` follows, so the contract's count unit stays truthful.
+
+### Docs
+
+- ROADMAP: CireSnave's 2026-10-24 ruling that Baracuda also owns the CUTLASS parser and emitter for Unpopped (rows SA-40..SA-42).
+
 ## 0.1.0-alpha.19 - 2026-10-24
 
 ### Changed

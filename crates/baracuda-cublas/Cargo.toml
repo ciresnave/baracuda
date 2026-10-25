@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-cublas"
-version = "0.1.0-alpha.19"
+version = "0.1.0-alpha.20"
 description = "Safe Rust wrappers for NVIDIA cuBLAS (classic BLAS, Lt, Xt)."
 edition.workspace = true
 license.workspace = true
