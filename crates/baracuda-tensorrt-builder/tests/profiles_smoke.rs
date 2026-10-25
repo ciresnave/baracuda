@@ -100,6 +100,7 @@ fn try_run(
         .expect("input shape");
     let x = DeviceBuffer::from_slice(&dev.ctx, &input).expect("upload");
     let y = DeviceBuffer::<f32>::zeros(&dev.ctx, n).expect("output");
+    // SAFETY: the buffers `x` and `y` are live device allocations of `n` floats that outlive the enqueue and the stream synchronize that follows, and the shape set above fits them.
     unsafe {
         exec.set_tensor_address("x", x.as_raw().0 as usize as *mut _)
             .expect("bind x");

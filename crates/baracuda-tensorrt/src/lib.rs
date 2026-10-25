@@ -510,6 +510,8 @@ impl Engine<'_> {
         selector: OptProfileSelector,
     ) -> Result<Dims> {
         let name = CString::new(name)?;
+        // SAFETY: `self.raw` is the live engine this value owns; `name` is a NUL-terminated
+        // `CString` that outlives the call, and TensorRT copies the returned `Dims` by value.
         let raw = unsafe {
             sys::trtCudaEngineGetProfileShape(self.raw, name.as_ptr(), profile, selector as i32)
         };
@@ -642,6 +644,8 @@ impl ExecutionContext<'_> {
     /// has more than one profile; the first context uses profile 0 by default.
     /// Fails with [`Error::Call`] if TensorRT rejects the index.
     pub fn set_optimization_profile_async(&self, index: i32, stream: &Stream) -> Result<()> {
+        // SAFETY: `self.raw` is the live execution context this value owns, and
+        // `stream.as_raw()` is a live CUDA stream borrowed for the call.
         let ok = unsafe {
             sys::trtExecutionContextSetOptimizationProfileAsync(
                 self.raw,
@@ -661,6 +665,7 @@ impl ExecutionContext<'_> {
     /// The index of the optimization profile this context currently uses
     /// (`-1` if none has been selected).
     pub fn optimization_profile(&self) -> i32 {
+        // SAFETY: `self.raw` is the live execution context this value owns; this only reads an index.
         unsafe { sys::trtExecutionContextGetOptimizationProfile(self.raw) }
     }
 
