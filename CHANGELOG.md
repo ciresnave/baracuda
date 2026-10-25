@@ -16,6 +16,27 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.25 - 2026-10-25
+
+### Added
+
+- `baracuda-cuda-emit` 0.24.0 spells the three typed IR nodes Unpopped 0.23/0.24 added (ROADMAP SA-43, SA-44), in the new `typed` module. **Fma**: `__fmaf_rn` / `__fma_rn`, one rounding; f16 / bf16 decline. **Cast**: the CUDA conversion intrinsics with the rounding direction in the name (`_rn` / `_rz` / `_rd` / `_ru`), float to integer saturating with NaN to 0 (explicit guard on the 64-bit and double-source paths, where the intrinsics return the type's minimum), narrow integer targets clamped, `ClampFinite` clamping in double before narrowing. **Bitcast**: the `__*_as_*` reinterpret intrinsics. Anything outside the v1 table declines with a typed `Decline`. Device-verified on sm_89 (RTX 4070): `tests/typed_exprs.rs`, 6 tests, every output bit-compared with Unpopped's oracle over 50-edge-value inputs in all four rounding modes.
+
+### Changed
+
+- **Breaking (pre-1.0 minor):** `unpopped`, `unpopped-vocab` and the `unpopped-cpu-c` / `unpopped-slang` dev-dependencies 0.22.0 -> 0.24.0; `baracuda-cuda-emit` and `baracuda-cuda-parse` 0.22.0 -> 0.24.0. `ScalarExpr` / `PatternError` gained `Fma`, `Cast`, `Bitcast`, so every exhaustive match in the emitter, its fuzz test and the walkers got arms.
+- `baracuda-cuda-seam`: `fuel-kernel-seam` and `fuel-kernel-seam-types` `=0.26.12` (first release on `unpopped-vocab` 0.24). The whole graph now holds one `unpopped-vocab`; with 0.25.10 (vocab ^0.22) it held two and `baracuda-cuda-seam` did not compile. `baracuda-types` carries `unpopped-vocab`, so the whole lockstep family moves together.
+
+### Fixed
+
+- Workspace `cargo clippy --workspace --all-targets` is clean on Rust 1.98: 12 lints in 9 targets (a `clone_on_copy` in two tests that exist to prove `Clone` is derived, now `allow`ed with that reason; a redundant borrow, a manual range check, dead code, indexed loops, an unused import and two constant `assert!`s in the seam tests, now `const` blocks).
+
+### Device evidence for the unpublished alphas (.17-.25)
+
+- **.20 SA-12 and .21 SA-28: NOT RUN ON DEVICE (no sm_61 hardware; race not demonstrated or fixed-proven).**
+- Device-verified on sm_89: .22 (pad backward modes), .24 (SA-17 tests), .25 (Fma / Cast / Bitcast).
+- No GPU code: .17, .18, .19, .23.
+
 ## 0.1.0-alpha.24 - 2026-10-25
 
 ### Fixed

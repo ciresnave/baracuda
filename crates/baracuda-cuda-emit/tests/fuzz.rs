@@ -330,13 +330,15 @@ fn scalar_key(n_inputs: usize) -> StructureKey {
 /// leaves excluded, first structural repeat wins.
 fn has_cse_hoist(e: &unpopped::ScalarExpr, seen: &mut std::collections::HashSet<String>) -> bool {
     use unpopped::ScalarExpr::{
-        Add, Binary, Const, Coord, Div, Input, Mul, Param, Reduced, Select, Sub, Unary,
+        Add, Binary, Bitcast, Cast, Const, Coord, Div, Fma, Input, Mul, Param, Reduced, Select,
+        Sub, Unary,
     };
     let kids: Vec<&unpopped::ScalarExpr> = match e {
         Input(_) | Const(_) | Param(_) | Reduced(_) | Coord(_) => return false, // leaf
         Add(a, b) | Sub(a, b) | Mul(a, b) | Div(a, b) | Binary(_, a, b) => vec![a, b],
         Unary(_, a) => vec![a],
-        Select(a, b, c) => vec![a, b, c],
+        Select(a, b, c) | Fma(a, b, c) => vec![a, b, c],
+        Cast(a, _) | Bitcast(a, _) => vec![a],
     };
     for k in kids {
         if has_cse_hoist(k, seen) {

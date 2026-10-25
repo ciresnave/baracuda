@@ -24,6 +24,9 @@ pub use cuda::{Cuda, emit_cast_helper, emit_coord_unravel_helper, emit_dtype_pro
 /// module doc comment for why.
 pub mod cfamily_shadow;
 
+/// The CUDA spellings of `Fma`, `Cast` and `Bitcast` (unpopped 0.24.0).
+mod typed;
+
 /// The NVRTC on-demand JIT compiler (`NvrtcCompiler`) — the production
 /// source → PTX [`Compiler`](unpopped::Compiler). Behind `--features
 /// nvrtc` because it needs the nvrtc runtime.

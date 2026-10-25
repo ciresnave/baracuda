@@ -153,8 +153,8 @@ where
 
         // ---- FlashSdpaPlan reference (bespoke or FA2 depending on
         //      heuristic — at seq_q=1 it's bespoke unless K is huge). ----
-        let q4_numel = (BATCH * NUM_HEADS * 1 * HEAD_DIM) as usize;
-        let lse_numel = (BATCH * NUM_HEADS * 1) as usize;
+        let q4_numel = (BATCH * NUM_HEADS * HEAD_DIM) as usize;
+        let lse_numel = (BATCH * NUM_HEADS) as usize;
         let host_q4: Vec<T> = vec![fill; q4_numel];
         let host_lse: Vec<T> = vec![fill; lse_numel];
 

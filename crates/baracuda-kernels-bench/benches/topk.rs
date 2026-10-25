@@ -33,10 +33,6 @@ const TOPK_SWEEP: &[(i32, i32, i32)] = &[
     (1, 1024, 64), // Trailblazer-cap shape
 ];
 
-fn leak_str(s: &str) -> &'static str {
-    Box::leak(s.to_owned().into_boxed_str())
-}
-
 /// Deterministic pseudo-random fixture: `(i * 0.001 + b * 0.137)` →
 /// non-constant values so top-k actually has work to do (constant
 /// inputs make the comparator trivial). f32 only.

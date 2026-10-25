@@ -28,7 +28,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .collect();
     println!(
         "input (first 8): {:?}",
-        &host_in.iter().take(8).copied().collect::<Vec<_>>()
+        host_in.iter().take(8).copied().collect::<Vec<_>>()
     );
 
     let mut d_in = DeviceBuffer::from_slice(&ctx, &host_in)?;

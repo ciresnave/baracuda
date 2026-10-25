@@ -57,6 +57,10 @@ const ROWS: i64 = 32;
 const K: i64 = 128;
 
 /// One matrix cell. Every expectation is a hand-written bit pattern.
+#[cfg_attr(
+    not(feature = "device-tests"),
+    allow(dead_code, reason = "read only by the device-gated `check`")
+)]
 struct Cell {
     name: &'static str,
     dt: ElementKind,

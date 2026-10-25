@@ -745,9 +745,9 @@ fn nvrtc_compiles_int_bitwise_and_u8_add() {
 
 /// The WHERE/SELECT kernels compile headerless under nvrtc: the f32/f64
 /// select is a plain identity-cast ternary (zero includes — no INFINITY
-/// macro, no headers), the triu select composes the Coord cast + cmp cond
-/// + pick in one strided body, and the f16 raw-pick form (cond promote +
-/// `(__half)` arm casts, incl. the double-literal Const arm through the
+/// macro, no headers), the triu select composes the Coord cast, the cmp cond
+/// and the pick in one strided body, and the f16 raw-pick form (cond promote
+/// and `(__half)` arm casts, incl. the double-literal Const arm through the
 /// half converting ctor) rides the fp16 header nvrtc bundles. Numeric
 /// correctness is the nvcc host harness (`ondevice/select_validate.cu`);
 /// this guards headerless portability. Ignored (needs nvrtc + CUDA).
