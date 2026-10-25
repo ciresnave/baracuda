@@ -1,7 +1,7 @@
 //! Runtime-API graph user objects (CUDA 12.0+).
 //!
 //! Refcounted RAII slot you can attach to a graph via
-//! [`Graph::retain_user_object`]; when the graph releases the last
+//! `Graph::retain_user_object`; when the graph releases the last
 //! reference, the destructor runs. Mirrors the Driver-side wrapper.
 
 use core::ffi::c_void;

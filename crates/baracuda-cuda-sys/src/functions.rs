@@ -464,7 +464,7 @@ pub type PFN_cuKernelGetFunction =
 
 /// `cuGraphAddKernelNode_v2` — v2 shape, matches our
 /// [`crate::types::CUDA_KERNEL_NODE_PARAMS`] layout (with `kern` + `ctx`
-/// trailing fields). Pinned to `_v2` via [`has_version_suffix`] routing.
+/// trailing fields). Pinned to `_v2` via `has_version_suffix` routing.
 pub type PFN_cuGraphAddKernelNode = unsafe extern "C" fn(
     graph_node: *mut CUgraphNode,
     graph: CUgraph,

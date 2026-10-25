@@ -1,6 +1,6 @@
 //! CUDA arrays + texture / surface objects (Runtime API).
 //!
-//! Mirrors [`baracuda_driver::array`]. An [`Array`] is an opaque
+//! Mirrors `baracuda_driver::array`. An [`Array`] is an opaque
 //! on-device layout optimized for texture fetches. [`TextureObject`] /
 //! [`SurfaceObject`] wrap the CUDA 5+ object-based texture API; the
 //! legacy reference-based API is intentionally not wrapped.

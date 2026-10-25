@@ -7,13 +7,13 @@
 //! FlashInfer (`flashinfer-ai/flashinfer`, Apache-2.0) is header-only /
 //! template-heavy, so there is no shared library to dynamically load.
 //! Instead, baracuda compiles thin C-ABI launcher shims around the
-//! vendored FlashInfer headers inside [`baracuda-kernels-sys`]; this
+//! vendored FlashInfer headers inside `baracuda-kernels-sys`; this
 //! crate re-exports those `extern "C"` symbols under a dedicated crate
 //! name so downstream code can depend on the FlashInfer FFI surface
 //! without pulling the whole kernels-sys symbol table into scope.
 //!
 //! Almost all callers should prefer the safe, typed wrappers in
-//! [`baracuda-flashinfer`] (the sibling crate) over these raw symbols.
+//! `baracuda-flashinfer` (the sibling crate) over these raw symbols.
 //!
 //! # Feature gating
 //!

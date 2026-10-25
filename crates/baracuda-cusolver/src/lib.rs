@@ -906,7 +906,7 @@ complex_impl!(
 ///
 /// On return `a` holds `L` (unit-diagonal lower) and `U` (upper) packed
 /// together; `ipiv` holds the row-pivot permutation (length = `min(m, n)`);
-/// `info` is a single-element device int (0 on success, k > 0 means U[k,k]
+/// `info` is a single-element device int (0 on success, k > 0 means U\[k,k\]
 /// is exactly zero).
 ///
 /// # Example
@@ -2765,7 +2765,7 @@ pub mod xapi {
         }
     }
 
-    /// Solve `A X = B` after [`xpotrf`] has Cholesky-factored A.
+    /// Solve `A X = B` after `xpotrf` has Cholesky-factored A.
     /// `b`/`ldb` describe the right-hand-side matrix; `b` is overwritten
     /// with X.
     ///

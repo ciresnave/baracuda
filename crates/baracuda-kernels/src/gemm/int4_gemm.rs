@@ -129,8 +129,8 @@ pub struct Int4GemmArgs<'a, T: IntElement, BT: BiasElement = f32> {
 
 /// int4 GEMM plan.
 ///
-/// Parameterized on `T: IntElement` ([`S4`] / [`U4`]; trailblazer SKU
-/// is [`S4`] only) and `BT: BiasElement` (`f32` default, or `i32`,
+/// Parameterized on `T: IntElement` (`S4` / `U4`; trailblazer SKU
+/// is `S4` only) and `BT: BiasElement` (`f32` default, or `i32`,
 /// matching the int8 family's bias-element convention).
 #[derive(Debug)]
 pub struct Int4GemmPlan<T: IntElement, BT: BiasElement = f32> {

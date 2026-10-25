@@ -96,7 +96,7 @@
 //!
 //! ## NCCL coordination contract
 //!
-//! - The plan's [`RingAttentionPlan::run`] takes a `&Communicator` arg
+//! - The plan's `RingAttentionPlan::run` takes a `&Communicator` arg
 //!   alongside the workspace. Caller owns the communicator's lifetime
 //!   and rank/world_size identity.
 //! - K/V buffers are rotated **in place** — the plan ping-pongs

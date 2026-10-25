@@ -1,6 +1,6 @@
 //! Batched paged-KV prefill — Phase 66 Tier 2 (FlashInfer).
 //!
-//! The prompt-ingestion counterpart to [`BatchPagedDecodePlan`]: every
+//! The prompt-ingestion counterpart to `BatchPagedDecodePlan`: every
 //! request contributes *multiple* query rows (its prompt tokens), all
 //! concatenated raggedly across the batch via `q_indptr`, each attending
 //! over that request's paged K/V history. Routes to FlashInfer's
@@ -16,7 +16,7 @@
 //! - `o`        : `[total_num_rows, num_qo_heads, head_dim]` element `T`.
 //! - `lse`      : `[total_num_rows, num_qo_heads]` **f32**.
 //!
-//! Paged store (kHND, shared with [`BatchPagedDecodePlan`]):
+//! Paged store (kHND, shared with `BatchPagedDecodePlan`):
 //!
 //! - `k_data` / `v_data` : `[max_num_pages, num_kv_heads, page_size, head_dim]`.
 //! - `kv_indices`        : `[total_used_pages]` i32 — physical page IDs.
@@ -28,7 +28,7 @@
 //! - `head_dim ∈ {64, 128, 256}`.
 //! - `num_qo_heads % num_kv_heads == 0` (integer GQA group).
 //! - Element type `T ∈ {f16, bf16}` — prefill is tensor-core (mma) based;
-//!   f32 Q/K is not supported by the kernel (use [`BatchPagedDecodePlan`]
+//!   f32 Q/K is not supported by the kernel (use `BatchPagedDecodePlan`
 //!   or the bespoke SDPA path for f32).
 //! - `causal` selects standard autoregressive masking; `false` attends to
 //!   the full history.

@@ -3,7 +3,7 @@
 //! cuFFT has no native shift, so these are hand-rolled kernels in
 //! `baracuda-kernels-sys`. The kernel is element-width-generic (4 / 8
 //! / 16-byte cells) so the same code covers `f32`, `f64`,
-//! [`Complex64`], and [`Complex128`] without per-type templating —
+//! `Complex64`, and `Complex128` without per-type templating —
 //! shift is a pure index permutation (no arithmetic on the element
 //! values), so the element type is irrelevant beyond its byte width.
 //!

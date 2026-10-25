@@ -9,7 +9,7 @@ use crate::error::{Result, check};
 use crate::module::Kernel;
 use crate::stream::Stream;
 
-/// Grid / block size triple, matching [`baracuda_driver::Dim3`].
+/// Grid / block size triple, matching `baracuda_driver::Dim3`.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct Dim3 {
     /// Extent in the X dimension. Must be `>= 1`.
@@ -123,7 +123,7 @@ impl<'k> LaunchBuilder<'k> {
     ///
     /// # Safety
     ///
-    /// Same rules as [`baracuda_driver::LaunchBuilder::launch`]: argument
+    /// Same rules as `baracuda_driver::LaunchBuilder::launch`: argument
     /// types and order must match the kernel's C signature, referenced
     /// device memory must stay valid for the duration of device execution,
     /// and grid/block dims must be within device limits.

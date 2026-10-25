@@ -953,7 +953,7 @@ fn check_cell_finite<T: LiveScalar>(label: &str, host: &[T]) {
 /// silent. This copies the op's output back once (call it OUTSIDE the timed
 /// loop, after `warmup` has populated the output) and asserts the output is
 /// live via its two runtime arms: element count matches `expected_numel`
-/// ([`check_cell_shape`]) and every element is finite ([`check_cell_finite`]).
+/// (`check_cell_shape`) and every element is finite (`check_cell_finite`).
 /// It distinguishes "this op ran" from "this op is correct"; only correctness
 /// belongs to the oracle (`kiss-ref-diff` + on-device parity tests).
 ///

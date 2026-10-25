@@ -102,7 +102,7 @@ pub struct SdpaArgs<'a, T: Element> {
 /// **When to use**: any SDPA pass where `d_k != d_v`, where you need an
 /// explicit additive mask, or where you want the saved softmax matrix
 /// available for downstream consumption. Pair with
-/// [`SdpaBackwardPlan`] for autograd. Prefer [`super::FlashSdpaPlan`]
+/// `SdpaBackwardPlan` for autograd. Prefer [`super::FlashSdpaPlan`]
 /// when memory is tight (the naive plan materializes the full
 /// `[B, H, Q, K]` attention matrix).
 ///

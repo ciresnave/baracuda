@@ -1,8 +1,8 @@
 //! Safe Rust wrappers for NVIDIA cuVS — GPU vector search / approximate
 //! nearest neighbours (ANN), part of NVIDIA RAPIDS.
 //!
-//! Tier-1 coverage: the [`IvfFlat`] inverted-file index and exact
-//! [`BruteForce`] k-NN, over `f32` (and `f16` behind the `half-crate`
+//! Tier-1 coverage: the `IvfFlat` inverted-file index and exact
+//! `BruteForce` k-NN, over `f32` (and `f16` behind the `half-crate`
 //! feature) vectors, with L2 / cosine / inner-product metrics.
 //!
 //! The whole API is behind the off-by-default **`cuvs`** cargo feature
@@ -40,7 +40,7 @@
 //! ```
 //!
 //! **Brute-force exact k-NN** — no training, no recall loss. Note that
-//! [`BruteForce`] borrows the dataset for its whole lifetime (the cuVS
+//! `BruteForce` borrows the dataset for its whole lifetime (the cuVS
 //! index keeps a non-owning view + precomputed norms).
 //!
 //! ```no_run
@@ -60,7 +60,7 @@
 //! # Ok(()) }
 //! ```
 //!
-//! **Distance-metric selection** — each [`Metric`] ranks neighbours
+//! **Distance-metric selection** — each `Metric` ranks neighbours
 //! differently. L2 (Euclidean) is the default; cosine and inner-product
 //! are useful for embedding lookups and recommender systems.
 //!
@@ -87,19 +87,19 @@
 //!
 //! # Stream ordering
 //!
-//! cuVS enqueues work on the stream bound to its [`Resources`] (the default
-//! stream unless [`Resources::set_stream`] was called). Both `build` and
-//! `search` here call [`Resources::sync`] before returning, so the results
+//! cuVS enqueues work on the stream bound to its `Resources` (the default
+//! stream unless `Resources::set_stream` was called). Both `build` and
+//! `search` here call `Resources::sync` before returning, so the results
 //! are ready to read on the host — the API is synchronous for simplicity.
 //!
 //! # Lifetime quirk: brute-force keeps a dataset view
 //!
 //! cuVS's brute-force index stores a *non-owning view* of the dataset (plus
 //! precomputed norms), so the dataset buffer must outlive the index. This is
-//! encoded in Rust: [`BruteForce::build`] borrows the dataset and the
-//! returned [`BruteForce`] carries that borrow's lifetime. IVF-Flat (with the
+//! encoded in Rust: `BruteForce::build` borrows the dataset and the
+//! returned `BruteForce` carries that borrow's lifetime. IVF-Flat (with the
 //! default `add_data_on_build = true`) copies the vectors into the index, so
-//! [`IvfFlat`] owns its data and has no such borrow.
+//! `IvfFlat` owns its data and has no such borrow.
 
 #![warn(missing_debug_implementations)]
 

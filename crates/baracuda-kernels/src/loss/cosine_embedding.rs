@@ -51,9 +51,9 @@ pub struct CosineEmbeddingLossArgs<'a, T: Element> {
     pub x1: TensorRef<'a, T, 2>,
     /// Second input tensor, shape [N, D].
     pub x2: TensorRef<'a, T, 2>,
-    /// Target tensor, shape [N] (encoded as [N, 1]).
+    /// Target tensor, shape \[N\] (encoded as [N, 1]).
     pub t: TensorRef<'a, T, 2>,
-    /// Output: [N] (None) or [1] (Mean/Sum), encoded as [N, 1] / [1, 1].
+    /// Output: \[N\] (None) or \[1\] (Mean/Sum), encoded as [N, 1] / [1, 1].
     pub out: TensorMut<'a, T, 2>,
 }
 

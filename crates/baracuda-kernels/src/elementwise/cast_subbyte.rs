@@ -10,7 +10,7 @@
 //!   conversion normalizes whatever non-zero byte the caller stored).
 //!
 //! - **`Fp8E4M3FN` / `Fp8E5M2` ↔ {`f32`, `f16`, `bf16`}** — Fp8 lives on
-//!   the [`FpElement`] sibling trait, not [`Element`]. Conversions
+//!   the [`FpElement`] sibling trait, not `Element`. Conversions
 //!   route through `f32` via NVIDIA's `__nv_cvt_*_fp8` intrinsics with
 //!   `SATFINITE` semantics (the wide → narrow direction clamps `|x|` to
 //!   the format's max-finite — 448 for E4M3, 57344 for E5M2 — instead

@@ -5,13 +5,13 @@
 //! Linux / WSL2 only. To keep the workspace building everywhere, the entire
 //! cuVS surface lives behind the off-by-default `cuvs` cargo feature and is
 //! resolved lazily at runtime via `libloading` — enabling the feature never
-//! adds a link-time dependency, and [`cuvs()`] returns
+//! adds a link-time dependency, and `cuvs()` returns
 //! `LoaderError::LibraryNotFound` on hosts without a RAPIDS install.
 //!
 //! # Data interchange
 //!
 //! cuVS's C API takes datasets / queries / outputs as DLPack
-//! [`DLManagedTensor`] pointers rather than bare device pointers. This crate
+//! `DLManagedTensor` pointers rather than bare device pointers. This crate
 //! defines the (stable-ABI) DLPack structs so callers can hand cuVS a tensor
 //! view over a baracuda `DeviceBuffer`. cuVS only *reads* the tensor metadata
 //! during the call and does not take ownership, so input tensors may use a
@@ -19,8 +19,8 @@
 //!
 //! # Status codes
 //!
-//! Note the unusual convention: [`cuvsError_t::SUCCESS`] is `1`, not `0`
-//! (`CUVS_ERROR` is `0`). [`cuvsError_t::is_success`] encodes this.
+//! Note the unusual convention: `cuvsError_t::SUCCESS` is `1`, not `0`
+//! (`CUVS_ERROR` is `0`). `cuvsError_t::is_success` encodes this.
 
 #![allow(
     non_camel_case_types,

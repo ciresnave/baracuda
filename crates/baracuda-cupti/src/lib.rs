@@ -240,7 +240,7 @@ pub mod event {
         /// Wraps `cuptiEventGroupCreate`; create an event-group bound to `ctx`.
         ///
         /// # Safety
-        /// `ctx` must be a valid `CUcontext` (use [`baracuda_driver::Context::as_raw`]).
+        /// `ctx` must be a valid `CUcontext` (use `baracuda_driver::Context::as_raw`).
         pub unsafe fn new(ctx: *mut core::ffi::c_void) -> Result<Self> {
             unsafe {
                 let c = cupti()?;

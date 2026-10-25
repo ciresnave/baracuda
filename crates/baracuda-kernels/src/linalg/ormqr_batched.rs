@@ -30,7 +30,7 @@
 //! family.
 //!
 //! See the kernel header
-//! [`crates/baracuda-kernels-sys/kernels/include/baracuda_batched_ormqr.cuh`]
+//! `crates/baracuda-kernels-sys/kernels/include/baracuda_batched_ormqr.cuh`
 //! for the algorithm details (block-stride sum reduction → rank-1
 //! update, GEMV-rates not GEMM-rates; WY blocking is a future
 //! milestone).

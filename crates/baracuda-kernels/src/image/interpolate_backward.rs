@@ -21,7 +21,7 @@ use super::map_status;
 
 /// Descriptor for an `interpolate_backward` op.
 ///
-/// `#[non_exhaustive]` (Phase 32) — see [`InterpolateDescriptor`] for
+/// `#[non_exhaustive]` (Phase 32) — see `InterpolateDescriptor` for
 /// the builder rationale. Use [`Self::new`] + the `with_*` setters
 /// from downstream code.
 #[derive(Copy, Clone, Debug)]

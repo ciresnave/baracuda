@@ -248,7 +248,7 @@ impl OzakiSlices {
         }
     }
 
-    /// Numeric slice count (3..=18), or `None` for [`Auto`].
+    /// Numeric slice count (3..=18), or `None` for `Auto`.
     ///
     /// Useful for logging / telemetry. `None` doesn't mean "no slices" —
     /// it means "decided at run time by the library."

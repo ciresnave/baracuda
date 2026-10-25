@@ -784,7 +784,7 @@ pub fn get_size(plan: cufftHandle) -> Result<usize> {
 /// [`Plan::create`] gets you a fresh handle, then one of the
 /// `make_plan_*` methods configures the rank and reports the workspace
 /// size — useful when you want to allocate the work area yourself
-/// (call [`set_auto_allocation(false)`] before `make_plan_*`).
+/// (call `set_auto_allocation(false)` before `make_plan_*`).
 ///
 /// Unlike [`Plan1d`] / [`Plan2d`] / [`Plan3d`], this type can hold any
 /// rank, including the batched-many / 64-bit-many forms.
@@ -885,12 +885,12 @@ impl Plan {
         }
     }
 
-    /// 64-bit variant of [`make_plan_many`] — use this when any
+    /// 64-bit variant of `make_plan_many` — use this when any
     /// dimension or stride exceeds `i32::MAX`.
     ///
     /// # Safety
     ///
-    /// Same as [`make_plan_many`].
+    /// Same as `make_plan_many`.
     pub unsafe fn make_plan_many64(
         &self,
         rank: i32,

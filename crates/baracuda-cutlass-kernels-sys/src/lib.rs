@@ -2902,7 +2902,7 @@ macro_rules! int8_bias_ffi {
                                 "+ beta * C + bias_broadcast(N)))`. See the section header for ",
                                 "the layout / accumulator / clamp contract.\n\n",
                                 "# Safety\nSame contract as ",
-                                "[`baracuda_cutlass_gemm_s8_rcr_sm80_run`]."
+                                "`baracuda_cutlass_gemm_s8_rcr_sm80_run`."
                             )]
             pub fn $run(
                 m: i32,

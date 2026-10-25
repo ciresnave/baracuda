@@ -5,7 +5,7 @@
 //!
 //! - [`InterpolatePlan`] / [`InterpolateBackwardPlan`] — bilinear-2D
 //!   spatial up/downsample (trailblazer). Other modes (nearest,
-//!   bicubic, trilinear, linear, area) reserved on the [`ImageKind`]
+//!   bicubic, trilinear, linear, area) reserved on the `ImageKind`
 //!   enum and return `Unsupported`.
 //! - [`GridSamplePlan`] / [`GridSampleBackwardPlan`] — sample input
 //!   at arbitrary normalized (x, y) coords. PyTorch default config

@@ -15,7 +15,7 @@
 //! `CUstream` and `cudaStream_t` are the same C type. With the
 //! `driver-interop` feature, `Stream::as_raw_driver()` and
 //! `Event::as_raw_driver()` return views usable by `baracuda-driver`
-//! APIs. See [`interop`].
+//! APIs. See `interop`.
 //!
 //! # Examples
 //!

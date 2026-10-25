@@ -1,6 +1,6 @@
 //! Runtime-API 2-D memory copies + pitched device allocations.
 //!
-//! Mirrors [`baracuda_driver::memcpy2d`]. `PitchedBuffer<T>` owns a
+//! Mirrors `baracuda_driver::memcpy2d`. `PitchedBuffer<T>` owns a
 //! 2-D device allocation with driver-chosen row stride; free functions
 //! handle host ↔ pitched-device copies.
 

@@ -50,7 +50,7 @@
 //! - `TIn ∈ {f32, f64}` activation-scale + weight-scale + output;
 //!   `TWQ = S8` weight; activation = `S8`.
 //!   (f16 / bf16 / u8-weight follow the same matrix as
-//!   [`QuantizedLinearPlan`]; deferred until the underlying bespoke
+//!   `QuantizedLinearPlan`; deferred until the underlying bespoke
 //!   `quantized_linear_w8a8` kernel grows the dtypes.)
 //! - **Inference-only** — no backward. The W8A8 path is forward-only
 //!   by convention; if a downstream needs gradients, they should use

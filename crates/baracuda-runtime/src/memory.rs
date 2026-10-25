@@ -533,7 +533,7 @@ impl<'a, T: DeviceRepr> PinnedRegistration<'a, T> {
 
     /// Safe wrapper for `cudaHostRegister`. Pin `slice` for the lifetime
     /// of the returned guard, passing `flags` verbatim (see
-    /// [`cudaHostRegisterFlags`](baracuda_cuda_sys::runtime::types::cudaHostRegisterFlags)).
+    /// `cudaHostRegisterFlags`).
     pub fn register_with_flags(slice: &'a mut [T], flags: u32) -> Result<Self> {
         let r = runtime()?;
         let cu = r.cuda_host_register()?;

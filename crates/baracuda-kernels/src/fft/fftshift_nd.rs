@@ -73,7 +73,7 @@ pub struct FftShiftNdDescriptor {
     pub ndim: u8,
     /// Indices of the axes to shift, in `[0, ndim)`. Only the first
     /// `num_shift_axes` slots are read. Duplicates are rejected by
-    /// [`Self::select`]. The remaining axes are pass-through.
+    /// `Self::select`. The remaining axes are pass-through.
     pub shift_axes: [u8; FFTSHIFT_ND_MAX_SHIFT_AXES],
     /// Number of shifted axes. `0..=ndim.min(4)`. `0` is the identity
     /// (degenerate but legal — emits a pure memcpy).

@@ -1,7 +1,7 @@
 //! `baracuda-bench run --report` — board #162 slice 2b.
 //!
 //! Runs a fixed kernel sweep under CUDA-event timing, computes the seven-number
-//! [`TimingStats`] per cell, captures the machine state the run happened under,
+//! `TimingStats` per cell, captures the machine state the run happened under,
 //! and writes one self-describing [`BenchReport`] JSON file.
 //!
 //! ```text

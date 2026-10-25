@@ -253,7 +253,7 @@ impl Stream {
 
     /// Device-to-device async copy scheduled on this stream.
     ///
-    /// Sugar over [`DeviceBuffer::copy_to_device_async`] with the borrows
+    /// Sugar over `DeviceBuffer::copy_to_device_async` with the borrows
     /// flipped the way the call-site usually wants them: the destination
     /// buffer is taken by `&mut`, so the borrow checker will catch
     /// aliasing bugs at compile time. `src.len()` must equal `dst.len()`.

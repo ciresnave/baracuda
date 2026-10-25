@@ -98,7 +98,7 @@ pub struct BatchPagedDecodeArgs<'a, T: Element> {
     /// Query rows — shape `[batch, num_qo_heads, head_dim]`.
     pub q: TensorRef<'a, T, 3>,
     /// Paged K cache — shape `[max_num_pages, num_kv_heads, page_size,
-    /// head_dim]`. Modified by upstream [`PagedKvAppendPlan`] writes;
+    /// head_dim]`. Modified by upstream `PagedKvAppendPlan` writes;
     /// read-only here.
     pub k_data: TensorRef<'a, T, 4>,
     /// Paged V cache — same layout as `k_data`.

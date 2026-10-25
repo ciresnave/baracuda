@@ -193,6 +193,14 @@ jobs:
           -p baracuda-core@$WSVER \
           -p baracuda-kernels-types@$WSVER \
           -p baracuda-bench-stats
+      # Whole-workspace rustdoc (ROADMAP SA-18): the step above covers only the driver-free
+      # subset; this one runs the rest of the members so a broken intra-doc link or a
+      # public->private link cannot land anywhere. DOCS_RS=1 skips every nvcc build, so it
+      # needs no toolkit. --keep-going reports every failing crate, not just the first.
+      - name: cargo doc (whole workspace, DOCS_RS — enforces rustdoc deny)
+        env:
+          DOCS_RS: "1"
+        run: cargo doc --locked --no-deps --workspace --keep-going
       # ---- feature-gated surfaces the default --workspace build never compiles.
       # These features are deliberately CI-safe: `cuvs` is a lazy dynamic loader
       # (no RAPIDS needed to build/test; GPU-touching tests are #[ignore]d),

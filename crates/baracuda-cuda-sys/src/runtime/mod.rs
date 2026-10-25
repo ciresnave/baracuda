@@ -5,7 +5,7 @@
 
 //! Raw FFI + dynamic loader for the CUDA Runtime API (`libcudart`).
 //!
-//! Parallels the [`crate::driver`] module. Runtime handles
+//! Parallels the [`driver`](mod@crate::driver) module. Runtime handles
 //! (`cudaStream_t`, `cudaEvent_t`, ...) are typedef-compatible with
 //! the Driver API's `CUstream` / `CUevent` / ... so
 //! `baracuda-runtime` and `baracuda-driver` can freely convert between

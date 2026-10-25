@@ -10,21 +10,21 @@
 //! |-------------|-----------------------------------------------|
 //! | `driver`    | [`driver`] — CUDA Driver API                  |
 //! | `runtime`   | [`runtime`] — CUDA Runtime API                |
-//! | `nvrtc`     | [`nvrtc`] — runtime C++→PTX compiler          |
-//! | `nvjitlink` | [`nvjitlink`] — CUDA 12+ JIT linker           |
-//! | `cublas`    | [`cublas`] — BLAS                             |
-//! | `curand`    | [`curand`] — RNG                              |
-//! | `cufft`     | [`cufft`] — FFT                               |
-//! | `cusparse`  | [`cusparse`] — sparse linear algebra          |
-//! | `cusolver`  | [`cusolver`] — dense/sparse solvers           |
-//! | `cudnn`     | [`cudnn`] — deep-learning primitives          |
-//! | `nccl`      | [`nccl`] — multi-GPU collectives              |
-//! | `npp`       | [`npp`] — performance primitives              |
-//! | `nvjpeg`    | [`nvjpeg`] — GPU JPEG codec                   |
-//! | `nvcomp`    | [`nvcomp`] — GPU compression (scaffolding)    |
-//! | `cvcuda`    | [`cvcuda`] — CV-CUDA (scaffolding)            |
-//! | `nvml`      | [`nvml`] — driver-bundled GPU monitoring      |
-//! | `cufile`    | [`cufile`] — GPUDirect Storage (Linux only)   |
+//! | `nvrtc`     | `nvrtc` — runtime C++→PTX compiler          |
+//! | `nvjitlink` | `nvjitlink` — CUDA 12+ JIT linker           |
+//! | `cublas`    | `cublas` — BLAS                             |
+//! | `curand`    | `curand` — RNG                              |
+//! | `cufft`     | `cufft` — FFT                               |
+//! | `cusparse`  | `cusparse` — sparse linear algebra          |
+//! | `cusolver`  | `cusolver` — dense/sparse solvers           |
+//! | `cudnn`     | `cudnn` — deep-learning primitives          |
+//! | `nccl`      | `nccl` — multi-GPU collectives              |
+//! | `npp`       | `npp` — performance primitives              |
+//! | `nvjpeg`    | `nvjpeg` — GPU JPEG codec                   |
+//! | `nvcomp`    | `nvcomp` — GPU compression (scaffolding)    |
+//! | `cvcuda`    | `cvcuda` — CV-CUDA (scaffolding)            |
+//! | `nvml`      | `nvml` — driver-bundled GPU monitoring      |
+//! | `cufile`    | `cufile` — GPUDirect Storage (Linux only)   |
 //!
 //! Bundles: `math` = cuBLAS + cuRAND + cuFFT + cuSPARSE + cuSOLVER;
 //! `imaging` = NPP + nvJPEG + CV-CUDA; `ml` = driver + runtime + nvrtc +

@@ -53,7 +53,7 @@
 //!   varlen). LSE is **f32** regardless of element dtype (FA2 always
 //!   accumulates softmax in f32).
 //!
-//! The default heuristic ([`should_use_fa2`]) picks FA2 for
+//! The default heuristic (`should_use_fa2`) picks FA2 for
 //! long-context f16/bf16 attention. Phase 59a lifted the original
 //! Tier-1 head_dim=128 / no-GQA / no-extras restrictions:
 //!
@@ -321,7 +321,7 @@ impl FlashSdpaDescriptor {
 /// Q has `H` heads; K and V have `H_k` heads with `H % H_k == 0`
 /// (multi-query / grouped-query attention). Phase 42's bespoke path
 /// requires `H == H_k`; the strided-FFI sibling routes GQA via
-/// stride[1] = 0. Phase 59a's FA2 path supports GQA natively via FA2's
+/// stride\[1\] = 0. Phase 59a's FA2 path supports GQA natively via FA2's
 /// `h_h_k_ratio` mechanism — pass distinct H_k in `k`/`v` shapes.
 #[derive(Debug)]
 pub struct FlashSdpaArgs<'a, T: Element> {

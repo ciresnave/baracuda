@@ -62,7 +62,7 @@ use half::{bf16, f16};
 use crate::quantize::map_status;
 
 /// Sealed marker for activation / destination element types accepted by
-/// [`GgufMmvqBatchedPlan`]. Identical set to [`GgufMmvqActivation`] from
+/// [`GgufMmvqBatchedPlan`]. Identical set to `GgufMmvqActivation` from
 /// the single-MMVQ plan — `f32`, `f16`, `bf16`.
 pub trait GgufMmvqBatchedActivation: Element + sealed::Sealed {}
 

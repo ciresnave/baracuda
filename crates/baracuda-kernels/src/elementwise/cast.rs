@@ -2,7 +2,7 @@
 //!
 //! Distinct from the same-dtype [`crate::UnaryPlan`] family because the
 //! input and output element types differ. The plan is generic over
-//! both `TIn: Element` and `TOut: Element`, with [`select`] dispatching
+//! both `TIn: Element` and `TOut: Element`, with `select` dispatching
 //! on the runtime `(input_element, output_element)` pair.
 //!
 //! Today wired (at the Plan-layer dispatch): every cross-dtype pair in
