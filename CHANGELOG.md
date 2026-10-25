@@ -16,6 +16,8 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.36 - 2026-10-25
+
 ## 0.1.0-alpha.35 - 2026-10-25
 
 ### Added
