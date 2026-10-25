@@ -6,11 +6,19 @@ behind a feature nobody builds. A test that cannot run **even there** is named b
 is **UNVERIFIED** — nothing in this repo may claim it as covered.
 
 The device runner is one Windows laptop with a single RTX 4070 (sm_89). Source: `git grep`
-of the `#[ignore = "…"]` reasons on `main` at the time of writing. These crates have not been
-migrated to the `device-tests` feature yet (`baracuda-driver` is the pilot), so each still
-carries its `#[ignore]` until its migration PR.
+of the `#[ignore = "…"]` reasons on `main` at the time of writing. No `#[ignore]` attribute
+remains on `main` (0 line-anchored hits, 2026-10-25): the tests listed here are gated behind
+`device-tests` (some with extra cfg conditions) and are not built by the runner.
 
 ## A. Needs hardware or an OS the runner lacks — UNVERIFIED
+
+CireSnave 2026-10-25 (decision 283 / SA-21): the laptop has TWO GPUs, the NVIDIA RTX 4070 and an AMD one, so a test needing two NVIDIA GPUs waits for his desktop (a few days). What each row below needs, and whether one NVIDIA GPU can run it (checked 2026-10-25 on the laptop: `nvidia-smi -L` lists one NVIDIA GPU; no NCCL, NVSHMEM or cuFile library is installed on this Windows box):
+
+| Test | Two NVIDIA GPUs? | Other blocker | Runs on the laptop? |
+|---|---|---|---|
+| `distributed_adam_two_ranks_...`, `column_parallel_world_size_2_smoke`, `row_parallel_world_size_2_smoke`, `ring_attention_multi_rank_scaffold` | yes (world size 2) | NCCL (Linux multi-GPU) | no: needs the desktop and Linux NCCL |
+| the four `nvshmem` tests | no (a PE launcher can start one PE) | NVSHMEM is Linux, sm_70+ | no: the laptop is Windows |
+| `cufile_write_read_roundtrip` | no | cuFile + GDS filesystem, Linux only | no: the laptop is Windows |
 
 | Test | Needs | Where |
 |---|---|---|

@@ -128,8 +128,8 @@ shim` against a TensorRT install; **Partial** = wrapper exists but limited;
 5. **Docs** — module docs + both READMEs describe the dynamic-load + shim
    design (previously documented a `Logger` type and APIs that did not exist).
 6. **Smoke tests** (`tests/runtime_smoke.rs`): one always-on `Dims` test plus
-   two `#[ignore]`d inference tests (version probe + graceful garbage-blob
-   deserialize) for `--features shim` on a TensorRT box.
+   two inference tests gated behind `device-tests` (version probe + graceful
+   garbage-blob deserialize) for `--features shim` on a TensorRT box.
 
 ## Building + testing the shim (needs a TensorRT box)
 

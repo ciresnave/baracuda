@@ -26,6 +26,16 @@ Fuel brings: overlay-at-the-seam pattern; **model-B** (quant scale = a *sibling 
 
 `{ logical_dtype, quant_family (encoding), scale: {placement, granularity, dtype}, block_structure (for MX: block size + scale dtype) }` — a neutral superset of Baracuda's `QuantFamily`/`ScalePlacement` and Fuel's DType/SType/Encoding + model-B. DLPack codes are a *spelling guide*, never the normative owner. Bless the neutralized successor; Baracuda then drops its private mirror for the shared one.
 
+### Gaps raised by Fuel (2026-10-25), accepted into the proposal
+
+Fuel concurred and listed four things the neutral shape must cover before its mirror can go. Baracuda accepts all four; none is contradicted by Baracuda's model (`QuantFamily` / `ScalePlacement` / `QuantFacts` no longer exist in this repo: `baracuda-kernel-vocab` left at alpha.79, so there is no in-tree type to compare against):
+
+1. `scale.placement` keeps `Inline` (GGUF Q4_0 / Q8_0 carry an f16 scale in each block); scale-as-sibling operand is the default, not the only case.
+2. `scale` is a recursive descriptor (bnb NF4 double-quant: a per-block scale that is itself quantized, with an offset).
+3. An optional `zero` operand beside `scale`, with the same placement / granularity vocabulary (AWQ / GPTQ int4, `AffineInt`). The op vocabulary already carries `zero_point` (per-tensor, per-channel, per-token, per-group).
+4. `block_structure` records packing: nibble order and the packing axis (AWQ interleave, bnb nibble order), else two incompatible layouts share one descriptor. The Unpopped `S4` / `U4` element type already fixes low nibble = even index.
+
+
 ## Non-goals
 
 Not in the identity key (C-3). Not a verbatim Fuel-struct lift. Not the DLPack ABI structs (those stay cuVS-FFI-only).

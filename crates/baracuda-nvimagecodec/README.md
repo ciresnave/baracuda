@@ -65,7 +65,7 @@ nvImageCodec / cuCIM family). Install via pip
 sure `libnvimgcodec.so.0` (Linux) / `nvimgcodec_0.dll` (Windows) is on the
 loader search path. The crate resolves it lazily — there is no link-time
 dependency, so it builds without the library present (the GPU smoke tests
-are `#[ignore]`-gated for the same reason).
+are gated behind the `device-tests` feature for the same reason).
 
 Pairs with [`baracuda-nvimagecodec-sys`] for the raw FFI surface.
 
