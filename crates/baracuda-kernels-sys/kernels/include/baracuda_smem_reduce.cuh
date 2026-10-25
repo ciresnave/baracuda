@@ -92,7 +92,11 @@ __device__ __forceinline__ float block_reduce_sum_f32(
     }
     __syncthreads();
 
-    return warp_buf[0];
+    // Read into a register, then barrier: a following block_reduce_* on the
+    // same warp_buf rewrites it, and a slow warp must have read first (SA-28).
+    auto result = warp_buf[0];
+    __syncthreads();
+    return result;
 }
 
 __device__ __forceinline__ float block_reduce_max_f32(
@@ -115,7 +119,11 @@ __device__ __forceinline__ float block_reduce_max_f32(
     }
     __syncthreads();
 
-    return warp_buf[0];
+    // Read into a register, then barrier: a following block_reduce_* on the
+    // same warp_buf rewrites it, and a slow warp must have read first (SA-28).
+    auto result = warp_buf[0];
+    __syncthreads();
+    return result;
 }
 
 __device__ __forceinline__ float block_reduce_min_f32(
@@ -138,7 +146,11 @@ __device__ __forceinline__ float block_reduce_min_f32(
     }
     __syncthreads();
 
-    return warp_buf[0];
+    // Read into a register, then barrier: a following block_reduce_* on the
+    // same warp_buf rewrites it, and a slow warp must have read first (SA-28).
+    auto result = warp_buf[0];
+    __syncthreads();
+    return result;
 }
 
 // =============================================================================
@@ -193,7 +205,11 @@ __device__ __forceinline__ double block_reduce_sum_f64(
     }
     __syncthreads();
 
-    return warp_buf[0];
+    // Read into a register, then barrier: a following block_reduce_* on the
+    // same warp_buf rewrites it, and a slow warp must have read first (SA-28).
+    auto result = warp_buf[0];
+    __syncthreads();
+    return result;
 }
 
 __device__ __forceinline__ double block_reduce_max_f64(
@@ -216,7 +232,11 @@ __device__ __forceinline__ double block_reduce_max_f64(
     }
     __syncthreads();
 
-    return warp_buf[0];
+    // Read into a register, then barrier: a following block_reduce_* on the
+    // same warp_buf rewrites it, and a slow warp must have read first (SA-28).
+    auto result = warp_buf[0];
+    __syncthreads();
+    return result;
 }
 
 __device__ __forceinline__ double block_reduce_min_f64(
@@ -239,7 +259,11 @@ __device__ __forceinline__ double block_reduce_min_f64(
     }
     __syncthreads();
 
-    return warp_buf[0];
+    // Read into a register, then barrier: a following block_reduce_* on the
+    // same warp_buf rewrites it, and a slow warp must have read first (SA-28).
+    auto result = warp_buf[0];
+    __syncthreads();
+    return result;
 }
 
 // =============================================================================
