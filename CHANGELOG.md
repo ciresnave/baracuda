@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.21 - 2026-10-25
+
+### Fixed
+
+- `baracuda_smem_reduce.cuh`: `block_reduce_{sum,max,min}_{f32,f64}` now read `warp_buf[0]` into a register and `__syncthreads()` before returning (ROADMAP SA-28). Back-to-back reductions on one `warp_buf` (softmax, log-softmax: max then sum) could rewrite it before a slow warp read the first result. Costs one extra barrier per reduction. Race not demonstrated on device; verified by `nvcc -ptx` compile.
+
 ## 0.1.0-alpha.20 - 2026-10-25
 
 ### Changed
