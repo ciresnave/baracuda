@@ -218,7 +218,10 @@ unsafe extern "C" {
     pub fn trtLoggerCreate(cb: trtLogCallback, user: *mut c_void) -> trtILogger_t;
     /// TensorRT shim: destroy a logger made by [`trtLoggerCreate`].
     pub fn trtLoggerDestroy(logger: trtILogger_t);
+}
 
+#[cfg(feature = "shim")]
+unsafe extern "C" {
     /// TensorRT shim: Runtime Deserialize Cuda Engine.
     pub fn trtRuntimeDeserializeCudaEngine(
         runtime: trtIRuntime_t,

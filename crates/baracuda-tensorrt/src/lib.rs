@@ -148,6 +148,7 @@ unsafe extern "C" fn log_trampoline(severity: Severity, msg: *const c_char, _use
     if msg.is_null() {
         return;
     }
+    // SAFETY: TensorRT passes a NUL-terminated message that stays valid for the call.
     let text = unsafe { CStr::from_ptr(msg) }.to_string_lossy();
     // Snapshot under the lock and call outside it, so a callback that itself
     // creates or drops a `Logger` cannot deadlock.
@@ -169,6 +170,7 @@ fn global_ilogger() -> Result<sys::trtILogger_t> {
     if let Some(&addr) = GLOBAL_ILOGGER.get() {
         return Ok(addr as sys::trtILogger_t);
     }
+    // SAFETY: `log_trampoline` matches the shim's callback signature and ignores `user`.
     let raw = unsafe { sys::trtLoggerCreate(log_trampoline, core::ptr::null_mut()) };
     if raw.is_null() {
         return Err(Error::NullHandle {
@@ -180,6 +182,7 @@ fn global_ilogger() -> Result<sys::trtILogger_t> {
     match GLOBAL_ILOGGER.set(raw as usize) {
         Ok(()) => Ok(raw),
         Err(_) => {
+            // SAFETY: `raw` came from `trtLoggerCreate` just above and was never handed to TensorRT.
             unsafe { sys::trtLoggerDestroy(raw) };
             Ok(*GLOBAL_ILOGGER.get().expect("set by the racing thread") as sys::trtILogger_t)
         }
@@ -270,6 +273,7 @@ impl Runtime {
     /// Create a runtime that reports through `logger`. The runtime shares
     /// ownership of the logger, so it stays alive as long as the runtime does.
     pub fn with_logger(logger: Arc<Logger>) -> Result<Self> {
+        // SAFETY: `logger.as_raw()` is the process-wide `ILogger*`, a valid `nvinfer1::ILogger*`.
         let mut rt = unsafe { Self::new(logger.as_raw())? };
         rt._logger = Some(logger);
         Ok(rt)
