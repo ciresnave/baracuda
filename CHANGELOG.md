@@ -16,6 +16,18 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.27 - 2026-10-25
+
+Docs only. No code, no device run.
+
+### Changed
+
+- GPU tests are described as gated behind the `device-tests` feature, not `#[ignore]` (ROADMAP SA-38b): `README.md`, `baracuda-nvimagecodec` README, `baracuda-tensorrt/AUDIT.md`, `docs/UNVERIFIED-HARDWARE.md`. Checked: no `#[ignore]` attribute remains in the tree (0 line-anchored hits).
+- `docs/abstention-list-and-provenance-vocab-2026-07-20.md` is OFFICIAL (CireSnave blessed it as drafted, decision 283, SA-3).
+- `docs/fdx-successor-baracuda-position-2026-07-20.md` records the four gaps Fuel raised (inline scale, nested scale, zero-point operand, packing order) (SA-4).
+- `docs/UNVERIFIED-HARDWARE.md` section A lists, per test, whether it needs two NVIDIA GPUs and why none runs on the one-GPU Windows laptop (SA-21).
+- ROADMAP: SA-3, SA-4, SA-9, SA-20, SA-21, SA-24 updated with the 2026-10-25 rulings; new row SA-46 (spell `Qualified`).
+
 ## 0.1.0-alpha.25 - 2026-10-25
 
 ### Added
