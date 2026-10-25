@@ -363,6 +363,52 @@ void trtShuffleSetSecondTranspose(void* layer, const std::int32_t* order) noexce
     static_cast<IShuffleLayer*>(asLayer(layer))->setSecondTranspose(p);
 }
 
+// ---- optimization profiles ----------------------------------------------
+
+// The profile is owned by the builder that created it: never delete it.
+void* trtBuilderCreateOptimizationProfile(void* builder) noexcept {
+    return asBuilder(builder)->createOptimizationProfile();
+}
+
+bool trtProfileSetDimensions(void* profile, const char* name, std::int32_t selector,
+                             const Dims* dims) noexcept {
+    return static_cast<IOptimizationProfile*>(profile)->setDimensions(
+        name, static_cast<OptProfileSelector>(selector), *dims);
+}
+
+Dims trtProfileGetDimensions(void* profile, const char* name, std::int32_t selector) noexcept {
+    return static_cast<IOptimizationProfile*>(profile)->getDimensions(
+        name, static_cast<OptProfileSelector>(selector));
+}
+
+bool trtProfileIsValid(void* profile) noexcept {
+    return static_cast<IOptimizationProfile*>(profile)->isValid();
+}
+
+std::int32_t trtConfigAddOptimizationProfile(void* config, void* profile) noexcept {
+    return asConfig(config)->addOptimizationProfile(static_cast<IOptimizationProfile*>(profile));
+}
+
+std::int32_t trtConfigGetNbOptimizationProfiles(void* config) noexcept {
+    return asConfig(config)->getNbOptimizationProfiles();
+}
+
+Dims trtCudaEngineGetProfileShape(void* engine, const char* name, std::int32_t profile,
+                                  std::int32_t selector) noexcept {
+    return static_cast<ICudaEngine*>(engine)->getProfileShape(
+        name, profile, static_cast<OptProfileSelector>(selector));
+}
+
+bool trtExecutionContextSetOptimizationProfileAsync(void* context, std::int32_t profile,
+                                                    void* stream) noexcept {
+    return static_cast<IExecutionContext*>(context)->setOptimizationProfileAsync(
+        profile, reinterpret_cast<cudaStream_t>(stream));
+}
+
+std::int32_t trtExecutionContextGetOptimizationProfile(void* context) noexcept {
+    return static_cast<IExecutionContext*>(context)->getOptimizationProfile();
+}
+
 void trtConcatenationSetAxis(void* layer, std::int32_t axis) noexcept {
     static_cast<IConcatenationLayer*>(asLayer(layer))->setAxis(axis);
 }

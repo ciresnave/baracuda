@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-cudnn-sys"
-version = "0.1.0-alpha.33"
+version = "0.1.0-alpha.34"
 description = "Raw FFI bindings and dynamic loader for NVIDIA cuDNN (classic-API subset)."
 edition.workspace = true
 license.workspace = true

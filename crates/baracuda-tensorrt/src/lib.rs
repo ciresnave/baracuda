@@ -92,6 +92,19 @@ pub fn version() -> Result<i32> {
     Ok(unsafe { t.get_infer_lib_version()?() })
 }
 
+/// Which of an optimization profile's three shapes to read or set
+/// (`nvinfer1::OptProfileSelector`).
+#[repr(i32)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub enum OptProfileSelector {
+    /// The smallest shape the profile allows.
+    Min = 0,
+    /// The shape the engine is tuned for.
+    Opt = 1,
+    /// The largest shape the profile allows.
+    Max = 2,
+}
+
 /// A dimension list up to 8 axes.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Dims {
@@ -487,6 +500,22 @@ impl Engine<'_> {
         Ok(unsafe { sys::trtCudaEngineGetNbOptimizationProfiles(self.raw) })
     }
 
+    /// The min / opt / max shape that optimization profile `profile` allows for
+    /// the input `name`. An unknown tensor or profile index comes back with
+    /// rank 0 (and TensorRT logs the reason).
+    pub fn profile_shape(
+        &self,
+        name: &str,
+        profile: i32,
+        selector: OptProfileSelector,
+    ) -> Result<Dims> {
+        let name = CString::new(name)?;
+        let raw = unsafe {
+            sys::trtCudaEngineGetProfileShape(self.raw, name.as_ptr(), profile, selector as i32)
+        };
+        Ok(Dims::from_raw(raw))
+    }
+
     /// Serialize this engine back into a byte blob you can round-trip to
     /// disk. The returned [`HostMemory`] owns TensorRT-allocated storage;
     /// use [`HostMemory::as_slice`] to copy.
@@ -606,6 +635,33 @@ impl ExecutionContext<'_> {
         let c = CString::new(name)?;
         let raw = unsafe { sys::trtExecutionContextGetTensorShape(self.raw, c.as_ptr()) };
         Ok(Dims::from_raw(raw))
+    }
+
+    /// Select optimization profile `index` for this context, ordered on `stream`
+    /// (`setOptimizationProfileAsync`). Required before running an engine that
+    /// has more than one profile; the first context uses profile 0 by default.
+    /// Fails with [`Error::Call`] if TensorRT rejects the index.
+    pub fn set_optimization_profile_async(&self, index: i32, stream: &Stream) -> Result<()> {
+        let ok = unsafe {
+            sys::trtExecutionContextSetOptimizationProfileAsync(
+                self.raw,
+                index,
+                stream.as_raw() as cudaStream_t,
+            )
+        };
+        if ok {
+            Ok(())
+        } else {
+            Err(Error::Call {
+                op: "setOptimizationProfileAsync",
+            })
+        }
+    }
+
+    /// The index of the optimization profile this context currently uses
+    /// (`-1` if none has been selected).
+    pub fn optimization_profile(&self) -> i32 {
+        unsafe { sys::trtExecutionContextGetOptimizationProfile(self.raw) }
     }
 
     /// Read the current bound device address for a tensor (null if unset).

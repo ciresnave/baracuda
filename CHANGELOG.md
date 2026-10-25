@@ -20,6 +20,14 @@ at alpha.82.
 
 ### Added
 
+- `baracuda-tensorrt-builder`: optimization profiles (ROADMAP SA-33 row 3). `Builder::create_optimization_profile`, `OptimizationProfile::{set_dimensions, dimensions, is_valid}`, `BuilderConfig::{add_optimization_profile, num_optimization_profiles}`. `baracuda-tensorrt`: `Engine::profile_shape`, `ExecutionContext::{set_optimization_profile_async, optimization_profile}` and `OptProfileSelector`. Device-verified on sm_89 (RTX 4070), TensorRT 10.16.1.11: `cargo gpu-test -p baracuda-tensorrt-builder --features shim,device-tests`, 12 passed, 0 failed, 0 declared skips (4 new in `profiles_smoke.rs`): one dynamic-batch engine runs at batches 2, 5, 8 and 1 against a CPU reference and reports its min / opt / max shapes; a shape outside the profile is rejected with the in-range maximum accepted as the control; a two-profile engine refuses batch 6 on profile 0, runs it after `set_optimization_profile_async(1)`, and rejects profile 2; an inconsistent profile (min > max) is refused by `add_optimization_profile` while a valid one returns index 0. With `set_optimization_profile_async` ignoring its index, `contexts_switch_between_two_profiles` fails.
+
+## 0.1.0-alpha.28 - 2026-10-25
+
+
+
+### Added
+
 - New crate `baracuda-tensorrt-builder` (ROADMAP SA-33, builder row): `Builder`, `BuilderConfig` (memory-pool limits, builder flags, optimization level), `Network` with layers for elementwise, activation, unary, matrix multiply, constant (`f32` / `i32`, weights kept alive until build), shuffle (reshape and transposes), reduce, softmax, concatenation, cast and identity, and `Builder::build_serialized`, whose plan `Runtime::deserialize_engine` loads. The shim gained the matching `trtBuilder*`, `trtConfig*`, `trtNetwork*`, `trtLayer*` and `trtTensor*` symbols; the loader resolves `createInferBuilder_INTERNAL`. The API needs the `shim` feature. Device-verified on sm_89 (RTX 4070), TensorRT 10.16.1.11: `cargo gpu-test -p baracuda-tensorrt-builder --features shim,device-tests`, 8 passed, 0 failed, 0 declared skips; each network's output is compared with a CPU reference (elementwise sum, matmul + ReLU, constant * x then sqrt, softmax, transpose + reduce, concatenation), and a network with no outputs fails to build while an identical one with an output builds.
 - Not yet in the builder (later SA-33 rows): optimization profiles, the ONNX parser, INT8 calibration, the plugin registry, convolution / pooling and the remaining layer types.
 
