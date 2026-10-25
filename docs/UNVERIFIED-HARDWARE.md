@@ -6,9 +6,9 @@ behind a feature nobody builds. A test that cannot run **even there** is named b
 is **UNVERIFIED** — nothing in this repo may claim it as covered.
 
 The device runner is one Windows laptop with a single RTX 4070 (sm_89). Source: `git grep`
-of the `#[ignore = "…"]` reasons on `main` at the time of writing. These crates have not been
-migrated to the `device-tests` feature yet (`baracuda-driver` is the pilot), so each still
-carries its `#[ignore]` until its migration PR.
+of the `#[ignore = "…"]` reasons on `main` at the time of writing. No `#[ignore]` attribute
+remains on `main` (0 line-anchored hits, 2026-10-25): the tests listed here are gated behind
+`device-tests` (some with extra cfg conditions) and are not built by the runner.
 
 ## A. Needs hardware or an OS the runner lacks — UNVERIFIED
 

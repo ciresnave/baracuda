@@ -576,10 +576,11 @@ and put its `bin` directory ahead of Git's on the user/system `PATH`.
 
 ## Testing
 
-baracuda's GPU integration tests are gated behind `#[ignore]` so a
-host-only `cargo test` doesn't try to launch a kernel on a machine
-without an NVIDIA driver. To run them you need a working GPU plus the
-`--ignored` flag:
+baracuda's GPU integration tests are gated behind the `device-tests`
+cargo feature (no `#[ignore]` attribute remains) so a host-only
+`cargo test` doesn't try to launch a kernel on a machine without an
+NVIDIA driver. To run them you need a working GPU plus
+`--features device-tests` (the `cargo gpu-test` alias below passes it):
 
 ```bash
 # Host-only tests (compile + reference logic; no GPU access):
