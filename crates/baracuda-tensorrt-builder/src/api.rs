@@ -492,12 +492,14 @@ impl Network<'_> {
 
     /// Network input `index` (for example, after an ONNX parse has created them).
     pub fn input<'a>(&'a self, index: i32) -> Result<Tensor<'a>> {
+        // SAFETY: `self.raw` and every tensor / layer / profile handle passed are live, non-null handles of the same network or builder; the borrow checker ties their lifetimes to `self`.
         let raw = unsafe { ffi::trtNetworkGetInput(self.raw, index) };
         self.tensor(raw, "getInput")
     }
 
     /// Network output `index`.
     pub fn output<'a>(&'a self, index: i32) -> Result<Tensor<'a>> {
+        // SAFETY: `self.raw` and every tensor / layer / profile handle passed are live, non-null handles of the same network or builder; the borrow checker ties their lifetimes to `self`.
         let raw = unsafe { ffi::trtNetworkGetOutput(self.raw, index) };
         self.tensor(raw, "getOutput")
     }

@@ -63,6 +63,7 @@ fn text(p: *const c_char) -> String {
     if p.is_null() {
         String::new()
     } else {
+        // SAFETY: TensorRT returns a NUL-terminated string that stays valid while the tensor lives (a null pointer is handled above).
         unsafe { CStr::from_ptr(p) }.to_string_lossy().into_owned()
     }
 }
@@ -84,6 +85,8 @@ impl<'n> OnnxParser<'n> {
     /// Create a parser that fills `network`, reporting through `logger`.
     pub fn new(network: &'n Network<'_>, logger: Arc<Logger>) -> Result<Self> {
         let create = sys::onnx_parser()?.create_parser();
+        // SAFETY: `create` was resolved from the ONNX parser library by the loader; `network` and the
+        // process-wide `ILogger*` are live for the call, and the returned parser borrows the network ('n).
         let raw = unsafe {
             create(
                 network.as_raw(),
@@ -125,6 +128,7 @@ impl<'n> OnnxParser<'n> {
                 }]));
             }
         };
+        // SAFETY: `self.raw` is a live parser; `model` is a slice valid for the call and `path`, if any, is a NUL-terminated `CString` that outlives it.
         let ok = unsafe {
             ffi::trtOnnxParserParse(
                 self.raw,
@@ -137,6 +141,7 @@ impl<'n> OnnxParser<'n> {
             return Ok(());
         }
         let errors = self.errors();
+        // SAFETY: `self.raw` is a live parser owned by this value; any string argument is a NUL-terminated `CString` that outlives the call, and strings TensorRT returns are copied before the next parse.
         unsafe { ffi::trtOnnxParserClearErrors(self.raw) };
         Err(OnnxParseError(errors))
     }
@@ -144,11 +149,13 @@ impl<'n> OnnxParser<'n> {
     /// Whether the parser can import the ONNX operator `op` (such as `"Relu"`).
     pub fn supports_operator(&self, op: &str) -> Result<bool> {
         let op = CString::new(op)?;
+        // SAFETY: `self.raw` is a live parser owned by this value; any string argument is a NUL-terminated `CString` that outlives the call, and strings TensorRT returns are copied before the next parse.
         Ok(unsafe { ffi::trtOnnxParserSupportsOperator(self.raw, op.as_ptr()) })
     }
 
     /// The errors recorded by the last parse.
     pub fn errors(&self) -> Vec<ParserError> {
+        // SAFETY: `self.raw` is a live parser owned by this value; any string argument is a NUL-terminated `CString` that outlives the call, and strings TensorRT returns are copied before the next parse.
         let count = unsafe { ffi::trtOnnxParserGetNbErrors(self.raw) };
         (0..count)
             .map(|i| unsafe {
@@ -171,6 +178,7 @@ impl<'n> OnnxParser<'n> {
 
 impl Drop for OnnxParser<'_> {
     fn drop(&mut self) {
+        // SAFETY: `self.raw` came from the matching create call, is destroyed exactly once here, and nothing can still borrow it (children borrow `&self`).
         unsafe { ffi::trtOnnxParserDestroy(self.raw) };
     }
 }

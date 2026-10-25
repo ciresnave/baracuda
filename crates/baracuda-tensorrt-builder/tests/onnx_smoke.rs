@@ -131,6 +131,7 @@ fn an_onnx_model_parses_builds_and_runs() {
     let input = [-3.0f32, -1.0, 0.0, 0.5, 2.0, 7.0];
     let x = DeviceBuffer::from_slice(&ctx, &input).expect("upload");
     let y = DeviceBuffer::<f32>::zeros(&ctx, 6).expect("output");
+    // SAFETY: `x` and `y` are live device allocations of six floats that outlive the enqueue and the stream synchronize that follows.
     unsafe {
         exec.set_tensor_address("x", x.as_raw().0 as usize as *mut _)
             .expect("bind x");
