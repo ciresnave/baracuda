@@ -295,19 +295,23 @@ mod tests {
         // Fuel's note: a seam cap bit MUST sit in the KISS FEAT range (bit >= 32),
         // NOT the EXT-experimental low range. And it must not collide with the
         // JIT-on-request bit.
-        assert!(
-            SEAM_CAP_KISC_FRAMING >= (1 << 32),
-            "KISC framing cap must be in the FEAT range (bit >= 32)"
-        );
+        const {
+            assert!(
+                SEAM_CAP_KISC_FRAMING >= (1 << 32),
+                "KISC framing cap must be in the FEAT range (bit >= 32)"
+            );
+        }
         assert_eq!(SEAM_CAP_KISC_FRAMING & SEAM_CAP_JIT_ON_REQUEST, 0);
     }
 
     #[test]
     fn recipe_import_cap_is_in_the_feat_range_and_distinct() {
-        assert!(
-            SEAM_CAP_RECIPE_IMPORT >= (1 << 32),
-            "recipe-import cap must be in the FEAT range (bit >= 32)"
-        );
+        const {
+            assert!(
+                SEAM_CAP_RECIPE_IMPORT >= (1 << 32),
+                "recipe-import cap must be in the FEAT range (bit >= 32)"
+            );
+        }
         assert_eq!(SEAM_CAP_RECIPE_IMPORT & SEAM_CAP_JIT_ON_REQUEST, 0);
         assert_eq!(SEAM_CAP_RECIPE_IMPORT & SEAM_CAP_KISC_FRAMING, 0);
     }

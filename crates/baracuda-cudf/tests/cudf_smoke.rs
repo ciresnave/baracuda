@@ -60,6 +60,10 @@ fn type_id_discriminants_match_upstream() {
 /// `TypeId` derives `Copy + Clone + Debug + Eq + PartialEq` in the `-sys`
 /// crate — exercise each so a stray attribute removal fails compilation.
 #[test]
+#[allow(
+    clippy::clone_on_copy,
+    reason = "the test exists to prove `Clone` is still derived alongside `Copy`"
+)]
 fn type_id_has_expected_derives() {
     let a = TypeId::Float32;
     let b = a; // Copy

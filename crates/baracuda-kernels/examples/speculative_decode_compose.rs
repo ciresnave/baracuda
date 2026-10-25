@@ -79,14 +79,14 @@ fn build_tree_mask(prefix_len: usize, num_heads: usize) -> Vec<f32> {
     }
 
     for h in 0..num_heads {
-        for qi in 0..Q {
+        for (qi, q_ancestors) in ancestors.iter().enumerate().take(Q) {
             // Prefix is always visible.
             for kj in 0..prefix_len {
                 let idx = (h * Q + qi) * k_len + kj;
                 mask[idx] = 0.0;
             }
             // Ancestor draft tokens.
-            for &anc in &ancestors[qi] {
+            for &anc in q_ancestors {
                 let kj = prefix_len + anc;
                 let idx = (h * Q + qi) * k_len + kj;
                 mask[idx] = 0.0;
@@ -297,8 +297,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     y_out.copy_to_host(&mut y_host)?;
 
     println!("Spec-decode tree attention output (first 8 cells of t0):");
-    for i in 0..8 {
-        println!("  y[t0, h0, {i}] = {:.6}", y_host[i]);
+    for (i, y) in y_host.iter().enumerate().take(8) {
+        println!("  y[t0, h0, {i}] = {y:.6}");
     }
 
     // -------------------------------------------------------------------

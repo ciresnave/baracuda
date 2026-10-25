@@ -181,6 +181,6 @@ fn slices_enum_round_trip() {
         );
         // to_compute_mode should not return 0 (sgemm) or anything out of range.
         let cm = s.to_compute_mode();
-        assert!(cm >= 1 && cm <= 18, "compute_mode {cm} out of range");
+        assert!((1..=18).contains(&cm), "compute_mode {cm} out of range");
     }
 }

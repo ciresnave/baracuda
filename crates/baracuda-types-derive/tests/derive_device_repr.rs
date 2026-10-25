@@ -167,6 +167,10 @@ fn derive_does_not_consume_copy_clone() {
         c: -1,
     };
     let b = a; // Copy
+    #[allow(
+        clippy::clone_on_copy,
+        reason = "the test exists to prove `Clone` is derived alongside `Copy`"
+    )]
     let _c = a.clone(); // Clone
     let _ = b;
 }

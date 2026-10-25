@@ -17,6 +17,7 @@ use baracuda_cutlass::{
 };
 #[cfg(feature = "device-tests")]
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
+#[cfg(feature = "device-tests")]
 use half::{bf16, f16};
 
 // ---- CPU references for each activation ----
