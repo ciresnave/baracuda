@@ -150,9 +150,9 @@ machine. To finish validation:
 ## Deferred (future phases)
 - Optimization-profile *selection* (`setOptimizationProfileAsync`) for dynamic
   shapes (add a shim symbol + safe method).
-- A typed `Logger` (a C++ `ILogger` subclass trampolining to a Rust callback) —
-  needs an extra shim object that *creates* a logger; the current path uses a
-  null logger or a caller-supplied `ILogger*`.
+- ~~A typed `Logger`~~ — done in alpha.28 (`Logger`, `Runtime::with_logger`, shim
+  `trtLoggerCreate`). TensorRT 10.16 refuses a null logger, so `with_null_logger`
+  returns `NullHandle`.
 - Builder path (`INetworkDefinition` / `IBuilder` / ONNX `IParser`) — a separate
   `baracuda-tensorrt-builder` phase.
 - INT8 calibration + plugin registry — Tier-2.

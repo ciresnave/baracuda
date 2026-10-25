@@ -31,8 +31,32 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <new>
 
 using namespace nvinfer1;
+
+namespace {
+
+// An `ILogger` that forwards every message to a Rust callback. TensorRT keeps
+// one logger per process and may keep the `ILogger*` it was first handed for as
+// long as any builder or runtime lives, so the Rust side creates exactly one of
+// these and never destroys it.
+class CallbackLogger final : public ILogger {
+public:
+    using Callback = void (*)(std::int32_t severity, const char* msg, void* user);
+
+    CallbackLogger(Callback cb, void* user) noexcept : cb_(cb), user_(user) {}
+
+    void log(Severity severity, const char* msg) noexcept override {
+        cb_(static_cast<std::int32_t>(severity), msg, user_);
+    }
+
+private:
+    Callback cb_;
+    void* user_;
+};
+
+}  // namespace
 
 // Handles cross the boundary as opaque `void*`; `cudaStream_t` is itself a
 // pointer, so it crosses as `void*` too. All structs returned/taken by value
@@ -40,6 +64,18 @@ using namespace nvinfer1;
 // `trtDims_t` (same `{ int32_t nbDims; int64_t d[8]; }` layout).
 
 extern "C" {
+
+// ---- ILogger ------------------------------------------------------------
+
+// Returns an `ILogger*` (upcast before it becomes `void*`, so the pointer
+// `createInferRuntime_INTERNAL` receives is a real `ILogger*`).
+void* trtLoggerCreate(CallbackLogger::Callback cb, void* user) noexcept {
+    return static_cast<ILogger*>(new (std::nothrow) CallbackLogger(cb, user));
+}
+
+void trtLoggerDestroy(void* logger) noexcept {
+    delete static_cast<ILogger*>(logger);
+}
 
 // ---- IRuntime -----------------------------------------------------------
 

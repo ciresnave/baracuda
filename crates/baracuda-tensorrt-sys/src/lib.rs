@@ -212,6 +212,16 @@ pub const SHIM_BUILT: bool = cfg!(feature = "shim");
 
 #[cfg(feature = "shim")]
 unsafe extern "C" {
+    /// TensorRT shim: create an `ILogger` that calls `cb(severity, msg, user)`
+    /// for every message. Returns null on allocation failure. Free with
+    /// [`trtLoggerDestroy`], after everything built from it is gone.
+    pub fn trtLoggerCreate(cb: trtLogCallback, user: *mut c_void) -> trtILogger_t;
+    /// TensorRT shim: destroy a logger made by [`trtLoggerCreate`].
+    pub fn trtLoggerDestroy(logger: trtILogger_t);
+}
+
+#[cfg(feature = "shim")]
+unsafe extern "C" {
     /// TensorRT shim: Runtime Deserialize Cuda Engine.
     pub fn trtRuntimeDeserializeCudaEngine(
         runtime: trtIRuntime_t,
@@ -572,6 +582,23 @@ mod shim_stubs {
     /// uphold the same contract as the real symbol (valid handles/pointers).
     #[inline]
     pub unsafe fn trtHostMemoryDestroy(_mem: trtIHostMemory_t) {}
+
+    /// TensorRT shim: create a logger (no-op: always null without the shim).
+    ///
+    /// # Safety
+    ///
+    /// Shim no-op mirroring the real symbol's signature.
+    #[inline]
+    pub unsafe fn trtLoggerCreate(_cb: trtLogCallback, _user: *mut c_void) -> trtILogger_t {
+        core::ptr::null_mut()
+    }
+    /// TensorRT shim: destroy a logger (no-op without the shim).
+    ///
+    /// # Safety
+    ///
+    /// Shim no-op mirroring the real symbol's signature.
+    #[inline]
+    pub unsafe fn trtLoggerDestroy(_logger: trtILogger_t) {}
 }
 
 #[cfg(not(feature = "shim"))]
@@ -581,7 +608,16 @@ pub use shim_stubs::*;
 
 fn tensorrt_candidates() -> Vec<String> {
     // TensorRT 10 ships libnvinfer.so.10 / nvinfer_10.dll; 8 uses "8".
-    platform::versioned_library_candidates("nvinfer", &["10", "9", "8"])
+    let mut out = platform::versioned_library_candidates("nvinfer", &["10", "9", "8"]);
+    // TensorRT's Windows DLLs are `nvinfer_10.dll` (no `64`), unlike the
+    // `cublas64_12.dll` convention the helper above spells.
+    if cfg!(windows) {
+        out.splice(
+            0..0,
+            ["10", "9", "8"].map(|major| format!("nvinfer_{major}.dll")),
+        );
+    }
+    out
 }
 
 macro_rules! trt_fns {

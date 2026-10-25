@@ -31,7 +31,9 @@
 
 use std::ffi::{CStr, CString};
 use std::marker::PhantomData;
-use std::os::raw::c_void;
+use std::os::raw::{c_char, c_void};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use baracuda_cuda_sys::runtime::cudaStream_t;
 use baracuda_driver::Stream;
@@ -131,14 +133,152 @@ impl Dims {
     }
 }
 
-/// Owned TensorRT runtime. Created around a user-supplied logger (the logger
-/// pointer is passed verbatim; safety responsibility is on the caller).
+type LogFn = dyn Fn(Severity, &str) + Send + Sync + 'static;
+
+/// The loggers currently alive, newest last. The one process-wide `ILogger`
+/// forwards every TensorRT message to all of them.
+static LOGGERS: Mutex<Vec<(u64, Arc<LogFn>)>> = Mutex::new(Vec::new());
+static NEXT_LOGGER_ID: AtomicU64 = AtomicU64::new(0);
+
+/// The single C++ `ILogger` handed to TensorRT, created on first use and never
+/// freed (stored as an address so the static is `Sync`).
+static GLOBAL_ILOGGER: OnceLock<usize> = OnceLock::new();
+
+unsafe extern "C" fn log_trampoline(severity: Severity, msg: *const c_char, _user: *mut c_void) {
+    if msg.is_null() {
+        return;
+    }
+    // SAFETY: TensorRT passes a NUL-terminated message that stays valid for the call.
+    let text = unsafe { CStr::from_ptr(msg) }.to_string_lossy();
+    // Snapshot under the lock and call outside it, so a callback that itself
+    // creates or drops a `Logger` cannot deadlock.
+    let snapshot: Vec<Arc<LogFn>> = match LOGGERS.lock() {
+        Ok(guard) => guard.iter().map(|(_, f)| Arc::clone(f)).collect(),
+        Err(poisoned) => poisoned
+            .into_inner()
+            .iter()
+            .map(|(_, f)| Arc::clone(f))
+            .collect(),
+    };
+    for callback in snapshot {
+        let _ =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| callback(severity, &text)));
+    }
+}
+
+fn global_ilogger() -> Result<sys::trtILogger_t> {
+    if let Some(&addr) = GLOBAL_ILOGGER.get() {
+        return Ok(addr as sys::trtILogger_t);
+    }
+    // SAFETY: `log_trampoline` matches the shim's callback signature and ignores `user`.
+    let raw = unsafe { sys::trtLoggerCreate(log_trampoline, core::ptr::null_mut()) };
+    if raw.is_null() {
+        return Err(Error::NullHandle {
+            op: "trtLoggerCreate",
+        });
+    }
+    // If two threads race, one `ILogger` is created twice; keep the winner and
+    // free the loser (it was never handed to TensorRT).
+    match GLOBAL_ILOGGER.set(raw as usize) {
+        Ok(()) => Ok(raw),
+        Err(_) => {
+            // SAFETY: `raw` came from `trtLoggerCreate` just above and was never handed to TensorRT.
+            unsafe { sys::trtLoggerDestroy(raw) };
+            Ok(*GLOBAL_ILOGGER.get().expect("set by the racing thread") as sys::trtILogger_t)
+        }
+    }
+}
+
+/// A safe TensorRT logger: a Rust closure that receives TensorRT's messages.
+///
+/// TensorRT 10 refuses a null logger, so every [`Runtime`] and builder needs
+/// one. TensorRT also keeps **one logger per process**: a second logger passed
+/// to `createInferRuntime` / `createInferBuilder` is ignored while any builder,
+/// runtime or refitter is alive (measured on 10.16: the "logger ... differs
+/// from one already registered" warning). So all [`Logger`]s share one
+/// process-wide C++ `ILogger`, created on first use and never freed, and every
+/// message is delivered to every live [`Logger`]. Dropping a [`Logger`] stops
+/// delivery to its closure and cannot leave TensorRT holding a dangling logger.
+///
+/// TensorRT may call it from any thread, hence the `Send + Sync` bound. A
+/// panic in the closure is caught at the boundary (unwinding into C++ would be
+/// undefined behaviour). Hand the logger to [`Runtime::with_logger`]; the
+/// runtime keeps it alive for as long as it lives.
+#[derive(Debug)]
+pub struct Logger {
+    id: u64,
+    raw: sys::trtILogger_t,
+}
+
+// SAFETY: `raw` is the process-wide `ILogger*`, which is never freed and only
+// read; the closures live in `LOGGERS` behind a mutex and are `Send + Sync`.
+unsafe impl Send for Logger {}
+unsafe impl Sync for Logger {}
+
+impl Logger {
+    /// Build a logger that calls `callback(severity, message)` for every
+    /// TensorRT message. Needs the shim: returns [`Error::ShimNotBuilt`]
+    /// without it.
+    pub fn new(callback: impl Fn(Severity, &str) + Send + Sync + 'static) -> Result<Self> {
+        if !sys::SHIM_BUILT {
+            return Err(Error::ShimNotBuilt);
+        }
+        let raw = global_ilogger()?;
+        let id = NEXT_LOGGER_ID.fetch_add(1, Ordering::Relaxed);
+        let callback: Arc<LogFn> = Arc::new(callback);
+        LOGGERS
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .push((id, callback));
+        Ok(Self { id, raw })
+    }
+
+    /// A logger that writes messages at or above `min` (more severe = lower
+    /// number, so `Severity::Warning` keeps warnings, errors and internal
+    /// errors) to standard error.
+    pub fn stderr(min: Severity) -> Result<Self> {
+        Self::new(move |severity, msg| {
+            if (severity as i32) <= (min as i32) {
+                eprintln!("[TensorRT {severity:?}] {msg}");
+            }
+        })
+    }
+
+    /// Raw `ILogger*`: the process-wide logger, valid for the life of the process.
+    pub fn as_raw(&self) -> sys::trtILogger_t {
+        self.raw
+    }
+}
+
+impl Drop for Logger {
+    fn drop(&mut self) {
+        LOGGERS
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .retain(|(id, _)| *id != self.id);
+    }
+}
+
+/// Owned TensorRT runtime. Built around a [`Logger`] ([`Runtime::with_logger`])
+/// or, for callers who manage their own `ILogger*`, [`Runtime::new`].
 #[derive(Debug)]
 pub struct Runtime {
     raw: sys::trtIRuntime_t,
+    // TensorRT keeps the logger pointer, so the logger must outlive the
+    // runtime: `Drop for Runtime` destroys `raw` before this field drops.
+    _logger: Option<Arc<Logger>>,
 }
 
 impl Runtime {
+    /// Create a runtime that reports through `logger`. The runtime shares
+    /// ownership of the logger, so it stays alive as long as the runtime does.
+    pub fn with_logger(logger: Arc<Logger>) -> Result<Self> {
+        // SAFETY: `logger.as_raw()` is the process-wide `ILogger*`, a valid `nvinfer1::ILogger*`.
+        let mut rt = unsafe { Self::new(logger.as_raw())? };
+        rt._logger = Some(logger);
+        Ok(rt)
+    }
+
     /// # Safety
     /// `logger` must be a valid `nvinfer1::ILogger*` (typically obtained from
     /// C++ or passed through a thin shim). Use [`Runtime::with_null_logger`]
@@ -156,12 +296,13 @@ impl Runtime {
                     op: "createInferRuntime",
                 });
             }
-            Ok(Self { raw })
+            Ok(Self { raw, _logger: None })
         }
     }
 
-    /// Construct without a logger. Supported on recent TensorRT; older
-    /// versions may refuse and return null.
+    /// Construct without a logger. TensorRT 10 refuses a null logger and this
+    /// returns [`Error::NullHandle`] there (measured against TensorRT 10.16);
+    /// use [`Runtime::with_logger`].
     pub fn with_null_logger() -> Result<Self> {
         unsafe { Self::new(core::ptr::null_mut()) }
     }
