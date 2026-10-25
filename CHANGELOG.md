@@ -24,6 +24,8 @@ Docs only. No code, no device run.
 
 - `OP-MATRIX.md` (ROADMAP SA-37, partial): `RepeatPlan` lists bf16, `InterpolatePlan` lists f16 / bf16, `ArgsortPlan` documents the multi-block radix path above 1024, the adaptive-pool note says the bit-exact bespoke plans shipped, strided siblings are marked shipped (4 `_strided_run` symbols for each of rms_norm, layer_norm, softmax, log_softmax, flip, roll, permute), and the header carries the current version and says which rows were re-checked. Each claim was checked against the code at `origin/main`.
 - ROADMAP SA-37 / SA-38 record what is done and what is still open.
+- New `docs/PATENT-SWEEP.md` (board 286): the due-diligence patent sweep of baracuda's own mechanisms (14 ideas, 10 hits assessed, 3 left `needs-review` because their claims could not be read with the available tools). Not legal advice.
+
 
 ## 0.1.0-alpha.28 - 2026-10-25
 
