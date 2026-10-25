@@ -115,13 +115,17 @@ impl Dims {
     pub fn as_slice(&self) -> &[i64] {
         &self.dims[..self.rank]
     }
-    fn to_raw(self) -> sys::trtDims_t {
+    /// The raw `trtDims_t` (for sibling crates that talk to the shim).
+    #[doc(hidden)]
+    pub fn to_raw(self) -> sys::trtDims_t {
         sys::trtDims_t {
             nb_dims: self.rank as i32,
             d: self.dims,
         }
     }
-    fn from_raw(raw: sys::trtDims_t) -> Self {
+    /// Build from a raw `trtDims_t` (for sibling crates that talk to the shim).
+    #[doc(hidden)]
+    pub fn from_raw(raw: sys::trtDims_t) -> Self {
         let mut out = Dims {
             dims: [0; sys::TRT_MAX_DIMS],
             rank: raw.nb_dims.max(0) as usize,
@@ -488,6 +492,15 @@ pub struct HostMemory {
 }
 
 impl HostMemory {
+    /// Adopt a TensorRT-owned `IHostMemory*`, which this value then frees on drop.
+    ///
+    /// # Safety
+    /// `raw` must be a live `IHostMemory*` that nothing else will free.
+    #[doc(hidden)]
+    pub unsafe fn from_raw(raw: sys::trtIHostMemory_t) -> Self {
+        Self { raw }
+    }
+
     /// Size of the buffer in bytes.
     pub fn len(&self) -> Result<usize> {
         Ok(unsafe { sys::trtHostMemorySize(self.raw) })

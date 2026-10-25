@@ -39,6 +39,16 @@ pub type trtILogger_t = *mut c_void;
 pub type trtIPluginRegistry_t = *mut c_void;
 /// TensorRT IHostMemory opaque handle.
 pub type trtIHostMemory_t = *mut c_void;
+/// TensorRT IBuilder opaque handle.
+pub type trtIBuilder_t = *mut c_void;
+/// TensorRT IBuilderConfig opaque handle.
+pub type trtIBuilderConfig_t = *mut c_void;
+/// TensorRT INetworkDefinition opaque handle.
+pub type trtINetworkDefinition_t = *mut c_void;
+/// TensorRT ITensor opaque handle (a network tensor).
+pub type trtITensor_t = *mut c_void;
+/// TensorRT ILayer opaque handle (always an `ILayer*`, never a subclass pointer).
+pub type trtILayer_t = *mut c_void;
 
 // ---- enums ---------------------------------------------------------------
 
@@ -188,6 +198,12 @@ pub type trtLogCallback =
 /// that value for the loaded library.
 pub type PFN_createInferRuntime =
     unsafe extern "C" fn(logger: trtILogger_t, version: c_int) -> trtIRuntime_t;
+
+/// `createInferBuilder_INTERNAL(void* logger, int32_t version)` — the
+/// `extern "C"` builder factory exported by `libnvinfer`; same contract as
+/// [`PFN_createInferRuntime`].
+pub type PFN_createInferBuilder =
+    unsafe extern "C" fn(logger: trtILogger_t, version: c_int) -> trtIBuilder_t;
 
 // ---- shim-backed runtime operations --------------------------------------
 //
@@ -604,6 +620,134 @@ mod shim_stubs {
 #[cfg(not(feature = "shim"))]
 pub use shim_stubs::*;
 
+/// Builder-side shim symbols (`IBuilder`, `IBuilderConfig`, `INetworkDefinition`,
+/// layers and tensors). Only present with the `shim` feature: there is no
+/// no-op fallback, because a builder that silently does nothing is worse than
+/// one that is absent (`baracuda-tensorrt-builder` gates its API on the same
+/// feature).
+#[cfg(feature = "shim")]
+#[allow(
+    missing_docs,
+    reason = "raw FFI mirror of the shim; each name is the TensorRT method it forwards to"
+)]
+pub mod builder {
+    use super::*;
+
+    unsafe extern "C" {
+        // IBuilder
+        pub fn trtBuilderDestroy(builder: trtIBuilder_t);
+        pub fn trtBuilderCreateNetwork(
+            builder: trtIBuilder_t,
+            flags: u32,
+        ) -> trtINetworkDefinition_t;
+        pub fn trtBuilderCreateConfig(builder: trtIBuilder_t) -> trtIBuilderConfig_t;
+        pub fn trtBuilderBuildSerialized(
+            builder: trtIBuilder_t,
+            network: trtINetworkDefinition_t,
+            config: trtIBuilderConfig_t,
+        ) -> trtIHostMemory_t;
+
+        // IBuilderConfig
+        pub fn trtConfigDestroy(config: trtIBuilderConfig_t);
+        pub fn trtConfigSetMemoryPoolLimit(config: trtIBuilderConfig_t, pool: i32, size: usize);
+        pub fn trtConfigGetMemoryPoolLimit(config: trtIBuilderConfig_t, pool: i32) -> usize;
+        pub fn trtConfigSetFlag(config: trtIBuilderConfig_t, flag: i32, on: bool);
+        pub fn trtConfigGetFlag(config: trtIBuilderConfig_t, flag: i32) -> bool;
+        pub fn trtConfigSetOptimizationLevel(config: trtIBuilderConfig_t, level: i32);
+        pub fn trtConfigGetOptimizationLevel(config: trtIBuilderConfig_t) -> i32;
+
+        // INetworkDefinition
+        pub fn trtNetworkDestroy(network: trtINetworkDefinition_t);
+        pub fn trtNetworkAddInput(
+            network: trtINetworkDefinition_t,
+            name: *const c_char,
+            dtype: i32,
+            dims: *const trtDims_t,
+        ) -> trtITensor_t;
+        pub fn trtNetworkMarkOutput(network: trtINetworkDefinition_t, tensor: trtITensor_t);
+        pub fn trtNetworkGetNbInputs(network: trtINetworkDefinition_t) -> i32;
+        pub fn trtNetworkGetNbOutputs(network: trtINetworkDefinition_t) -> i32;
+        pub fn trtNetworkGetNbLayers(network: trtINetworkDefinition_t) -> i32;
+        pub fn trtNetworkAddElementWise(
+            network: trtINetworkDefinition_t,
+            a: trtITensor_t,
+            b: trtITensor_t,
+            op: i32,
+        ) -> trtILayer_t;
+        pub fn trtNetworkAddActivation(
+            network: trtINetworkDefinition_t,
+            input: trtITensor_t,
+            kind: i32,
+        ) -> trtILayer_t;
+        pub fn trtNetworkAddUnary(
+            network: trtINetworkDefinition_t,
+            input: trtITensor_t,
+            op: i32,
+        ) -> trtILayer_t;
+        pub fn trtNetworkAddMatrixMultiply(
+            network: trtINetworkDefinition_t,
+            a: trtITensor_t,
+            op_a: i32,
+            b: trtITensor_t,
+            op_b: i32,
+        ) -> trtILayer_t;
+        pub fn trtNetworkAddConstant(
+            network: trtINetworkDefinition_t,
+            dims: *const trtDims_t,
+            dtype: i32,
+            values: *const c_void,
+            count: i64,
+        ) -> trtILayer_t;
+        pub fn trtNetworkAddShuffle(
+            network: trtINetworkDefinition_t,
+            input: trtITensor_t,
+        ) -> trtILayer_t;
+        pub fn trtNetworkAddReduce(
+            network: trtINetworkDefinition_t,
+            input: trtITensor_t,
+            op: i32,
+            axes: u32,
+            keep_dims: bool,
+        ) -> trtILayer_t;
+        pub fn trtNetworkAddSoftMax(
+            network: trtINetworkDefinition_t,
+            input: trtITensor_t,
+        ) -> trtILayer_t;
+        pub fn trtNetworkAddConcatenation(
+            network: trtINetworkDefinition_t,
+            inputs: *const trtITensor_t,
+            n: i32,
+        ) -> trtILayer_t;
+        pub fn trtNetworkAddCast(
+            network: trtINetworkDefinition_t,
+            input: trtITensor_t,
+            dtype: i32,
+        ) -> trtILayer_t;
+        pub fn trtNetworkAddIdentity(
+            network: trtINetworkDefinition_t,
+            input: trtITensor_t,
+        ) -> trtILayer_t;
+
+        // ILayer / ITensor
+        pub fn trtLayerGetOutput(layer: trtILayer_t, index: i32) -> trtITensor_t;
+        pub fn trtLayerGetNbOutputs(layer: trtILayer_t) -> i32;
+        pub fn trtLayerSetName(layer: trtILayer_t, name: *const c_char);
+        pub fn trtTensorSetName(tensor: trtITensor_t, name: *const c_char);
+        pub fn trtTensorGetName(tensor: trtITensor_t) -> *const c_char;
+        pub fn trtTensorGetDimensions(tensor: trtITensor_t) -> trtDims_t;
+        pub fn trtTensorGetType(tensor: trtITensor_t) -> i32;
+
+        // layer-specific setters
+        pub fn trtActivationSetAlpha(layer: trtILayer_t, alpha: f32);
+        pub fn trtActivationSetBeta(layer: trtILayer_t, beta: f32);
+        pub fn trtShuffleSetReshapeDims(layer: trtILayer_t, dims: *const trtDims_t);
+        pub fn trtShuffleSetFirstTranspose(layer: trtILayer_t, order: *const i32);
+        pub fn trtShuffleSetSecondTranspose(layer: trtILayer_t, order: *const i32);
+        pub fn trtSoftMaxSetAxes(layer: trtILayer_t, axes: u32);
+        pub fn trtConcatenationSetAxis(layer: trtILayer_t, axis: i32);
+    }
+}
+
 // ---- loader --------------------------------------------------------------
 
 fn tensorrt_candidates() -> Vec<String> {
@@ -658,6 +802,7 @@ trt_fns! {
     // `get_infer_lib_version()` as the version.
     get_infer_lib_version as "getInferLibVersion": PFN_getInferLibVersion;
     create_infer_runtime as "createInferRuntime_INTERNAL": PFN_createInferRuntime;
+    create_infer_builder as "createInferBuilder_INTERNAL": PFN_createInferBuilder;
 }
 
 /// resolve and return the process-wide TensorRT loader.
