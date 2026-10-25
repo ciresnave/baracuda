@@ -819,7 +819,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-tensorrt-builder"
-version = "0.1.0-alpha.26"
+version = "0.1.0-alpha.29"
 dependencies = [
  "baracuda-driver",
  "baracuda-tensorrt",
