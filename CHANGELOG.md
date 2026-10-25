@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.21 - 2026-10-25
+
+### Fixed
+
+- `baracuda_smem_reduce.cuh`: `block_reduce_{sum,max,min}_{f32,f64}` now read `warp_buf[0]` into a register and `__syncthreads()` before returning (ROADMAP SA-28). Back-to-back reductions on one `warp_buf` (softmax, log-softmax: max then sum) could rewrite it before a slow warp read the first result. Costs one extra barrier per reduction. Race not demonstrated on device; verified by `nvcc -ptx` compile.
+
 ## 0.1.0-alpha.20 - 2026-10-25
 
 ### Changed
@@ -45,6 +51,8 @@ at alpha.82.
 No API or behaviour change; docs only. Spec-to-roadmap audit (PM task, CireSnave's idea): all 176 tracked `.md` docs were diffed against `ROADMAP.md`; 39 rows (SA-1 .. SA-39) were added for outstanding work that had no roadmap row, plus a list of work that docs still show open but has merged. 8 rows need a CireSnave decision (SA-36, the upstream LICENSE asks, was PM-approved and filed). `ROADMAP.md`'s own stale statements were corrected (header version, the retired `baracuda-kernelgen` 589/0 figure, the api-freeze "Open" list). Many other docs contradict the code; they are listed in SA-38 and not fixed here.
 
 ## 0.1.0-alpha.16 - 2026-10-24
+
+**Published 2026-10-25** by the PM: all 70 crates live at 0.1.0-alpha.16 (read back from crates.io), tag `v0.1.0-alpha.16` at `eabec4ab`, built from a clean `git archive` of that commit; `baracuda-cuda-emit`/`-parse` 0.22.0 were already live. alpha.17-21 are not published.
 
 **Behaviour change (numeric results change): the f16 / bf16 dense GEMM accumulates in f32 end to end.**
 
