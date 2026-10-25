@@ -155,5 +155,5 @@ machine. To finish validation:
   returns `NullHandle`.
 - ~~Builder path~~ — `baracuda-tensorrt-builder` (alpha.33) covers `IBuilder`,
   `IBuilderConfig` and `INetworkDefinition` with 12 layer kinds; the ONNX `IParser`
-  arrived in alpha.30 (`OnnxParser`).
+  arrived in alpha.31 (`OnnxParser`).
 - INT8 calibration + plugin registry — Tier-2.

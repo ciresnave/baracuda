@@ -16,13 +16,19 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.31 - 2026-10-25
+
+### Fixed
+
+- `baracuda-tensorrt`: the logger callback took TensorRT's severity as a Rust enum by value, so an out-of-range value from C++ would have been undefined behaviour (Pip review of #262). `trtLogCallback` now takes an `i32`; `severity_from_raw` maps `0..=4` and reports anything else as `InternalError`. Tests: `severity_from_raw_maps_every_documented_value_and_clamps_the_rest` and `trampoline_accepts_an_out_of_range_severity` (calls the trampoline with 99).
+
 ## 0.1.0-alpha.34 - 2026-10-25
 
 ### Added
 
 - `baracuda-tensorrt-builder`: the ONNX parser (ROADMAP SA-33 row 4). `OnnxParser::{new, parse, supports_operator, errors}`, `ParserError` and `OnnxParseError` carrying the parser's error list (code, description, node index, node name, operator), and `Network::{input, output}` to reach the tensors a parse creates. The loader resolves `createNvOnnxParser_INTERNAL` from `nvonnxparser_10.dll` / `libnvonnxparser.so.10`; the shim wraps `nvonnxparser::IParser` by vtable, as for the rest of TensorRT. Device-verified on sm_89 (RTX 4070), TensorRT 10.16.1.11: `cargo gpu-test -p baracuda-tensorrt-builder --features shim,device-tests`, 15 passed, 0 failed, 0 declared skips (3 new in `onnx_smoke.rs`): a hand-encoded ONNX model (`Neg` then `Relu`, input and output names and shape read back from the network) is parsed, built, run, and equal to the CPU result element for element; garbage bytes return a non-empty error list while the same builder then parses a valid model; an unknown operator is named in the error, with `supports_operator("Relu")` true as the control. With the parse result ignored, the two error tests fail.
 
-## 0.1.0-alpha.29 - 2026-10-25
+## 0.1.0-alpha.30 - 2026-10-25
 
 
 
