@@ -52,6 +52,8 @@ No API or behaviour change; docs only. Spec-to-roadmap audit (PM task, CireSnave
 
 ## 0.1.0-alpha.16 - 2026-10-24
 
+**Published 2026-10-25** by the PM: all 70 crates live at 0.1.0-alpha.16 (read back from crates.io), tag `v0.1.0-alpha.16` at `eabec4ab`, built from a clean `git archive` of that commit; `baracuda-cuda-emit`/`-parse` 0.22.0 were already live. alpha.17-21 are not published.
+
 **Behaviour change (numeric results change): the f16 / bf16 dense GEMM accumulates in f32 end to end.**
 
 - **Fixed: use-after-destroy of a cached cuBLAS handle in the `gemm_dense` facade.** The facade pools cuBLAS handles per CUDA context, keyed by the context's address. A destroyed context's address is reused by the next `cuCtxCreate`, so a handle bound to the dead context was revived. A caller that makes a fresh context per call (Fuel's `CudaInvoker`) got `INTERNAL` (5) on every call after the first, on any dtype and shape; it looked shape-dependent only because the first call of each process passes. The pool now keys on `cuCtxGetId` (unique, never reused), falling back to the address only when the id is unavailable. Every consumer that creates and destroys contexts was exposed, not only Fuel. Regression test `dense_gemm_fresh_context` (40 fresh-context calls): before the fix `[0, 0, 0, 5, 5, 5, 5, 5, 0, 5, ...]`, after, all 0. Contexts destroyed mid-process now leave their pool slot claimed; after 8 distinct contexts further ones take the transient create/destroy path (correct, slower).
