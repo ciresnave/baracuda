@@ -2079,7 +2079,7 @@ PM task 2026-10-24 (CireSnave's idea): diff every spec / design / plan / README 
 CireSnave, verbatim (relayed by the PM): "Our Baracuda project was already handed the job of maintaining the parser and emitter for CUDA. I'm thinking it would make sense for Baracuda to also maintain the CUTLASS parser and emitter since Baracuda already has CUTLASS code as part of their project." Baracuda owns the CUDA **and** CUTLASS parser + emitter for Unpopped. Unpopped is surveying and designing its IR first (full union); the module interface comes from its design doc.
 
 - **SA-40 CUTLASS parser.** held(Unpopped IR design doc: module interface). New work, no design yet; sibling of `baracuda-cuda-parse`. Do not start before Unpopped publishes the interface.
-- **SA-41 CUTLASS emitter.** held(Unpopped IR design doc). Open question to ask Unpopped: emit CUTLASS source, or only CUDA that uses CUTLASS? Decide before design.
+- **SA-41 CUTLASS emitter.** held(Unpopped IR design doc). Ruled by the PM 2026-10-25 (option c, relayed): emits CUTLASS C++ source (template instantiations + EVT) for IR nodes that map to a CUTLASS collective, raw CUDA otherwise; `baracuda-cutlass`'s runtime wrapper stays as is. Module interface comes from Unpopped's design doc.
 - **SA-42 Hand over the CUDA parse half still in Unpopped `convert.rs`.** held(KISS registry repoint). Moves into `baracuda-cuda-parse` after the repoint lands.
 
 ### Provenance, docs and low-priority
