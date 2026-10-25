@@ -17,7 +17,15 @@ fn multicast_granularity_and_create() {
     // Granularity query on a 1-device group is fine on any system — it's
     // a pure sizing calculation that the driver serves from static data.
     match multicast::multicast_granularity(1, 1 << 21, false) {
-        Ok(g) => eprintln!("multicast min granularity (1 device, 2 MiB) = {g}"),
+        Ok(g) => {
+            eprintln!("multicast min granularity (1 device, 2 MiB) = {g}");
+            // A granularity is a byte count the driver rounds sizes to: nonzero and a
+            // power of two.
+            assert!(
+                g > 0 && g.is_power_of_two(),
+                "bad multicast granularity {g}"
+            );
+        }
         Err(e) => {
             eprintln!("multicast_granularity not supported: {e:?}");
             return;
@@ -29,6 +37,7 @@ fn multicast_granularity_and_create() {
     match MulticastObject::new(1, 1 << 21) {
         Ok(mc) => {
             eprintln!("multicast object created: {:#x}", mc.as_raw());
+            assert_ne!(mc.as_raw(), 0, "created multicast object has a null handle");
         }
         Err(e) => {
             eprintln!("cuMulticastCreate rejected as expected on non-NVSwitch: {e:?}");
