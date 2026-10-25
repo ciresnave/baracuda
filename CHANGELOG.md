@@ -16,6 +16,21 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.28 - 2026-10-25
+
+### Added
+
+- `baracuda-tensorrt`: a safe `Logger` (ROADMAP SA-33, first row). The shim gained `trtLoggerCreate` / `trtLoggerDestroy`, a C++ `ILogger` that calls a Rust closure; `Logger::new(closure)` and `Logger::stderr(min)` wrap it, `Runtime::with_logger(Arc<Logger>)` keeps it alive for the runtime's life, and a panic in the closure is caught at the boundary. Device-verified against TensorRT 10.16.1.11 on sm_89 (RTX 4070): `cargo gpu-test -p baracuda-tensorrt --features shim,device-tests`, 6 passed, 0 failed, 0 declared skips; with the trampoline's call to the closure removed, `logger_forwards_messages_to_the_closure` fails.
+
+### Fixed
+
+- `baracuda-tensorrt-sys`: the Windows loader looked for `nvinfer64_10.dll`, but TensorRT ships `nvinfer_10.dll`, so the runtime never loaded on Windows and every TensorRT device test skipped. It now tries `nvinfer_<major>.dll` first.
+- `Runtime::with_null_logger` is documented as refused by TensorRT 10 (measured on 10.16: `NullHandle`); use `Runtime::with_logger`.
+
+### Build notes
+
+- The shim compiles against the NVIDIA/TensorRT `v10.16` headers (commit `52399f555c2f80cb690a4a558b604e1a5f227e7c`, Apache-2.0) with the `TRT_*_ENTERPRISE` version macros supplied by `-D`. The runtime is NVIDIA's `tensorrt-cu13-libs` 10.16.1.11 wheel (licence: Proprietary), linked at run time and never vendored or redistributed. See `crates/baracuda-tensorrt/NOTICE.md`.
+
 ## 0.1.0-alpha.27 - 2026-10-25
 
 Docs only. No code, no device run.

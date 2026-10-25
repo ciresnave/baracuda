@@ -31,7 +31,8 @@
 
 use std::ffi::{CStr, CString};
 use std::marker::PhantomData;
-use std::os::raw::c_void;
+use std::os::raw::{c_char, c_void};
+use std::sync::Arc;
 
 use baracuda_cuda_sys::runtime::cudaStream_t;
 use baracuda_driver::Stream;
@@ -131,14 +132,112 @@ impl Dims {
     }
 }
 
-/// Owned TensorRT runtime. Created around a user-supplied logger (the logger
-/// pointer is passed verbatim; safety responsibility is on the caller).
+type LogFn = dyn Fn(Severity, &str) + Send + Sync + 'static;
+
+/// A safe TensorRT logger: a C++ `ILogger` (built by the shim) that calls a Rust
+/// closure for every message.
+///
+/// TensorRT 10 refuses a null logger, so every [`Runtime`] needs one. TensorRT
+/// may call it from any thread, hence the `Send + Sync` bound on the closure.
+/// A panic in the closure is caught and dropped at the boundary (unwinding
+/// into C++ would be undefined behaviour). Hand the logger to
+/// [`Runtime::with_logger`]; the runtime keeps it alive for as long as it
+/// lives.
+pub struct Logger {
+    raw: sys::trtILogger_t,
+    // Boxed twice: `raw` stores a thin pointer to this heap cell, which holds
+    // the fat `dyn` pointer. The cell never moves for the logger's life.
+    _callback: Box<Box<LogFn>>,
+}
+
+// SAFETY: the C++ logger only holds the callback pointer and the user pointer
+// (both immutable after construction), and the closure is `Send + Sync`.
+unsafe impl Send for Logger {}
+unsafe impl Sync for Logger {}
+
+impl std::fmt::Debug for Logger {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Logger")
+            .field("raw", &self.raw)
+            .finish_non_exhaustive()
+    }
+}
+
+unsafe extern "C" fn log_trampoline(severity: Severity, msg: *const c_char, user: *mut c_void) {
+    if user.is_null() || msg.is_null() {
+        return;
+    }
+    // SAFETY: `user` is the `Box<Box<LogFn>>` cell owned by the `Logger`, which
+    // outlives every call (the logger is destroyed only after the runtime).
+    let callback = unsafe { &*(user as *const Box<LogFn>) };
+    let text = unsafe { CStr::from_ptr(msg) }.to_string_lossy();
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| callback(severity, &text)));
+}
+
+impl Logger {
+    /// Build a logger that calls `callback(severity, message)` for every
+    /// TensorRT message. Needs the shim: returns [`Error::ShimNotBuilt`]
+    /// without it.
+    pub fn new(callback: impl Fn(Severity, &str) + Send + Sync + 'static) -> Result<Self> {
+        if !sys::SHIM_BUILT {
+            return Err(Error::ShimNotBuilt);
+        }
+        let mut cell: Box<Box<LogFn>> = Box::new(Box::new(callback));
+        let user = &mut *cell as *mut Box<LogFn> as *mut c_void;
+        let raw = unsafe { sys::trtLoggerCreate(log_trampoline, user) };
+        if raw.is_null() {
+            return Err(Error::NullHandle {
+                op: "trtLoggerCreate",
+            });
+        }
+        Ok(Self {
+            raw,
+            _callback: cell,
+        })
+    }
+
+    /// A logger that writes messages at or above `min` (more severe = lower
+    /// number, so `Severity::Warning` keeps warnings, errors and internal
+    /// errors) to standard error.
+    pub fn stderr(min: Severity) -> Result<Self> {
+        Self::new(move |severity, msg| {
+            if (severity as i32) <= (min as i32) {
+                eprintln!("[TensorRT {severity:?}] {msg}");
+            }
+        })
+    }
+
+    /// Raw `ILogger*`. Valid for as long as this [`Logger`] lives.
+    pub fn as_raw(&self) -> sys::trtILogger_t {
+        self.raw
+    }
+}
+
+impl Drop for Logger {
+    fn drop(&mut self) {
+        unsafe { sys::trtLoggerDestroy(self.raw) };
+    }
+}
+
+/// Owned TensorRT runtime. Built around a [`Logger`] ([`Runtime::with_logger`])
+/// or, for callers who manage their own `ILogger*`, [`Runtime::new`].
 #[derive(Debug)]
 pub struct Runtime {
     raw: sys::trtIRuntime_t,
+    // TensorRT keeps the logger pointer, so the logger must outlive the
+    // runtime: `Drop for Runtime` destroys `raw` before this field drops.
+    _logger: Option<Arc<Logger>>,
 }
 
 impl Runtime {
+    /// Create a runtime that reports through `logger`. The runtime shares
+    /// ownership of the logger, so it stays alive as long as the runtime does.
+    pub fn with_logger(logger: Arc<Logger>) -> Result<Self> {
+        let mut rt = unsafe { Self::new(logger.as_raw())? };
+        rt._logger = Some(logger);
+        Ok(rt)
+    }
+
     /// # Safety
     /// `logger` must be a valid `nvinfer1::ILogger*` (typically obtained from
     /// C++ or passed through a thin shim). Use [`Runtime::with_null_logger`]
@@ -156,12 +255,13 @@ impl Runtime {
                     op: "createInferRuntime",
                 });
             }
-            Ok(Self { raw })
+            Ok(Self { raw, _logger: None })
         }
     }
 
-    /// Construct without a logger. Supported on recent TensorRT; older
-    /// versions may refuse and return null.
+    /// Construct without a logger. TensorRT 10 refuses a null logger and this
+    /// returns [`Error::NullHandle`] there (measured against TensorRT 10.16);
+    /// use [`Runtime::with_logger`].
     pub fn with_null_logger() -> Result<Self> {
         unsafe { Self::new(core::ptr::null_mut()) }
     }

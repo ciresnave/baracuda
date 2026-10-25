@@ -16,7 +16,9 @@
 use baracuda_driver::require_optional;
 use baracuda_tensorrt::Dims;
 #[cfg(feature = "device-tests")]
-use baracuda_tensorrt::Runtime;
+use baracuda_tensorrt::{Logger, Runtime, Severity};
+#[cfg(feature = "device-tests")]
+use std::sync::{Arc, Mutex};
 
 #[test]
 fn dims_new_and_slice_roundtrip() {
@@ -55,14 +57,78 @@ fn version_reports_trt10_or_newer() {
 #[test]
 #[cfg(feature = "device-tests")]
 fn deserialize_garbage_blob_is_graceful() {
-    // A runtime built without a logger; older TRT may refuse (returns null),
-    // which surfaces as Err — that is itself an acceptable graceful outcome.
+    let logger = require_optional!(
+        Logger::stderr(Severity::Warning).map(Arc::new),
+        "C-ABI shim (Logger::new)"
+    );
     let rt = require_optional!(
-        Runtime::with_null_logger(),
-        "TensorRT runtime + C-ABI shim (Runtime::with_null_logger)"
+        Runtime::with_logger(logger),
+        "TensorRT runtime (Runtime::with_logger)"
     );
     // Feeding a non-engine blob must error, never panic / UB.
     let bogus = [0u8; 32];
     let res = rt.deserialize_engine(&bogus);
     assert!(res.is_err(), "deserializing garbage must fail gracefully");
+}
+
+/// The logger's callback really runs: deserializing garbage makes TensorRT log
+/// an error, and that message reaches the Rust closure.
+#[test]
+#[cfg(feature = "device-tests")]
+fn logger_forwards_messages_to_the_closure() {
+    let seen: Arc<Mutex<Vec<(Severity, String)>>> = Arc::default();
+    let sink = Arc::clone(&seen);
+    let logger = require_optional!(
+        Logger::new(move |severity, msg| sink.lock().unwrap().push((severity, msg.to_owned())))
+            .map(Arc::new),
+        "C-ABI shim (Logger::new)"
+    );
+    let rt = require_optional!(
+        Runtime::with_logger(logger),
+        "TensorRT runtime (Runtime::with_logger)"
+    );
+    assert!(rt.deserialize_engine(&[0u8; 32]).is_err());
+    let seen = seen.lock().unwrap();
+    assert!(
+        seen.iter()
+            .any(|(s, _)| (*s as i32) <= (Severity::Error as i32)),
+        "no error-or-worse message reached the closure; saw {seen:?}"
+    );
+}
+
+/// TensorRT 10 refuses a null logger. The positive control is the same call
+/// with a real logger, which succeeds in the same process.
+#[test]
+#[cfg(feature = "device-tests")]
+fn null_logger_is_refused_but_a_real_logger_is_accepted() {
+    let logger = require_optional!(
+        Logger::stderr(Severity::Error).map(Arc::new),
+        "C-ABI shim (Logger::new)"
+    );
+    require_optional!(
+        Runtime::with_logger(logger),
+        "TensorRT runtime (Runtime::with_logger)"
+    );
+    assert!(
+        matches!(
+            Runtime::with_null_logger(),
+            Err(baracuda_tensorrt::Error::NullHandle { .. })
+        ),
+        "TensorRT 10 is expected to refuse a null logger"
+    );
+}
+
+/// A panicking closure must not unwind into C++.
+#[test]
+#[cfg(feature = "device-tests")]
+fn panicking_logger_does_not_unwind_into_cpp() {
+    let logger = require_optional!(
+        Logger::new(|_, _| panic!("logger panic")).map(Arc::new),
+        "C-ABI shim (Logger::new)"
+    );
+    let rt = require_optional!(
+        Runtime::with_logger(logger),
+        "TensorRT runtime (Runtime::with_logger)"
+    );
+    assert!(rt.deserialize_engine(&[0u8; 32]).is_err());
 }
