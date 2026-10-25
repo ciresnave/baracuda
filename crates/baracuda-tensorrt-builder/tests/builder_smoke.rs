@@ -133,7 +133,7 @@ fn matmul_then_relu_matches_cpu() {
             want[i * 2 + j] = s.max(0.0);
         }
     }
-    assert!(want.iter().any(|v| *v == 0.0) && want.iter().any(|v| *v > 0.0));
+    assert!(want.contains(&0.0) && want.iter().any(|v| *v > 0.0));
     assert_close(&got, &want, 1e-4);
 }
 
