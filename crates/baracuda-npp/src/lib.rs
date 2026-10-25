@@ -177,7 +177,7 @@ pub mod image {
     ///
     /// Steps are in bytes between rows. Pass the pitch your allocator
     /// returned (typically `width * 4` for packed data, or the
-    /// pitched-alloc pitch from [`baracuda_runtime::memcpy2d::PitchedBuffer`]).
+    /// pitched-alloc pitch from `baracuda_runtime::memcpy2d::PitchedBuffer`).
     ///
     /// # Safety
     ///

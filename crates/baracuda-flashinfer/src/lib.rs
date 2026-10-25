@@ -19,36 +19,36 @@
 //!
 //! ## [`attention`] — paged-KV attention
 //!
-//! - [`BatchPagedDecodePlan`] — batched paged-KV **decode** (one query
+//! - `BatchPagedDecodePlan` — batched paged-KV **decode** (one query
 //!   row per request, KV history in a paged store). The core vLLM
 //!   serving primitive. f16 / bf16 / f32, head_dim ∈ {64, 128, 256}.
-//! - [`BatchPagedPrefillPlan`] — batched paged-KV **prefill** (multiple
+//! - `BatchPagedPrefillPlan` — batched paged-KV **prefill** (multiple
 //!   query rows per request, ragged via `q_indptr`, attending over the
 //!   paged history; causal or full; optional KV-split parallelism for
 //!   long-context / few-request). The prompt-ingestion primitive. f16 /
 //!   bf16.
-//! - [`BatchRaggedPrefillPlan`] — prefill over a **contiguous** (non-paged)
+//! - `BatchRaggedPrefillPlan` — prefill over a **contiguous** (non-paged)
 //!   ragged KV store (`kv_indptr`), for the not-yet-paged path.
-//! - [`PagedKvAppendPlan`] — decode-time KV-cache **append** (writes the
+//! - `PagedKvAppendPlan` — decode-time KV-cache **append** (writes the
 //!   freshly-computed K/V for the current token into the paged store).
-//! - [`CascadeAttentionPlan`] — LSE-aware pairwise **merge** of partial
+//! - `CascadeAttentionPlan` — LSE-aware pairwise **merge** of partial
 //!   attention states, the building block for prefix-cache / shared-prompt
 //!   reuse.
-//! - [`CascadeMergeStatesPlan`] — many-way (fan-in > 2) cascade merge, for
+//! - `CascadeMergeStatesPlan` — many-way (fan-in > 2) cascade merge, for
 //!   multi-level shared-prefix trees / overlapping prefix caches.
-//! - [`BatchPagedDecodeFp8Plan`] — paged decode with an **fp8** KV cache
+//! - `BatchPagedDecodeFp8Plan` — paged decode with an **fp8** KV cache
 //!   (e4m3 / e5m2), Q/O in f16/bf16. Halves KV bandwidth + footprint.
 //!
 //! ## [`sampling`] — sort-free token sampling + verification
 //!
-//! - [`TopKTopPSamplingPlan`] — top-K / top-P / min-P / combined
+//! - `TopKTopPSamplingPlan` — top-K / top-P / min-P / combined
 //!   top-K+top-P sampling directly from a probability tensor, with no
-//!   global sort. Select the variant via [`SamplerKind`].
-//! - [`PerRowSamplingPlan`] — the same samplers with per-request
+//!   global sort. Select the variant via `SamplerKind`.
+//! - `PerRowSamplingPlan` — the same samplers with per-request
 //!   thresholds supplied as device arrays.
-//! - [`SpeculativeSamplingPlan`] — speculative-decode accept/reject
+//! - `SpeculativeSamplingPlan` — speculative-decode accept/reject
 //!   verification (`ChainSpeculativeSampling`).
-//! - [`TokenPenaltyPlan`] — repetition / frequency / presence penalty
+//! - `TokenPenaltyPlan` — repetition / frequency / presence penalty
 //!   logit transform (native baracuda op; not feature-gated).
 //!
 //! # Feature gating
@@ -56,7 +56,7 @@
 //! The FlashInfer-backed kernels are behind the `flashinfer` cargo feature
 //! (OFF by default). With the feature off the plan types still exist and
 //! `select` / `can_implement` still validate shapes, but `run` returns
-//! `Error::Unsupported`. ([`TokenPenaltyPlan`] is a native baracuda op and
+//! `Error::Unsupported`. (`TokenPenaltyPlan` is a native baracuda op and
 //! runs regardless.) Enable the feature to compile the vendored kernels.
 //!
 //! # Example shape (paged decode)

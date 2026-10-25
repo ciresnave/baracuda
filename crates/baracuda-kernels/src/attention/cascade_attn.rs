@@ -23,7 +23,7 @@
 //!
 //! ## Variants
 //!
-//! - [`Self::merge_in_place`] — pairwise in-place merge:
+//! - `Self::merge_in_place` — pairwise in-place merge:
 //!   `(v, s) <- merge((v, s), (v_other, s_other))`. Fastest for the
 //!   common "merge prefix into per-request output" case.
 //! - Many-way merge via FlashInfer's `MergeStates` (cascade depth > 2)

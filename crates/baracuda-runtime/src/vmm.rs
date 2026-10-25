@@ -1,6 +1,6 @@
 //! Virtual memory management (Runtime API).
 //!
-//! Mirrors [`baracuda_driver::vmm`]. Workflow:
+//! Mirrors `baracuda_driver::vmm`. Workflow:
 //!
 //! 1. Reserve a VA range: [`address_reserve`].
 //! 2. Create a physical allocation: [`MemHandle::new`].

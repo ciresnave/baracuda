@@ -16,6 +16,16 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.23 - 2026-10-25
+
+### Fixed
+
+- Rustdoc: 172 broken intra-doc links across 23 crates repaired (unresolved links, public docs linking private items, `crate::driver` function/module ambiguity); doc text only, no code change (ROADMAP SA-18).
+
+### Changed
+
+- CI: new step `cargo doc --locked --no-deps --workspace --keep-going` under `DOCS_RS=1` (no nvcc), so the `[workspace.lints.rustdoc]` deny now covers every member, not just the 12 driver-free crates.
+
 ## 0.1.0-alpha.22 - 2026-10-25
 
 ### Added

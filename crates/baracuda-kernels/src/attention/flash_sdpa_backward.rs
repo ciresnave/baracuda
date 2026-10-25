@@ -28,7 +28,7 @@
 //! ## Phase 59b — FA2 BW backend
 //!
 //! `FlashSdpaBackwardPlan` mirrors [`super::FlashSdpaPlan`]'s
-//! [`BackendChoice`] machinery (Phase 42 + 59a):
+//! `BackendChoice` machinery (Phase 42 + 59a):
 //!
 //! - **Bespoke** (default) — the three-kernel deterministic pipeline
 //!   described above. f16 / bf16 / f32 / f64; `d_k ≤ 128`.
@@ -40,7 +40,7 @@
 //!   (`atomicAdd` into `dq_accum`); FA2's BW kernels are not
 //!   bit-stable run-to-run.
 //!
-//! The default routing heuristic ([`should_use_fa2_bw`]) is more
+//! The default routing heuristic (`should_use_fa2_bw`) is more
 //! permissive than the FW heuristic — BW is launch-dominated by the
 //! work-per-cell ratio rather than launch overhead, so we route
 //! through FA2 whenever it's *eligible* (f16/bf16 + supported head_dim

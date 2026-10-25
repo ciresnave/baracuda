@@ -4918,7 +4918,7 @@ unsafe extern "C" {
     /// **Aliasing (Phase 62)**: aliasing `y` with either input
     /// (`a == y` or `b == y`) is safe IF AND ONLY IF the aliased
     /// input's stride array equals `stride_y` element-for-element
-    /// (use [`baracuda_kernels_types::strides_equal`] to check). With
+    /// (use `baracuda_kernels_types::strides_equal` to check). With
     /// equal strides, each thread reads its own `off_y` cell from the
     /// aliased input then writes the same cell, identical structure
     /// to the contig binary case. With unequal strides, different
@@ -7102,7 +7102,7 @@ unsafe extern "C" {
     /// **Aliasing (Phase 62)**: aliasing `y` with any input (`a == y`,
     /// `b == y`, or `c == y`) is safe IF AND ONLY IF the aliased
     /// input's stride array equals `stride_y` element-for-element
-    /// (use [`baracuda_kernels_types::strides_equal`] to check). With
+    /// (use `baracuda_kernels_types::strides_equal` to check). With
     /// equal strides, each thread reads its own `off_y` cell from the
     /// aliased input then writes the same cell. With unequal strides
     /// (including the common broadcast-of-scalar case where the input
@@ -17728,7 +17728,7 @@ unsafe extern "C" {
 #[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
 unsafe extern "C" {
     /// Roll (cyclic shift along axes), f32. `shifts[d]` is the shift
-    /// amount on axis d (positive or negative, mod shape[d]).
+    /// amount on axis d (positive or negative, mod shape\[d\]).
     ///
     /// **NOT in-place safe** — thread `i` reads at source coord and
     /// writes at shifted dest coord; same-pointer aliasing is unsafe.
@@ -32164,7 +32164,7 @@ unsafe extern "C" {
     ///
     /// **Aliasing (Phase 62)**: aliasing `y` with `x` is safe IF AND
     /// ONLY IF `stride_x == stride_y` element-for-element (use
-    /// [`baracuda_kernels_types::strides_equal`] to check). With equal
+    /// `baracuda_kernels_types::strides_equal` to check). With equal
     /// strides, each thread reads its own `off` cell then writes the
     /// same cell, identical structure to the contig unary case. With
     /// unequal strides, different threads can read cells that other
@@ -51895,7 +51895,7 @@ unsafe extern "C" {
     ///
     /// `softmax_lse` is a load-bearing OUTPUT of this kernel and the
     /// load-bearing INPUT to the corresponding
-    /// [`baracuda_kernels_fa2_sdpa_backward_f16_run`]. Callers
+    /// `baracuda_kernels_fa2_sdpa_backward_f16_run`. Callers
     /// implementing differentiable attention (e.g. an autograd
     /// framework's `FlashAttn` op) MUST:
     ///
@@ -53214,7 +53214,7 @@ pub type cusolverDnParams_t = *mut c_void;
 
 /// ABI-compatible single-precision complex struct, matching `cuComplex`
 /// from `<cuComplex.h>` (interleaved real/imag `f32`). Identical layout
-/// to [`crate::cufftComplex`] and to the safe-side [`Complex32`] from
+/// to [`crate::cufftComplex`] and to the safe-side `Complex32` from
 /// `baracuda-kernels-types` — a `DeviceBuffer<Complex32>` can be cast
 /// to a `*mut cuComplex` for the cuSOLVER complex APIs without copy.
 #[repr(C)]
@@ -63356,7 +63356,7 @@ unsafe extern "C" {
     // `axis` selects which of the 4 dims indexes scale[] / zp[].
 
     /// `q[i] = clamp(round(x[i]/scale[c])+zp[c], qmin, qmax)` where c =
-    /// coord[axis]. f32 → s8.
+    /// coord`axis`. f32 → s8.
     pub fn baracuda_kernels_quantize_per_channel_f32_s8_run(
         numel: i64,
         shape4: *const i32,

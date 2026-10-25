@@ -8,7 +8,7 @@
 //! one Plan type per op category (unary / binary / ternary / gated /
 //! shape-layout), each parameterized on the scalar element type `T` and
 //! the tensor rank `N`. The op identity within a category is a runtime
-//! enum field on the descriptor (e.g. [`BinaryKind`]), dispatching to
+//! enum field on the descriptor (e.g. `BinaryKind`), dispatching to
 //! per-(op, dtype) kernel SKUs in `baracuda-kernels-sys` — exactly the
 //! shape used by the GEMM family's [`crate::EpilogueKind`].
 //!

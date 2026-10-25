@@ -22,7 +22,7 @@
 //!   conjugate-transpose adjoint of unitary `Q`).
 //! - `dtype ∈ {f32, f64, Complex64, Complex128}`. Complex variants
 //!   landed in Phase 26 and reuse the same WY-blocked kernel template
-//!   via the [`mul_T`] / [`conj_T`] element-arithmetic helpers in
+//!   via the `mul_T` / `conj_T` element-arithmetic helpers in
 //!   `baracuda_batched_ormqr.cuh`. Complex GEMMs go through cuBLAS
 //!   `C/ZgemmStridedBatched`; the second GEMM uses `transa = OP_C`
 //!   (conjugate-transpose) when applying `Q^H`, mirroring the real

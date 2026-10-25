@@ -153,7 +153,7 @@ pub fn version() -> Result<(i32, i32)> {
 /// Raw string flags are still accepted via
 /// [`Program::compile_raw`] / [`Program::compile`]. Use this struct when
 /// you want compile-time typo protection and IDE completion; its
-/// [`Self::into_raw`] converts to the `Vec<String>` the underlying API
+/// `Self::into_raw` converts to the `Vec<String>` the underlying API
 /// expects.
 ///
 /// # Example

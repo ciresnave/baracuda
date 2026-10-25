@@ -37,7 +37,7 @@ pub struct MultiMarginLossDescriptor {
 pub struct MultiMarginLossArgs<'a, T: Element> {
     /// Input tensor [N, C].
     pub input: TensorRef<'a, T, 2>,
-    /// Target tensor [N] i64 class indices (encoded as [N, 1]).
+    /// Target tensor \[N\] i64 class indices (encoded as [N, 1]).
     pub target: TensorRef<'a, i64, 2>,
     /// Output.
     pub out: TensorMut<'a, T, 2>,

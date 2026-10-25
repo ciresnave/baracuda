@@ -85,7 +85,7 @@ pub struct Fp8GemmArgs<'a, T: FpElement> {
 
 /// FP8 GEMM plan.
 ///
-/// Parameterized on `T: FpElement` ([`Fp8E4M3FN`] or [`Fp8E5M2`]). No
+/// Parameterized on `T: FpElement` (`Fp8E4M3FN` or `Fp8E5M2`). No
 /// bias-element generic — FP8 bias is always `f32`.
 #[derive(Debug)]
 pub struct Fp8GemmPlan<T: FpElement> {

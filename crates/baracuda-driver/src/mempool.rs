@@ -216,7 +216,7 @@ impl MemoryPool {
     /// Export an opaque blob that a peer process can import via
     /// [`MemoryPool::import_pointer`]. Both ends must share the same pool
     /// via its shareable-handle mechanism first (see
-    /// [`MemoryPool::export_to_shareable_handle`]).
+    /// `MemoryPool::export_to_shareable_handle`).
     pub fn export_pointer(&self, ptr: CUdeviceptr) -> Result<CUmemPoolPtrExportData> {
         let d = driver()?;
         let cu = d.cu_mem_pool_export_pointer()?;

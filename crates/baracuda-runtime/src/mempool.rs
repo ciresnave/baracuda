@@ -1,6 +1,6 @@
 //! Stream-ordered memory pools (Runtime API, CUDA 11.2+).
 //!
-//! Mirrors [`baracuda_driver::mempool`] — a pool is a device-backed
+//! Mirrors `baracuda_driver::mempool` — a pool is a device-backed
 //! allocator with a configurable release threshold, accessed via
 //! `cudaMallocFromPoolAsync` and returned with `cudaFreeAsync`.
 //! Each device exposes a default pool via [`default_pool`].

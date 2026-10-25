@@ -24,7 +24,7 @@
 //!   "input is log-prob" convention. Cells with `target == 0` contribute 0
 //!   (avoids `log(0)`). BW: `dinput = -target · scale`.
 //!
-//! ## Reduction modes ([`LossReduction`])
+//! ## Reduction modes (`LossReduction`)
 //!
 //! - `None`: output is per-cell — same shape as the loss surface
 //!   (`[numel]` for MSE / BCE / KLDiv; `[n_rows]` for NLL / CrossEntropy).

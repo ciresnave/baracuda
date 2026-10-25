@@ -87,7 +87,7 @@ pub struct FlashDecodingDescriptor {
     /// MQA. `num_kv_heads < num_heads && > 1` → GQA.
     pub num_kv_heads: i32,
     /// K/V sequence length (the full attended prefix, not just the new
-    /// step). Arbitrary; the split-K factor adapts via [`CHUNK_K`].
+    /// step). Arbitrary; the split-K factor adapts via `CHUNK_K`.
     pub k_len: i32,
     /// Per-head feature dimension. `d_q == d_k == d_v` is enforced —
     /// the decode regime doesn't justify the d_k != d_v complication
@@ -209,7 +209,7 @@ pub struct FlashDecodingArgs<'a, T: Element> {
 /// — both of those tile the Q dimension and waste work when seq_q < 64.
 ///
 /// **When to use**: autoregressive decoder inference token loop. After
-/// the prefill step (which uses [`FlashSdpaPlan`] with `fa2` for the
+/// the prefill step (which uses `FlashSdpaPlan` with `fa2` for the
 /// long initial context), each generated token calls this plan with
 /// `seq_q = 1` and the full grown KV cache.
 ///

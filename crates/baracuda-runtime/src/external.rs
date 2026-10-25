@@ -1,6 +1,6 @@
 //! External memory / semaphore interop via the Runtime API.
 //!
-//! Mirrors [`baracuda_driver::external`]. Because `cudaExternalMemory_t`
+//! Mirrors `baracuda_driver::external`. Because `cudaExternalMemory_t`
 //! and `CUexternalMemory` are typedef-compatible (same underlying C
 //! pointer), the two wrappers are interchangeable at the handle level —
 //! this module exists so Runtime-API users don't have to pull in the

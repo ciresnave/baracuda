@@ -1,6 +1,6 @@
 //! Device enumeration + queries via the Runtime API.
 //!
-//! Unlike [`baracuda_driver::Device`], a [`Device`] in the Runtime API is
+//! Unlike `baracuda_driver::Device`, a [`Device`] in the Runtime API is
 //! just an ordinal — there's no separate `CUdevice` handle. Contexts are
 //! implicit (the "primary context" per device) and are shared with the
 //! Driver API on the same device.

@@ -3,7 +3,7 @@
 //! Clean-room hand-port of facebookresearch/xFormers
 //! `components/attention/blocksparse.py` algorithmic reference
 //! (BSD-3-Clause). See
-//! [`crates/baracuda-kernels-sys/vendor/xformers/VENDOR.md`] for the
+//! `crates/baracuda-kernels-sys/vendor/xformers/VENDOR.md` for the
 //! attribution + cherry-pick scope documentation.
 //!
 //! ## Algorithm

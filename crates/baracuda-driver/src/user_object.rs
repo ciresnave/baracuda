@@ -3,7 +3,7 @@
 //! Graphs frequently hold references to external resources (allocators,
 //! file handles, RAII guards) that must be kept alive for the graph's
 //! lifetime. A [`UserObject`] is a refcounted handle + destructor that
-//! you can *attach* to a graph via [`Graph::retain_user_object`]; when
+//! you can *attach* to a graph via `Graph::retain_user_object`; when
 //! the graph releases the last reference, the destructor runs.
 //!
 //! The Rust safe wrapper owns a `Box<dyn FnOnce() + Send>` trampoline so

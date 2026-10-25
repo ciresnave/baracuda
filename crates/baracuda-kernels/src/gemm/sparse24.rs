@@ -2,7 +2,7 @@
 //!
 //! Clean-room hand-port of facebookresearch/xFormers `sparse24/`
 //! algorithmic reference (BSD-3-Clause). See
-//! [`crates/baracuda-kernels-sys/vendor/xformers/VENDOR.md`] for the
+//! `crates/baracuda-kernels-sys/vendor/xformers/VENDOR.md` for the
 //! attribution + cherry-pick scope documentation.
 //!
 //! ## 2:4 pattern

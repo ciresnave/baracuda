@@ -3495,7 +3495,7 @@ fn cublas_dtype_for(kind: ElementKind) -> Option<baracuda_cublas_sys::functions:
 /// - [`backend`](Self::backend) — which backend (CUTLASS / cuBLAS) was
 ///   picked. Phase 30 added the cuBLAS fast-path for f16/bf16 low-M
 ///   decode shapes; the heuristic is documented on
-///   [`should_use_cublas_for_fp`](self::should_use_cublas_for_fp).
+///   `should_use_cublas_for_fp`.
 #[derive(Debug)]
 pub struct GemmPlan<T: CutlassElement> {
     desc: GemmDescriptor,
@@ -3513,7 +3513,7 @@ impl<T: CutlassElement> GemmPlan<T> {
     /// enabled and the device actually is Hopper), and the Phase-30
     /// cuBLAS fast-path. Build features filter what kernels are
     /// *available*; the device cap and the f16/bf16-low-M heuristic
-    /// decide what to *use*. See [`should_use_cublas_for_fp`] for the
+    /// decide what to *use*. See `should_use_cublas_for_fp` for the
     /// dispatch rules. Override the heuristic via
     /// [`PlanPreference::prefer_backend`].
     pub fn select(stream: &Stream, desc: &GemmDescriptor, pref: PlanPreference) -> Result<Self> {
@@ -3629,7 +3629,7 @@ impl<T: CutlassElement> GemmPlan<T> {
     ///
     /// CUTLASS (the default path) or cuBLAS (the Phase-30 fast-path
     /// for f16/bf16 low-M decode shapes). The dispatch heuristic is
-    /// documented on [`should_use_cublas_for_fp`].
+    /// documented on `should_use_cublas_for_fp`.
     pub fn backend(&self) -> BackendKind {
         self.backend.as_public()
     }

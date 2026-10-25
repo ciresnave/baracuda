@@ -233,7 +233,7 @@ impl<T: Element> EigPlan<T> {
 
     /// Device workspace size in bytes (cuSOLVER Xgeev's
     /// `workspaceInBytesOnDevice`). Populated lazily by
-    /// [`query_workspace_size`].
+    /// `query_workspace_size`.
     #[inline]
     pub fn workspace_size(&self) -> usize {
         self.workspace_bytes_device.get()
@@ -241,7 +241,7 @@ impl<T: Element> EigPlan<T> {
 
     /// Host workspace size in bytes (cuSOLVER Xgeev's
     /// `workspaceInBytesOnHost`). Populated lazily by
-    /// [`query_workspace_size`]. Allocated transparently by the plan on
+    /// `query_workspace_size`. Allocated transparently by the plan on
     /// each `run` from a `Vec<u8>` — not exposed via `Workspace`.
     #[inline]
     pub fn host_workspace_size(&self) -> usize {

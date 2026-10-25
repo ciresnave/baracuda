@@ -16,7 +16,7 @@
 //! - `o`        : `[total_num_rows, num_qo_heads, head_dim]` element `T`.
 //! - `lse`      : `[total_num_rows, num_qo_heads]` f32.
 //!
-//! Constraints + synchronization match [`BatchPagedPrefillPlan`]:
+//! Constraints + synchronization match `BatchPagedPrefillPlan`:
 //! `head_dim ∈ {64,128,256}`, integer GQA, `T ∈ {f16, bf16}`, causal or
 //! full, optional KV-split, synchronous `run`.
 
@@ -52,7 +52,7 @@ pub struct BatchRaggedPrefillDescriptor {
     pub sm_scale: f32,
     /// Apply causal masking.
     pub causal: bool,
-    /// Opt into KV-split parallelism (see [`BatchPagedPrefillPlan`]).
+    /// Opt into KV-split parallelism (see `BatchPagedPrefillPlan`).
     pub enable_kv_split: bool,
     /// Element type of q / k / v / o.
     pub element: ElementKind,

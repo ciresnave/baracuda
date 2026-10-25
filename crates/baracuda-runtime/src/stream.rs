@@ -231,7 +231,7 @@ impl Stream {
 
     /// # Safety
     ///
-    /// Same as [`write_value_32`].
+    /// Same as `write_value_32`.
     pub unsafe fn write_value_64(
         &self,
         addr: *mut core::ffi::c_void,
@@ -267,7 +267,7 @@ impl Stream {
 
     /// # Safety
     ///
-    /// Same as [`wait_value_32`].
+    /// Same as `wait_value_32`.
     pub unsafe fn wait_value_64(
         &self,
         addr: *mut core::ffi::c_void,

@@ -11,7 +11,7 @@
 //!
 //! Dtype coverage spans the entire baracuda element bank via
 //! byte-width dispatch (`sizeof(T) ∈ {1, 2, 4, 8, 16}`), with a
-//! separate nibble-packed kernel for [`S4`] / [`U4`]. Bound is
+//! separate nibble-packed kernel for `S4` / `U4`. Bound is
 //! `T: DeviceRepr + Copy + 'static` (same as [`TensorRef`]) so the
 //! same plan covers `Element`-family, `IntElement`-family, and
 //! `FpElement`-family dtypes uniformly.

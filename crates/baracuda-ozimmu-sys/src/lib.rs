@@ -8,10 +8,10 @@
 //! DGEMM at the cost of leaving the bit-exact-DGEMM accuracy contract.
 //!
 //! This crate is the FFI shim — the safe wrapper lives in
-//! [`baracuda-ozimmu`]. Most baracuda callers will not touch this
+//! `baracuda-ozimmu`. Most baracuda callers will not touch this
 //! crate directly; they opt into the Ozaki backend via
 //! `PlanPreference::prefer_backend = Some(BackendKind::Ozaki { slices: ... })`
-//! on a [`baracuda_kernels::GemmPlan`] (gated behind the `ozimmu`
+//! on a `baracuda_kernels::GemmPlan` (gated behind the `ozimmu`
 //! cargo feature on `baracuda-kernels`).
 //!
 //! ## What this crate exposes
@@ -69,7 +69,7 @@ pub type OzimmuHandleT = *mut OzimmuHandle;
 /// - `18` — `fp64_int8_auto` (runtime selection based on the
 ///   handle's `auto_mantissa_loss_threshold`)
 ///
-/// The safe wrapper in [`baracuda-ozimmu`] re-exports these as an
+/// The safe wrapper in `baracuda-ozimmu` re-exports these as an
 /// `OzakiSlices` enum.
 pub type ComputeMode = c_int;
 

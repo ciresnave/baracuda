@@ -2344,7 +2344,7 @@ pub struct CUDA_EXTERNAL_SEMAPHORE_SIGNAL_PARAMS {
     /// - [0..8]   fence.value (u64) — the fence value to signal.
     /// - [8..16]  nvSciSync.{fence|reserved} (pointer or u64).
     /// - [16..24] keyedMutex.key (u64).
-    /// - [24..72] reserved[12] u32.
+    /// - [24..72] reserved\[12\] u32.
     pub params: [u64; 9],
     /// `flags` field.
     pub flags: core::ffi::c_uint,

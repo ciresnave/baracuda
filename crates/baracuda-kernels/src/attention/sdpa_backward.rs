@@ -62,7 +62,7 @@ pub struct SdpaBackwardArgs<'a, T: Element> {
     /// Value tensor used in FW — shape `[B, H, K, D_v]`.
     pub v: TensorRef<'a, T, 4>,
     /// Saved softmax output from FW — shape `[B, H, Q, K]`. This is
-    /// the `attn` field returned by [`SdpaPlan::run`].
+    /// the `attn` field returned by `SdpaPlan::run`.
     pub attn: TensorRef<'a, T, 4>,
     /// Upstream gradient on the FW output — shape `[B, H, Q, D_v]`.
     pub dy: TensorRef<'a, T, 4>,

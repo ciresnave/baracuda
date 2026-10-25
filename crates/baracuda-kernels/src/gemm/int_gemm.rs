@@ -42,7 +42,7 @@ impl<T: IntElement, BT: BiasElement> core::fmt::Debug for IntGemmPlan<T, BT> {
 
 /// Unified integer GEMM plan.
 ///
-/// `T: IntElement` is the kernel element type ([`S8`] / [`U8`]).
+/// `T: IntElement` is the kernel element type (`S8` / `U8`).
 /// `BT: BiasElement` is the bias broadcast type (`f32` / `i32`),
 /// meaningful only for the `Bias*` [`EpilogueKind`] variants.
 pub struct IntGemmPlan<T: IntElement, BT: BiasElement = f32> {

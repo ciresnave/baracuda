@@ -1,7 +1,7 @@
 //! # baracuda-megatron
 //!
 //! Megatron-LM-style tensor-parallel (TP) primitives on top of
-//! [`baracuda-cublas`] (local GEMM) and [`baracuda-nccl`] (cross-rank
+//! `baracuda-cublas` (local GEMM) and `baracuda-nccl` (cross-rank
 //! collectives). Pure-composition crate — **no new CUDA kernels**.
 //!
 //! ## Algorithmic reference
@@ -29,7 +29,7 @@
 //!
 //! ## Why a separate crate
 //!
-//! Mirrors the [`baracuda-optim`] / [`baracuda-transformer-engine`]
+//! Mirrors the `baracuda-optim` / `baracuda-transformer-engine`
 //! pattern from Phase 49 / Phase 55 — deliberate scope expansion that
 //! lives in its own crate so:
 //!

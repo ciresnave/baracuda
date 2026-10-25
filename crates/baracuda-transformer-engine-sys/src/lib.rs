@@ -5,7 +5,7 @@
 //! (Apache-2.0) FP8 cast/transpose + delayed-scaling recipe primitives.
 //!
 //! This crate is the FFI shim — the safe wrapper lives in
-//! [`baracuda-transformer-engine`]. Most baracuda callers will not
+//! `baracuda-transformer-engine`. Most baracuda callers will not
 //! touch this crate directly; they go through the safe wrapper's
 //! `Fp8Recipe` / `Fp8CastPlan` / `Fp8DequantPlan` types, which are
 //! re-exported from `baracuda_kernels::transformer_engine` when the

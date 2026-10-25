@@ -4,9 +4,9 @@
 //! input shape (in contrast to reductions; same shape relation as
 //! scans). Today wired:
 //!
-//! - **Softmax** (FW + BW) — `y[k] = exp(x[k] - max(x)) / Σ_j exp(x[j]
+//! - **Softmax** (FW + BW) — `y\[k\] = exp(x\[k\] - max(x)) / Σ_j exp(x\[j\]
 //!   - max(x))`. Numerically stable via max subtraction. BW formula:
-//!   `dx[k] = y[k] · (dy[k] - Σ_j y[j] · dy[j])`. Needs saved
+//!   `dx\[k\] = y\[k\] · (dy\[k\] - Σ_j y\[j\] · dy\[j\])`. Needs saved
 //!   forward output `y`.
 //!
 //! - **LogSoftmax** (FW + BW) — `y[k] = x[k] - logsumexp(x)`. BW:
