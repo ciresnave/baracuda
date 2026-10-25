@@ -39,7 +39,7 @@ declare -A CUDA_FEATURES=( [baracuda-optim]="sm80 sm89 sm90a" )
 CUDA_ONLY=(
   baracuda-cutlass baracuda-cutlass-kernels-sys baracuda-flashinfer-sys
   baracuda-flashinfer baracuda-kernels-sys baracuda-kernels baracuda-tensorrt-sys
-  baracuda-kernels-bench
+  baracuda-tensorrt-builder baracuda-kernels-bench
 )
 # Crates whose build.rs invokes nvcc UNCONDITIONALLY (graph membership is enough —
 # no feature guard). If an ALL_FEATURES `--all-features` graph pulls one of these,

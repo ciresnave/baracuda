@@ -2,8 +2,9 @@
 //!
 //! Scope is inference only: load a serialized engine (e.g. produced by
 //! `trtexec` or the TRT Python API), build an execution context, bind tensor
-//! addresses, and enqueue execution on a CUDA stream. Engine construction
-//! (the builder / network definition API) is C++-only and is not wrapped here.
+//! addresses, and enqueue execution on a CUDA stream. Engine construction (the
+//! builder / network definition API) lives in the sibling crate
+//! `baracuda-tensorrt-builder`.
 //!
 //! # How it links: dynamic libnvinfer + a C++ shim
 //!
@@ -115,13 +116,17 @@ impl Dims {
     pub fn as_slice(&self) -> &[i64] {
         &self.dims[..self.rank]
     }
-    fn to_raw(self) -> sys::trtDims_t {
+    /// The raw `trtDims_t` (for sibling crates that talk to the shim).
+    #[doc(hidden)]
+    pub fn to_raw(self) -> sys::trtDims_t {
         sys::trtDims_t {
             nb_dims: self.rank as i32,
             d: self.dims,
         }
     }
-    fn from_raw(raw: sys::trtDims_t) -> Self {
+    /// Build from a raw `trtDims_t` (for sibling crates that talk to the shim).
+    #[doc(hidden)]
+    pub fn from_raw(raw: sys::trtDims_t) -> Self {
         let mut out = Dims {
             dims: [0; sys::TRT_MAX_DIMS],
             rank: raw.nb_dims.max(0) as usize,
@@ -144,10 +149,25 @@ static NEXT_LOGGER_ID: AtomicU64 = AtomicU64::new(0);
 /// freed (stored as an address so the static is `Sync`).
 static GLOBAL_ILOGGER: OnceLock<usize> = OnceLock::new();
 
-unsafe extern "C" fn log_trampoline(severity: Severity, msg: *const c_char, _user: *mut c_void) {
+/// Map the integer TensorRT passes to a [`Severity`]. A value outside `0..=4` is
+/// not a severity TensorRT documents; it is reported as `InternalError` so it is
+/// never filtered out as noise.
+fn severity_from_raw(raw: i32) -> Severity {
+    match raw {
+        0 => Severity::InternalError,
+        1 => Severity::Error,
+        2 => Severity::Warning,
+        3 => Severity::Info,
+        4 => Severity::Verbose,
+        _ => Severity::InternalError,
+    }
+}
+
+unsafe extern "C" fn log_trampoline(raw_severity: i32, msg: *const c_char, _user: *mut c_void) {
     if msg.is_null() {
         return;
     }
+    let severity = severity_from_raw(raw_severity);
     // SAFETY: TensorRT passes a NUL-terminated message that stays valid for the call.
     let text = unsafe { CStr::from_ptr(msg) }.to_string_lossy();
     // Snapshot under the lock and call outside it, so a callback that itself
@@ -488,6 +508,15 @@ pub struct HostMemory {
 }
 
 impl HostMemory {
+    /// Adopt a TensorRT-owned `IHostMemory*`, which this value then frees on drop.
+    ///
+    /// # Safety
+    /// `raw` must be a live `IHostMemory*` that nothing else will free.
+    #[doc(hidden)]
+    pub unsafe fn from_raw(raw: sys::trtIHostMemory_t) -> Self {
+        Self { raw }
+    }
+
     /// Size of the buffer in bytes.
     pub fn len(&self) -> Result<usize> {
         Ok(unsafe { sys::trtHostMemorySize(self.raw) })
@@ -626,5 +655,46 @@ impl ExecutionContext<'_> {
 impl Drop for ExecutionContext<'_> {
     fn drop(&mut self) {
         unsafe { sys::trtExecutionContextDestroy(self.raw) };
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn severity_from_raw_maps_every_documented_value_and_clamps_the_rest() {
+        let want = [
+            Severity::InternalError,
+            Severity::Error,
+            Severity::Warning,
+            Severity::Info,
+            Severity::Verbose,
+        ];
+        for (raw, severity) in want.iter().enumerate() {
+            assert_eq!(severity_from_raw(raw as i32), *severity);
+        }
+        for raw in [-1, 5, 99, i32::MAX, i32::MIN] {
+            assert_eq!(severity_from_raw(raw), Severity::InternalError, "{raw}");
+        }
+    }
+
+    /// The trampoline survives a severity no enum variant has, and delivers it
+    /// as `InternalError` to a live logger.
+    #[test]
+    fn trampoline_accepts_an_out_of_range_severity() {
+        use std::sync::Mutex as StdMutex;
+        let seen: Arc<StdMutex<Vec<Severity>>> = Arc::default();
+        let sink = Arc::clone(&seen);
+        let id = NEXT_LOGGER_ID.fetch_add(1, Ordering::Relaxed);
+        LOGGERS
+            .lock()
+            .unwrap()
+            .push((id, Arc::new(move |s, _| sink.lock().unwrap().push(s))));
+        let msg = c"boom";
+        // SAFETY: `msg` is a NUL-terminated literal and `user` is ignored.
+        unsafe { log_trampoline(99, msg.as_ptr(), core::ptr::null_mut()) };
+        LOGGERS.lock().unwrap().retain(|(i, _)| *i != id);
+        assert_eq!(*seen.lock().unwrap(), vec![Severity::InternalError]);
     }
 }

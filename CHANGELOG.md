@@ -16,6 +16,17 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.33 - 2026-10-25
+
+### Added
+
+- New crate `baracuda-tensorrt-builder` (ROADMAP SA-33, builder row): `Builder`, `BuilderConfig` (memory-pool limits, builder flags, optimization level), `Network` with layers for elementwise, activation, unary, matrix multiply, constant (`f32` / `i32`, weights kept alive until build), shuffle (reshape and transposes), reduce, softmax, concatenation, cast and identity, and `Builder::build_serialized`, whose plan `Runtime::deserialize_engine` loads. The shim gained the matching `trtBuilder*`, `trtConfig*`, `trtNetwork*`, `trtLayer*` and `trtTensor*` symbols; the loader resolves `createInferBuilder_INTERNAL`. The API needs the `shim` feature. Device-verified on sm_89 (RTX 4070), TensorRT 10.16.1.11: `cargo gpu-test -p baracuda-tensorrt-builder --features shim,device-tests`, 8 passed, 0 failed, 0 declared skips; each network's output is compared with a CPU reference (elementwise sum, matmul + ReLU, constant * x then sqrt, softmax, transpose + reduce, concatenation), and a network with no outputs fails to build while an identical one with an output builds.
+- Not yet in the builder (later SA-33 rows): optimization profiles, the ONNX parser, INT8 calibration, the plugin registry, convolution / pooling and the remaining layer types.
+
+### Fixed
+
+- `baracuda-tensorrt`: the logger callback took TensorRT's severity as a Rust enum by value, so an out-of-range value from C++ would have been undefined behaviour (Pip review of #262). `trtLogCallback` now takes an `i32`; `severity_from_raw` maps `0..=4` and reports anything else as `InternalError`. Tests: `severity_from_raw_maps_every_documented_value_and_clamps_the_rest` and `trampoline_accepts_an_out_of_range_severity` (calls the trampoline with 99).
+
 ## 0.1.0-alpha.32 - 2026-10-25
 
 Docs only. No code, no device run.
