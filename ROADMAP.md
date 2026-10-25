@@ -2081,6 +2081,7 @@ CireSnave, verbatim (relayed by the PM): "Our Baracuda project was already hande
 - **SA-40 CUTLASS parser.** held(Unpopped IR design doc: module interface). New work, no design yet; sibling of `baracuda-cuda-parse`. Do not start before Unpopped publishes the interface.
 - **SA-41 CUTLASS emitter.** held(Unpopped IR design doc). Ruled by the PM 2026-10-25 (option c, relayed): emits CUTLASS C++ source (template instantiations + EVT) for IR nodes that map to a CUTLASS collective, raw CUDA otherwise; `baracuda-cutlass`'s runtime wrapper stays as is. Module interface comes from Unpopped's design doc.
 - **SA-42 Hand over the CUDA parse half still in Unpopped `convert.rs`.** held(KISS registry repoint). Moves into `baracuda-cuda-parse` after the repoint lands.
+- **SA-43 Spell `Fma` in the CUDA emitter (Unpopped 0.23.0, breaking).** open, blocked on Unpopped#125 merging. `ScalarExpr`/`PatternError` gain `Fma` variants: add an arm to every exhaustive match; `Lowering::fma` defaults to a typed decline, so the emitter compiles but declines Fma until spelled. Emit `__fmaf_rn(a,b,c)` for f32/f32s and `__fma_rn` for f64; keep f16/bf16 declined (a half FMA rounds twice). Contract: ONE rounding, never mul-then-add. Tracking Unpopped#112/#113.
 
 ### Provenance, docs and low-priority
 
