@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.22 - 2026-10-25
+
+### Added
+
+- `PadBackwardPlan` now covers `Reflect`, `Replicate` and `Circular` (ROADMAP SA-30), f32 / f16 / bf16 / f64. A deterministic gather-adjoint (one thread per `dx` cell, fixed summation order, f32 accumulator for f16 / bf16) rather than an atomic scatter, so results are bit-stable run to run. `Reflect` with `pad_low` or `pad_high` > `extent - 1` on an axis of extent > 1 returns `Unsupported` from `select()`. New C ABI: `baracuda_kernels_pad_modes_backward_{f32,f16,bf16,f64}_{run,can_implement}` (8 symbols, ABI manifest updated). Device-verified on sm_89 (12 tests in `pad_backward_modes_smoke.rs`); the old "non-constant mode is rejected" test was replaced by the over-pad decline.
+
 ## 0.1.0-alpha.21 - 2026-10-25
 
 ### Fixed

@@ -287,18 +287,3 @@ fn pad_backward_f64_3d() {
         assert_eq!(g.to_bits(), e.to_bits(), "f64 pad BW mismatch @ {i}");
     }
 }
-
-// Validation guard — reject non-constant modes.
-#[test]
-fn pad_backward_rejects_non_constant_mode() {
-    let (_ctx, stream) = setup();
-    let desc = PadBackwardDescriptor {
-        mode: PadMode::Reflect,
-        input_shape: [4i32, 4],
-        pad_low: [1i32, 1],
-        pad_high: [1i32, 1],
-        element: ElementKind::F32,
-    };
-    let res = PadBackwardPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default());
-    assert!(res.is_err(), "Reflect-mode BW select should fail");
-}

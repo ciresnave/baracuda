@@ -90,7 +90,7 @@ measurement; the on-device bench gate (v1) and the Fuel `dispatch_record` feed
 | `FlipPlan<T, N>` | Bespoke | FP-family | rank N | ✓ | ✓ via `FlipBackwardPlan` | BW is involution (reuses FW kernel with same flip axes). |
 | `RollPlan<T, N>` | Bespoke | FP-family | rank N | ✓ | ✓ via `RollBackwardPlan` | BW reuses FW kernel with negated shifts. |
 | `PermutePlan<T, N>` | Bespoke | FP-family | rank N | ✓ | ✓ via `PermuteBackwardPlan` | BW reuses FW kernel with inverse permutation. |
-| `PadPlan<T, N>` | Bespoke | FP-family | rank N | ✓ | ✓ via `PadBackwardPlan` (Constant mode only) | Modes: `{Constant, Reflect, Replicate, Circular}` (Reflect/Replicate/Circular = f16 ∪ f32 ∪ f64 only — bf16 deferred). BW only for Constant (slice operation). |
+| `PadPlan<T, N>` | Bespoke | FP-family | rank N | ✓ | ✓ via `PadBackwardPlan` (all four modes; Reflect needs pad <= extent - 1) | Modes: `{Constant, Reflect, Replicate, Circular}` (Reflect/Replicate/Circular = f16 ∪ f32 ∪ f64 only — bf16 deferred). BW only for Constant (slice operation). |
 | `RepeatPlan<T, N>` | Bespoke | `{f32, f16, f64}` (no bf16) | rank N | ✓ | ✓ via `RepeatBackwardPlan` | f16/f64 added in Phase 3.5 fanout. |
 | `ConcatPlan<T, N>` | Bespoke | FP-family | rank N | ✓ | ✓ via `ConcatBackwardPlan` | Multi-input concat along one axis. |
 | `FillPlan<T>` | Bespoke | `{f32, f64, f16, bf16, i32, i64}` | numel ≥ 0 | ✓ | N/A | Scalar fill. No Bool. |

@@ -2434,6 +2434,186 @@ __host__ inline int32_t launch_repeat_backward(
 }
 
 // =============================================================================
+// Pad backward — Reflect / Replicate / Circular (ROADMAP SA-30)
+// =============================================================================
+//
+// Adjoint of `pad_{reflect,replicate,circular}_kernel`: several `dy` cells
+// can map to one input coord, so `dx[j] = sum of dy[c]` over the preimage
+// `{c : fwd_map(c - pad_low) == j}`. Formulated as a GATHER (one thread per
+// `dx` cell) rather than an atomicAdd scatter, so the summation order is
+// fixed and the result is deterministic and bit-stable run to run. f16 /
+// bf16 accumulate in float (same `RepeatBwAcc` mapping as repeat backward).
+//
+// The preimage of coord `j` on one axis is the union of at most three
+// arithmetic progressions `{start + k*step : 0 <= k < count}`:
+//
+//   Replicate (extent e > 1):  j == 0      -> [0, pad_low]
+//                              j == e - 1  -> [e-1+pad_low, out)
+//                              otherwise   -> {j + pad_low}
+//   Reflect   (e > 1):         {j + pad_low}                      (center)
+//                              {pad_low - j}      if 1 <= j <= pad_low   (left mirror)
+//                              {2e-2-j+pad_low}   if e-1-pad_high <= j <= e-2 (right mirror)
+//   Circular:                  {c0 + k*e}, c0 = (j + pad_low) mod e
+//   extent == 1 (Reflect / Replicate): every out coord maps to 0 -> [0, out)
+//
+// The preimage over all axes is the product of the per-axis sets; the
+// kernel walks it in row-major order. Reflect requires pad_low, pad_high
+// <= e - 1 (a single reflection, the PyTorch contract); the forward kernel
+// clamps beyond that and the host launcher declines it (status 3).
+
+constexpr int32_t PAD_BW_REFLECT   = 0;
+constexpr int32_t PAD_BW_REPLICATE = 1;
+constexpr int32_t PAD_BW_CIRCULAR  = 2;
+
+struct PadBwAxis {
+    int64_t start[3];
+    int64_t count[3];
+    int64_t step[3];
+};
+
+__device__ __forceinline__ void pad_bw_axis(
+    int32_t mode, int64_t j, int64_t e, int64_t pl, int64_t os, PadBwAxis& a)
+{
+    for (int p = 0; p < 3; ++p) { a.start[p] = 0; a.count[p] = 0; a.step[p] = 1; }
+    int64_t ph = os - e - pl;
+    if (mode == PAD_BW_CIRCULAR) {
+        int64_t c0 = (j + pl) % e;
+        a.start[0] = c0;
+        a.count[0] = (c0 < os) ? ((os - 1 - c0) / e + 1) : 0;
+        a.step[0]  = e;
+    } else if (e == 1) {
+        a.start[0] = 0;
+        a.count[0] = os;
+    } else if (mode == PAD_BW_REPLICATE) {
+        if (j == 0) {
+            a.start[0] = 0;
+            a.count[0] = pl + 1;
+        } else if (j == e - 1) {
+            a.start[0] = e - 1 + pl;
+            a.count[0] = ph + 1;
+        } else {
+            a.start[0] = j + pl;
+            a.count[0] = 1;
+        }
+    } else {
+        a.start[0] = j + pl;
+        a.count[0] = 1;
+        if (j >= 1 && j <= pl) {
+            a.start[1] = pl - j;
+            a.count[1] = 1;
+        }
+        if (j <= e - 2 && j >= e - 1 - ph) {
+            a.start[2] = 2 * e - 2 - j + pl;
+            a.count[2] = 1;
+        }
+    }
+}
+
+template <typename T>
+__global__ void pad_modes_backward_kernel(
+    const T* __restrict__ dy,
+    T* __restrict__ dx,
+    int64_t input_numel,
+    int32_t rank,
+    int32_t mode,
+    DimsI32 input_shape,
+    DimsI32 output_shape,
+    DimsI32 pad_low,
+    DimsI64 stride_dy,
+    DimsI64 stride_dx)
+{
+    using AccT = typename RepeatBwAcc<T>::type;
+    int64_t tid  = (int64_t)blockIdx.x * (int64_t)blockDim.x + (int64_t)threadIdx.x;
+    int64_t step = (int64_t)gridDim.x  * (int64_t)blockDim.x;
+    for (int64_t i = tid; i < input_numel; i += step) {
+        PadBwAxis axes[MAX_RANK];
+        int64_t n_axis[MAX_RANK];
+        int64_t linear = i;
+        int64_t off_dx = 0;
+        int64_t total = 1;
+        for (int d = rank - 1; d >= 0; --d) {
+            int32_t in_s = input_shape.v[d];
+            int64_t coord = (in_s == 0) ? 0 : (linear % (int64_t)in_s);
+            if (in_s != 0) linear /= (int64_t)in_s;
+            off_dx += coord * stride_dx.v[d];
+            pad_bw_axis(mode, coord, (int64_t)in_s, (int64_t)pad_low.v[d],
+                        (int64_t)output_shape.v[d], axes[d]);
+            n_axis[d] = axes[d].count[0] + axes[d].count[1] + axes[d].count[2];
+            total *= n_axis[d];
+        }
+        AccT acc = AccT(0);
+        for (int64_t t = 0; t < total; ++t) {
+            int64_t rem = t;
+            int64_t off_dy = 0;
+            for (int d = rank - 1; d >= 0; --d) {
+                int64_t u = rem % n_axis[d];
+                rem /= n_axis[d];
+                int p = 0;
+                while (u >= axes[d].count[p]) { u -= axes[d].count[p]; ++p; }
+                off_dy += (axes[d].start[p] + u * axes[d].step[p]) * stride_dy.v[d];
+            }
+            acc += repeat_bw_load_as_acc<T>(dy[off_dy]);
+        }
+        dx[off_dx] = repeat_bw_store_from_acc<T>(acc);
+    }
+}
+
+// Status: 0 ok, 2 invalid, 3 unsupported (Reflect pad > extent - 1), 5 launch.
+__host__ inline int32_t pad_modes_backward_check(
+    int32_t rank, int32_t mode,
+    const int32_t* input_shape_host,
+    const int32_t* output_shape_host,
+    const int32_t* pad_low_host)
+{
+    if (rank < 0 || rank > MAX_RANK) return 2;
+    if (mode < PAD_BW_REFLECT || mode > PAD_BW_CIRCULAR) return 2;
+    for (int i = 0; i < rank; ++i) {
+        int64_t e  = input_shape_host[i];
+        int64_t pl = pad_low_host[i];
+        int64_t ph = (int64_t)output_shape_host[i] - e - pl;
+        if (e < 0 || pl < 0 || ph < 0) return 2;
+        if (mode == PAD_BW_REFLECT && e > 1 && (pl > e - 1 || ph > e - 1)) return 3;
+    }
+    return 0;
+}
+
+template <typename T>
+__host__ inline int32_t launch_pad_modes_backward(
+    const T* dy, T* dx,
+    int64_t input_numel,
+    int32_t rank,
+    int32_t mode,
+    const int32_t* input_shape_host,
+    const int32_t* output_shape_host,
+    const int32_t* pad_low_host,
+    const int64_t* stride_dy_host,
+    const int64_t* stride_dx_host,
+    cudaStream_t stream)
+{
+    int32_t chk = pad_modes_backward_check(
+        rank, mode, input_shape_host, output_shape_host, pad_low_host);
+    if (chk != 0) return chk;
+    DimsI32 in_shape = {}, out_shape = {}, plow = {};
+    DimsI64 sdy = {}, sdx = {};
+    for (int i = 0; i < rank; ++i) {
+        in_shape.v[i]  = input_shape_host[i];
+        out_shape.v[i] = output_shape_host[i];
+        plow.v[i]      = pad_low_host[i];
+        sdy.v[i]       = stride_dy_host[i];
+        sdx.v[i]       = stride_dx_host[i];
+    }
+    constexpr int kBlock = 256;
+    constexpr int64_t kMaxBlocks = 65535;
+    int64_t blocks_i64 = (input_numel + kBlock - 1) / kBlock;
+    int blocks = static_cast<int>(blocks_i64 > kMaxBlocks ? kMaxBlocks : blocks_i64);
+    if (blocks <= 0) blocks = 1;
+    pad_modes_backward_kernel<T><<<blocks, kBlock, 0, stream>>>(
+        dy, dx, input_numel, rank, mode, in_shape, out_shape, plow, sdy, sdx);
+    cudaError_t err = cudaGetLastError();
+    return (err == cudaSuccess) ? 0 : 5;
+}
+
+// =============================================================================
 // Concat2 backward kernel — Category N (Phase 3 BW for 2-input concat)
 // =============================================================================
 //
@@ -6055,6 +6235,51 @@ __host__ inline int32_t launch_gated_activation_backward_contig(
         if (input_numel > 0 && (input_shape == nullptr || pad_low == nullptr ||                   \
                                   stride_dy == nullptr || stride_dx == nullptr)) return 2;        \
         return 0;                                                                                  \
+    }
+
+// Emit one Pad-modes backward (Reflect / Replicate / Circular) launcher.
+//
+// Deterministic gather-adjoint of the three non-constant pad modes; `mode`
+// is 0 = Reflect, 1 = Replicate, 2 = Circular. Iterates `input_numel`
+// (dx-coord space). NAME: e.g. `pad_modes_backward_f32`. T: scalar element
+// type. Status 3 = Reflect with pad > extent - 1.
+#define BARACUDA_KERNELS_PAD_MODES_BACKWARD_INSTANTIATE(NAME, T)                                  \
+    extern "C" int32_t baracuda_kernels_##NAME##_run(                                             \
+        int64_t input_numel,                                                                       \
+        int32_t rank,                                                                              \
+        int32_t mode,                                                                              \
+        const int32_t* input_shape,                                                               \
+        const int32_t* output_shape,                                                              \
+        const int32_t* pad_low,                                                                   \
+        const int64_t* stride_dy,                                                                 \
+        const int64_t* stride_dx,                                                                 \
+        const void* dy, void* dx,                                                                 \
+        void* /*workspace*/, size_t /*workspace_bytes*/,                                          \
+        void* stream_ptr)                                                                          \
+    {                                                                                              \
+        if (input_numel < 0) return 2;                                                            \
+        if (input_numel == 0) return 0;                                                           \
+        if (dy == nullptr || dx == nullptr) return 2;                                             \
+        if (input_shape == nullptr || output_shape == nullptr || pad_low == nullptr ||            \
+            stride_dy == nullptr || stride_dx == nullptr) return 2;                               \
+        cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                              \
+        return baracuda::elementwise::launch_pad_modes_backward<T>(                               \
+            static_cast<const T*>(dy), static_cast<T*>(dx), input_numel, rank, mode,              \
+            input_shape, output_shape, pad_low, stride_dy, stride_dx, stream);                    \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int64_t input_numel, int32_t rank, int32_t mode,                                          \
+        const int32_t* input_shape, const int32_t* output_shape, const int32_t* pad_low,          \
+        const int64_t* stride_dy, const int64_t* stride_dx,                                       \
+        const void* /*dy*/, const void* /*dx*/)                                                   \
+    {                                                                                              \
+        if (input_numel < 0) return 2;                                                            \
+        if (rank < 0) return 2;                                                                   \
+        if (input_numel == 0) return 0;                                                           \
+        if (input_shape == nullptr || output_shape == nullptr || pad_low == nullptr ||            \
+            stride_dy == nullptr || stride_dx == nullptr) return 2;                               \
+        return baracuda::elementwise::pad_modes_backward_check(                                   \
+            rank, mode, input_shape, output_shape, pad_low);                                      \
     }
 
 // Emit one Repeat backward (gather-adjoint sum) launcher.

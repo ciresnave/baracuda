@@ -3019,6 +3019,14 @@ fn	baracuda-kernels-sys	baracuda_kernels_pad_constant_f32_can_implement	9f7b683f
 fn	baracuda-kernels-sys	baracuda_kernels_pad_constant_f32_run	ccdfb2cbfab68386	-
 fn	baracuda-kernels-sys	baracuda_kernels_pad_constant_f64_can_implement	51dac7cc35604473	-
 fn	baracuda-kernels-sys	baracuda_kernels_pad_constant_f64_run	c4bc935590cc10ee	-
+fn	baracuda-kernels-sys	baracuda_kernels_pad_modes_backward_bf16_can_implement	d77e2d3094ccbb72	-
+fn	baracuda-kernels-sys	baracuda_kernels_pad_modes_backward_bf16_run	f055af3940304fcf	-
+fn	baracuda-kernels-sys	baracuda_kernels_pad_modes_backward_f16_can_implement	d77e2d3094ccbb72	-
+fn	baracuda-kernels-sys	baracuda_kernels_pad_modes_backward_f16_run	f055af3940304fcf	-
+fn	baracuda-kernels-sys	baracuda_kernels_pad_modes_backward_f32_can_implement	d77e2d3094ccbb72	-
+fn	baracuda-kernels-sys	baracuda_kernels_pad_modes_backward_f32_run	f055af3940304fcf	-
+fn	baracuda-kernels-sys	baracuda_kernels_pad_modes_backward_f64_can_implement	d77e2d3094ccbb72	-
+fn	baracuda-kernels-sys	baracuda_kernels_pad_modes_backward_f64_run	f055af3940304fcf	-
 fn	baracuda-kernels-sys	baracuda_kernels_pad_reflect_bf16_can_implement	21e6087a82d72b2f	-
 fn	baracuda-kernels-sys	baracuda_kernels_pad_reflect_bf16_run	a9860bbf2bf1da52	-
 fn	baracuda-kernels-sys	baracuda_kernels_pad_reflect_f16_can_implement	21e6087a82d72b2f	-

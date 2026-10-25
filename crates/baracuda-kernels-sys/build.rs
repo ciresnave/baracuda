@@ -970,6 +970,7 @@ fn collect_kernel_files() -> Vec<&'static str> {
             "elementwise/prelu_backward_fp.cu",
             // Phase 3 Category N — shape/layout BWs.
             "elementwise/pad_constant_backward_fp.cu",
+            "elementwise/pad_modes_backward_fp.cu",
             "elementwise/repeat_backward_fp.cu",
             "elementwise/concat2_backward_fp.cu",
             // Phase 4 — reduction trailblazer + fanout

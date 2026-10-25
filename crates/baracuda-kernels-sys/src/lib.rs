@@ -21894,6 +21894,134 @@ unsafe extern "C" {
 
 #[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
 unsafe extern "C" {
+    /// Pad-modes backward (Reflect / Replicate / Circular gather-adjoint), f32.
+    /// `mode`: 0 = Reflect, 1 = Replicate, 2 = Circular. Status 3 = Reflect pad > extent - 1.
+    pub fn baracuda_kernels_pad_modes_backward_f32_run(
+        input_numel: i64,
+        rank: i32,
+        mode: i32,
+        input_shape: *const i32,
+        output_shape: *const i32,
+        pad_low: *const i32,
+        stride_dy: *const i64,
+        stride_dx: *const i64,
+        dy: *const c_void,
+        dx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Pre-flight check for the matching `_run` entry point.
+    pub fn baracuda_kernels_pad_modes_backward_f32_can_implement(
+        input_numel: i64,
+        rank: i32,
+        mode: i32,
+        input_shape: *const i32,
+        output_shape: *const i32,
+        pad_low: *const i32,
+        stride_dy: *const i64,
+        stride_dx: *const i64,
+        dy: *const c_void,
+        dx: *const c_void,
+    ) -> i32;
+
+    /// Pad-modes backward (Reflect / Replicate / Circular gather-adjoint), f16.
+    /// `mode`: 0 = Reflect, 1 = Replicate, 2 = Circular. Status 3 = Reflect pad > extent - 1.
+    pub fn baracuda_kernels_pad_modes_backward_f16_run(
+        input_numel: i64,
+        rank: i32,
+        mode: i32,
+        input_shape: *const i32,
+        output_shape: *const i32,
+        pad_low: *const i32,
+        stride_dy: *const i64,
+        stride_dx: *const i64,
+        dy: *const c_void,
+        dx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Pre-flight check for the matching `_run` entry point.
+    pub fn baracuda_kernels_pad_modes_backward_f16_can_implement(
+        input_numel: i64,
+        rank: i32,
+        mode: i32,
+        input_shape: *const i32,
+        output_shape: *const i32,
+        pad_low: *const i32,
+        stride_dy: *const i64,
+        stride_dx: *const i64,
+        dy: *const c_void,
+        dx: *const c_void,
+    ) -> i32;
+
+    /// Pad-modes backward (Reflect / Replicate / Circular gather-adjoint), bf16.
+    /// `mode`: 0 = Reflect, 1 = Replicate, 2 = Circular. Status 3 = Reflect pad > extent - 1.
+    pub fn baracuda_kernels_pad_modes_backward_bf16_run(
+        input_numel: i64,
+        rank: i32,
+        mode: i32,
+        input_shape: *const i32,
+        output_shape: *const i32,
+        pad_low: *const i32,
+        stride_dy: *const i64,
+        stride_dx: *const i64,
+        dy: *const c_void,
+        dx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Pre-flight check for the matching `_run` entry point.
+    pub fn baracuda_kernels_pad_modes_backward_bf16_can_implement(
+        input_numel: i64,
+        rank: i32,
+        mode: i32,
+        input_shape: *const i32,
+        output_shape: *const i32,
+        pad_low: *const i32,
+        stride_dy: *const i64,
+        stride_dx: *const i64,
+        dy: *const c_void,
+        dx: *const c_void,
+    ) -> i32;
+
+    /// Pad-modes backward (Reflect / Replicate / Circular gather-adjoint), f64.
+    /// `mode`: 0 = Reflect, 1 = Replicate, 2 = Circular. Status 3 = Reflect pad > extent - 1.
+    pub fn baracuda_kernels_pad_modes_backward_f64_run(
+        input_numel: i64,
+        rank: i32,
+        mode: i32,
+        input_shape: *const i32,
+        output_shape: *const i32,
+        pad_low: *const i32,
+        stride_dy: *const i64,
+        stride_dx: *const i64,
+        dy: *const c_void,
+        dx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Pre-flight check for the matching `_run` entry point.
+    pub fn baracuda_kernels_pad_modes_backward_f64_can_implement(
+        input_numel: i64,
+        rank: i32,
+        mode: i32,
+        input_shape: *const i32,
+        output_shape: *const i32,
+        pad_low: *const i32,
+        stride_dy: *const i64,
+        stride_dx: *const i64,
+        dy: *const c_void,
+        dx: *const c_void,
+    ) -> i32;
+
     /// Pad-constant backward (slice), f32.
     pub fn baracuda_kernels_pad_constant_backward_f32_run(
         input_numel: i64,
