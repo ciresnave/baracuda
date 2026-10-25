@@ -168,3 +168,36 @@ fn a_later_logger_survives_the_first_one_being_dropped() {
         "the second logger heard nothing after the first was dropped; saw {seen:?}"
     );
 }
+
+/// TensorRT ignores a second logger while a runtime made with the first is
+/// alive, so with one `ILogger` per `Logger` the second logger heard nothing.
+/// Both loggers must hear a message raised through the second runtime.
+#[test]
+#[cfg(feature = "device-tests")]
+fn every_live_logger_hears_a_message_from_any_runtime() {
+    let seen_a: Arc<Mutex<Vec<Severity>>> = Arc::default();
+    let seen_b: Arc<Mutex<Vec<Severity>>> = Arc::default();
+    let (sink_a, sink_b) = (Arc::clone(&seen_a), Arc::clone(&seen_b));
+    let logger_a = require_optional!(
+        Logger::new(move |severity, _| sink_a.lock().unwrap().push(severity)).map(Arc::new),
+        "C-ABI shim (Logger::new)"
+    );
+    let logger_b = Logger::new(move |severity, _| sink_b.lock().unwrap().push(severity))
+        .map(Arc::new)
+        .expect("second logger");
+    let _rt_a = require_optional!(
+        Runtime::with_logger(logger_a),
+        "TensorRT runtime (Runtime::with_logger)"
+    );
+    let rt_b = Runtime::with_logger(logger_b).expect("second runtime");
+
+    assert!(rt_b.deserialize_engine(&[0u8; 32]).is_err());
+    let errors = |seen: &Mutex<Vec<Severity>>| {
+        seen.lock()
+            .unwrap()
+            .iter()
+            .any(|s| (*s as i32) <= (Severity::Error as i32))
+    };
+    assert!(errors(&seen_b), "the runtime's own logger heard no error");
+    assert!(errors(&seen_a), "the other live logger heard no error");
+}
