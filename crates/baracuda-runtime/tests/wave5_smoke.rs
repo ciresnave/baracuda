@@ -210,57 +210,105 @@ fn green_ctx_surface_is_feature_gated_or_works() {
     }
 }
 
+/// Wave-5 runtime entry points that do NOT exist in `libcudart` (CUDA 13.3 `cudart64_13.dll`
+/// exports none of these names: VMM, multicast and green contexts are driver-API only, and
+/// `cudaLaunchKernelEx` is a header inline over the exported `cudaLaunchKernelExC`). The
+/// loader entries can never resolve, so the runtime wrappers over them always declare-skip
+/// (ROADMAP SA-45). Pinned so the set cannot change silently: a symbol that starts to
+/// resolve, or a new one that stops, fails this test.
+const KNOWN_UNRESOLVABLE: &[&str] = &[
+    "cuda_launch_kernel_ex",
+    "cuda_mem_address_reserve",
+    "cuda_mem_address_free",
+    "cuda_mem_create",
+    "cuda_mem_release",
+    "cuda_mem_map",
+    "cuda_mem_unmap",
+    "cuda_mem_set_access",
+    "cuda_mem_get_access",
+    "cuda_mem_get_allocation_granularity",
+    "cuda_mem_get_allocation_properties_from_handle",
+    "cuda_mem_export_to_shareable_handle",
+    "cuda_mem_import_from_shareable_handle",
+    "cuda_mem_retain_allocation_handle",
+    "cuda_multicast_create",
+    "cuda_multicast_add_device",
+    "cuda_multicast_bind_mem",
+    "cuda_multicast_bind_addr",
+    "cuda_multicast_unbind",
+    "cuda_multicast_get_granularity",
+    "cuda_device_create_green_ctx",
+    "cuda_green_ctx_destroy",
+    "cuda_green_ctx_record_event",
+    "cuda_green_ctx_wait_event",
+    "cuda_green_ctx_stream_create",
+];
+
+/// Every other Wave-5 runtime entry point must resolve against the installed `libcudart`.
+/// Without a CUDA runtime on the machine there is nothing to resolve, so that case is
+/// the only one that returns early; with `device-tests` it fails instead.
 #[test]
 fn runtime_wave5_symbols_resolve() {
-    if let Ok(r) = baracuda_cuda_sys::runtime() {
-        // Arrays / tex / surf
-        let _ = r.cuda_malloc_mipmapped_array();
-        let _ = r.cuda_free_mipmapped_array();
-        let _ = r.cuda_array_get_info();
-        let _ = r.cuda_get_mipmapped_array_level();
-        let _ = r.cuda_get_texture_object_resource_desc();
-        let _ = r.cuda_get_texture_object_texture_desc();
-        let _ = r.cuda_get_texture_object_resource_view_desc();
-        let _ = r.cuda_get_surface_object_resource_desc();
-        // 3D
-        let _ = r.cuda_memcpy_3d();
-        let _ = r.cuda_memcpy_3d_async();
-        let _ = r.cuda_memcpy_3d_peer();
-        let _ = r.cuda_memcpy_3d_peer_async();
-        let _ = r.cuda_memset_3d();
-        let _ = r.cuda_malloc_3d();
-        let _ = r.cuda_malloc_3d_array();
-        // Launch-ex
-        let _ = r.cuda_launch_kernel_ex();
-        // Profiler
-        let _ = r.cuda_profiler_start();
-        let _ = r.cuda_profiler_stop();
-        // VMM
-        let _ = r.cuda_mem_address_reserve();
-        let _ = r.cuda_mem_address_free();
-        let _ = r.cuda_mem_create();
-        let _ = r.cuda_mem_release();
-        let _ = r.cuda_mem_map();
-        let _ = r.cuda_mem_unmap();
-        let _ = r.cuda_mem_set_access();
-        let _ = r.cuda_mem_get_access();
-        let _ = r.cuda_mem_get_allocation_granularity();
-        let _ = r.cuda_mem_get_allocation_properties_from_handle();
-        let _ = r.cuda_mem_export_to_shareable_handle();
-        let _ = r.cuda_mem_import_from_shareable_handle();
-        let _ = r.cuda_mem_retain_allocation_handle();
-        // Multicast
-        let _ = r.cuda_multicast_create();
-        let _ = r.cuda_multicast_add_device();
-        let _ = r.cuda_multicast_bind_mem();
-        let _ = r.cuda_multicast_bind_addr();
-        let _ = r.cuda_multicast_unbind();
-        let _ = r.cuda_multicast_get_granularity();
-        // Green
-        let _ = r.cuda_device_create_green_ctx();
-        let _ = r.cuda_green_ctx_destroy();
-        let _ = r.cuda_green_ctx_record_event();
-        let _ = r.cuda_green_ctx_wait_event();
-        let _ = r.cuda_green_ctx_stream_create();
+    let Ok(r) = baracuda_cuda_sys::runtime() else {
+        if cfg!(feature = "device-tests") {
+            panic!("device-tests build but libcudart did not load");
+        }
+        return;
+    };
+    let mut missing: Vec<&str> = Vec::new();
+    macro_rules! resolve {
+        ($($f:ident),+ $(,)?) => {
+            $(if r.$f().is_err() {
+                missing.push(stringify!($f));
+            })+
+        };
     }
+    resolve!(
+        cuda_malloc_mipmapped_array,
+        cuda_free_mipmapped_array,
+        cuda_array_get_info,
+        cuda_get_mipmapped_array_level,
+        cuda_get_texture_object_resource_desc,
+        cuda_get_texture_object_texture_desc,
+        cuda_get_texture_object_resource_view_desc,
+        cuda_get_surface_object_resource_desc,
+        cuda_memcpy_3d,
+        cuda_memcpy_3d_async,
+        cuda_memcpy_3d_peer,
+        cuda_memcpy_3d_peer_async,
+        cuda_memset_3d,
+        cuda_malloc_3d,
+        cuda_malloc_3d_array,
+        cuda_launch_kernel_ex,
+        cuda_profiler_start,
+        cuda_profiler_stop,
+        cuda_mem_address_reserve,
+        cuda_mem_address_free,
+        cuda_mem_create,
+        cuda_mem_release,
+        cuda_mem_map,
+        cuda_mem_unmap,
+        cuda_mem_set_access,
+        cuda_mem_get_access,
+        cuda_mem_get_allocation_granularity,
+        cuda_mem_get_allocation_properties_from_handle,
+        cuda_mem_export_to_shareable_handle,
+        cuda_mem_import_from_shareable_handle,
+        cuda_mem_retain_allocation_handle,
+        cuda_multicast_create,
+        cuda_multicast_add_device,
+        cuda_multicast_bind_mem,
+        cuda_multicast_bind_addr,
+        cuda_multicast_unbind,
+        cuda_multicast_get_granularity,
+        cuda_device_create_green_ctx,
+        cuda_green_ctx_destroy,
+        cuda_green_ctx_record_event,
+        cuda_green_ctx_wait_event,
+        cuda_green_ctx_stream_create,
+    );
+    assert_eq!(
+        missing, KNOWN_UNRESOLVABLE,
+        "set of unresolvable runtime symbols changed"
+    );
 }

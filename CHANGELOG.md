@@ -16,6 +16,21 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.24 - 2026-10-25
+
+### Fixed
+
+- Tests that asserted nothing now assert (ROADMAP SA-17). `baracuda-driver` `wave18_smoke`: the multicast granularity must be a nonzero power of two and a created object must have a non-null handle. `baracuda-runtime` `wave5_smoke` `runtime_wave5_symbols_resolve` discarded every loader `Result`; it now pins the exact set of 25 loader entries that cannot resolve (`KNOWN_UNRESOLVABLE`) so the set cannot change silently. Device-verified on sm_89 (RTX 4070).
+
+### Found
+
+- ROADMAP SA-45: 25 `baracuda-cuda-sys` runtime loader entries name symbols that `cudart64_13.dll` does not export (`cudaMemCreate` / `cudaMemMap` / `cudaMemAddressReserve` and the rest of the VMM set, `cudaMulticast*`, `cudaDeviceCreateGreenCtx` and the green-context set, `cudaLaunchKernelEx`, which is a header inline over the exported `cudaLaunchKernelExC`). The `baracuda-runtime` VMM / multicast / green-context / launch-ex wrappers over them can never work, and their tests always declare-skip.
+
+### Device evidence for the unpublished alphas (.17-.24)
+
+- **.20 SA-12 and .21 SA-28: NOT RUN ON DEVICE (no sm_61 hardware; race not demonstrated or fixed-proven).**
+- Device-verified on sm_89: .22 (pad backward modes) and .24 (tests above). No GPU code: .17, .18, .19, .23.
+
 ## 0.1.0-alpha.23 - 2026-10-25
 
 ### Fixed
@@ -34,11 +49,15 @@ at alpha.82.
 
 ## 0.1.0-alpha.21 - 2026-10-25
 
+**.21 SA-28: NOT RUN ON DEVICE (no sm_61 hardware; race not demonstrated or fixed-proven).**
+
 ### Fixed
 
 - `baracuda_smem_reduce.cuh`: `block_reduce_{sum,max,min}_{f32,f64}` now read `warp_buf[0]` into a register and `__syncthreads()` before returning (ROADMAP SA-28). Back-to-back reductions on one `warp_buf` (softmax, log-softmax: max then sum) could rewrite it before a slow warp read the first result. Costs one extra barrier per reduction. Race not demonstrated on device; verified by `nvcc -ptx` compile.
 
 ## 0.1.0-alpha.20 - 2026-10-25
+
+**.20 SA-12: NOT RUN ON DEVICE (no sm_61 hardware; race not demonstrated or fixed-proven).**
 
 ### Changed
 
