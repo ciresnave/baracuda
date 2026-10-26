@@ -18,6 +18,10 @@ at alpha.82.
 
 ## 0.1.0-alpha.36 - 2026-10-25
 
+### Fixed
+
+- `baracuda-cuda-seam`: `fuel-kernel-seam` and `fuel-kernel-seam-types` are pinned `0.26.12` (caret) instead of `=0.26.12`. Fuel's own workspace carries newer 0.26 patch releases of the same crates, and an exact pin cannot unify with them: cargo held two copies and `BaracudaSynthesizer` stopped implementing Fuel's `Synthesizer` (E0308 at `lib.rs:275,283`). Proof: a scratch crate depending on `baracuda-cuda-seam` and on `fuel-kernel-seam` 0.26.13 (the 0.26.12 sources re-versioned and patched in) fails to resolve with the old pin ("versions that meet the requirements `=0.26.12` ... conflict with previously selected packages") and, with the caret pins, builds and passes `BaracudaSynthesizer` where Fuel's `Synthesizer` is required; `cargo tree -i fuel-kernel-seam` shows one copy. New test `tests/seam_pin.rs` fails when the pin is `=0.26.12`. Not run on device (no GPU code).
+
 ## 0.1.0-alpha.35 - 2026-10-25
 
 ### Added
@@ -29,12 +33,6 @@ at alpha.82.
 ### Added
 
 - `baracuda-tensorrt-builder`: optimization profiles (ROADMAP SA-33 row 3). `Builder::create_optimization_profile`, `OptimizationProfile::{set_dimensions, dimensions, is_valid}`, `BuilderConfig::{add_optimization_profile, num_optimization_profiles}`. `baracuda-tensorrt`: `Engine::profile_shape`, `ExecutionContext::{set_optimization_profile_async, optimization_profile}` and `OptProfileSelector`. Device-verified on sm_89 (RTX 4070), TensorRT 10.16.1.11: `cargo gpu-test -p baracuda-tensorrt-builder --features shim,device-tests`, 12 passed, 0 failed, 0 declared skips (4 new in `profiles_smoke.rs`): one dynamic-batch engine runs at batches 2, 5, 8 and 1 against a CPU reference and reports its min / opt / max shapes; a shape outside the profile is rejected with the in-range maximum accepted as the control; a two-profile engine refuses batch 6 on profile 0, runs it after `set_optimization_profile_async(1)`, and rejects profile 2; an inconsistent profile (min > max) is refused by `add_optimization_profile` while a valid one returns index 0. With `set_optimization_profile_async` ignoring its index, `contexts_switch_between_two_profiles` fails.
-
-## 0.1.0-alpha.33 - 2026-10-25
-
-### Fixed
-
-- `baracuda-cuda-seam`: `fuel-kernel-seam` and `fuel-kernel-seam-types` are pinned `0.26.12` (caret) instead of `=0.26.12`. Fuel's own workspace carries newer 0.26 patch releases of the same crates, and an exact pin cannot unify with them: cargo held two copies and `BaracudaSynthesizer` stopped implementing Fuel's `Synthesizer` (E0308 at `lib.rs:275,283`). Proof: a scratch crate depending on `baracuda-cuda-seam` and on `fuel-kernel-seam` 0.26.13 (the 0.26.12 sources re-versioned and patched in) fails to resolve with the old pin ("versions that meet the requirements `=0.26.12` ... conflict with previously selected packages") and, with the caret pins, builds and passes `BaracudaSynthesizer` where Fuel's `Synthesizer` is required; `cargo tree -i fuel-kernel-seam` shows one copy. New test `tests/seam_pin.rs` fails when the pin is `=0.26.12`. Not run on device (no GPU code).
 
 ## 0.1.0-alpha.33 - 2026-10-25
 
