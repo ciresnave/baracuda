@@ -44,3 +44,13 @@ fn the_requirement_parser_sees_an_exact_pin() {
     assert_eq!(rest, "=0.26.12");
     assert!(!rest.chars().next().unwrap().is_ascii_digit());
 }
+
+/// `BaracudaSynthesizer` implements the `Synthesizer` trait of the `fuel-kernel-seam` this
+/// graph resolves. With two copies of the seam crates (the exact-pin failure) the bound
+/// below would not hold, so this also fails to compile in that situation.
+#[test]
+fn baracuda_synthesizer_is_fuels_synthesizer() {
+    fn takes_fuels_synthesizer<S: fuel_kernel_seam::Synthesizer>(_: &S) {}
+    let synthesizer = baracuda_cuda_seam::BaracudaSynthesizer::new(1000);
+    takes_fuels_synthesizer(&synthesizer);
+}
