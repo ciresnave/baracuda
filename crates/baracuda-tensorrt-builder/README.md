@@ -16,6 +16,6 @@ let plan = builder.build_serialized(&network, &builder.create_config()?)?;
 
 The API needs the `shim` feature, and so the TensorRT SDK headers at build time (see [`../baracuda-tensorrt/NOTICE.md`](../baracuda-tensorrt/NOTICE.md)); TensorRT itself is loaded at run time, never linked. Without `shim` the crate is empty apart from `shim_built()`.
 
-Covered so far: builder, config (memory-pool limits, flags, optimization level), and networks with elementwise, activation, unary, matrix multiply, constant, shuffle, reduce, softmax, concatenation, cast and identity layers. Still to come: optimization profiles, the ONNX parser, INT8 calibration, the plugin registry, convolution and pooling.
+Covered so far: builder, config (memory-pool limits, flags, optimization level), optimization profiles, the ONNX parser (`OnnxParser`, which needs `nvonnxparser_10.dll` / `libnvonnxparser.so.10` next to TensorRT), and networks with elementwise, activation, unary, matrix multiply, constant, shuffle, reduce, softmax, concatenation, cast and identity layers. Still to come: INT8 calibration, the plugin registry, convolution and pooling.
 
 Dual-licensed under MIT or Apache-2.0.

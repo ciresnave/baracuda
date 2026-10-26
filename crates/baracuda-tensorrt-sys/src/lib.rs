@@ -51,6 +51,8 @@ pub type trtITensor_t = *mut c_void;
 pub type trtILayer_t = *mut c_void;
 /// TensorRT IOptimizationProfile opaque handle (owned by the builder that made it).
 pub type trtIOptimizationProfile_t = *mut c_void;
+/// `nvonnxparser::IParser` opaque handle.
+pub type trtIParser_t = *mut c_void;
 
 // ---- enums ---------------------------------------------------------------
 
@@ -806,6 +808,27 @@ pub mod builder {
         pub fn trtSoftMaxSetAxes(layer: trtILayer_t, axes: u32);
         pub fn trtConcatenationSetAxis(layer: trtILayer_t, axis: i32);
 
+        // network inputs / outputs by index
+        pub fn trtNetworkGetInput(network: trtINetworkDefinition_t, index: i32) -> trtITensor_t;
+        pub fn trtNetworkGetOutput(network: trtINetworkDefinition_t, index: i32) -> trtITensor_t;
+
+        // ONNX parser
+        pub fn trtOnnxParserDestroy(parser: trtIParser_t);
+        pub fn trtOnnxParserParse(
+            parser: trtIParser_t,
+            data: *const c_void,
+            size: usize,
+            path: *const c_char,
+        ) -> bool;
+        pub fn trtOnnxParserGetNbErrors(parser: trtIParser_t) -> i32;
+        pub fn trtOnnxParserClearErrors(parser: trtIParser_t);
+        pub fn trtOnnxParserSupportsOperator(parser: trtIParser_t, op: *const c_char) -> bool;
+        pub fn trtOnnxParserErrorCode(parser: trtIParser_t, index: i32) -> i32;
+        pub fn trtOnnxParserErrorDesc(parser: trtIParser_t, index: i32) -> *const c_char;
+        pub fn trtOnnxParserErrorNode(parser: trtIParser_t, index: i32) -> i32;
+        pub fn trtOnnxParserErrorNodeName(parser: trtIParser_t, index: i32) -> *const c_char;
+        pub fn trtOnnxParserErrorNodeOperator(parser: trtIParser_t, index: i32) -> *const c_char;
+
         // optimization profiles
         pub fn trtBuilderCreateOptimizationProfile(
             builder: trtIBuilder_t,
@@ -885,6 +908,62 @@ trt_fns! {
     get_infer_lib_version as "getInferLibVersion": PFN_getInferLibVersion;
     create_infer_runtime as "createInferRuntime_INTERNAL": PFN_createInferRuntime;
     create_infer_builder as "createInferBuilder_INTERNAL": PFN_createInferBuilder;
+}
+
+/// `createNvOnnxParser_INTERNAL(void* network, void* logger, int version)`, the
+/// `extern "C"` factory exported by the ONNX parser library.
+pub type PFN_createNvOnnxParser = unsafe extern "C" fn(
+    network: trtINetworkDefinition_t,
+    logger: trtILogger_t,
+    version: c_int,
+) -> trtIParser_t;
+
+/// `NV_ONNX_PARSER_VERSION` from `NvOnnxParser.h` (0.1.0 encoded as `1 * 100`).
+pub const NV_ONNX_PARSER_VERSION: c_int = 100;
+
+/// Loader handle for the ONNX parser library (`nvonnxparser_10.dll` /
+/// `libnvonnxparser.so.10`), which ships next to `libnvinfer`.
+pub struct OnnxParserLib {
+    _lib: Library,
+    create: PFN_createNvOnnxParser,
+}
+
+impl core::fmt::Debug for OnnxParserLib {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("OnnxParserLib").finish_non_exhaustive()
+    }
+}
+
+impl OnnxParserLib {
+    /// The parser factory.
+    pub fn create_parser(&self) -> PFN_createNvOnnxParser {
+        self.create
+    }
+}
+
+fn onnx_parser_candidates() -> Vec<&'static str> {
+    // TensorRT 10 ships libnvonnxparser.so.10 / nvonnxparser_10.dll.
+    if cfg!(windows) {
+        vec!["nvonnxparser_10.dll", "nvonnxparser.dll"]
+    } else {
+        vec!["libnvonnxparser.so.10", "libnvonnxparser.so"]
+    }
+}
+
+/// Resolve and return the process-wide ONNX parser library.
+pub fn onnx_parser() -> Result<&'static OnnxParserLib, LoaderError> {
+    static LIB: OnceLock<OnnxParserLib> = OnceLock::new();
+    if let Some(l) = LIB.get() {
+        return Ok(l);
+    }
+    let candidates: &'static [&'static str] =
+        Box::leak(onnx_parser_candidates().into_boxed_slice());
+    let lib = Library::open("nvonnxparser", candidates)?;
+    let raw: *mut () = unsafe { lib.raw_symbol("createNvOnnxParser_INTERNAL")? };
+    let create: PFN_createNvOnnxParser =
+        unsafe { core::mem::transmute_copy::<*mut (), PFN_createNvOnnxParser>(&raw) };
+    let _ = LIB.set(OnnxParserLib { _lib: lib, create });
+    Ok(LIB.get().expect("OnceLock set or lost race"))
 }
 
 /// resolve and return the process-wide TensorRT loader.
