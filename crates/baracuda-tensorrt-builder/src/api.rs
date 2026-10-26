@@ -3,6 +3,7 @@ use std::ffi::CString;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+pub use baracuda_tensorrt::OptProfileSelector;
 use baracuda_tensorrt::{DataType, Dims, Error, HostMemory, Logger, Result};
 use baracuda_tensorrt_sys::{self as sys, builder as ffi};
 
@@ -267,6 +268,19 @@ impl Builder {
         })
     }
 
+    /// Create an optimization profile: the range of input shapes an engine
+    /// built with dynamic (`-1`) dimensions has to support. The builder owns
+    /// the profile; add it to a [`BuilderConfig`] with
+    /// [`BuilderConfig::add_optimization_profile`].
+    pub fn create_optimization_profile(&self) -> Result<OptimizationProfile<'_>> {
+        // SAFETY: `self.raw` and every tensor / layer / profile handle passed are live, non-null handles of the same network or builder; the borrow checker ties their lifetimes to `self`.
+        let raw = unsafe { ffi::trtBuilderCreateOptimizationProfile(self.raw) };
+        Ok(OptimizationProfile {
+            raw: non_null(raw, "createOptimizationProfile")?,
+            _builder: PhantomData,
+        })
+    }
+
     /// Build `network` under `config` into a serialized engine plan.
     ///
     /// Fails with [`Error::NullHandle`] when TensorRT rejects the network
@@ -341,6 +355,26 @@ impl BuilderConfig<'_> {
         unsafe { ffi::trtConfigGetOptimizationLevel(self.raw) }
     }
 
+    /// Add `profile` to the build and return its index. Fails with
+    /// [`Error::Call`] when the profile is not valid (min <= opt <= max for
+    /// every dynamic input); the logger receives the reason.
+    pub fn add_optimization_profile(&self, profile: &OptimizationProfile<'_>) -> Result<i32> {
+        // SAFETY: `self.raw` and every tensor / layer / profile handle passed are live, non-null handles of the same network or builder; the borrow checker ties their lifetimes to `self`.
+        let index = unsafe { ffi::trtConfigAddOptimizationProfile(self.raw, profile.raw) };
+        if index < 0 {
+            return Err(Error::Call {
+                op: "addOptimizationProfile",
+            });
+        }
+        Ok(index)
+    }
+
+    /// Number of optimization profiles added so far.
+    pub fn num_optimization_profiles(&self) -> i32 {
+        // SAFETY: `self.raw` and every tensor / layer / profile handle passed are live, non-null handles of the same network or builder; the borrow checker ties their lifetimes to `self`.
+        unsafe { ffi::trtConfigGetNbOptimizationProfiles(self.raw) }
+    }
+
     /// Raw `IBuilderConfig*`.
     pub fn as_raw(&self) -> sys::trtIBuilderConfig_t {
         self.raw
@@ -351,6 +385,59 @@ impl Drop for BuilderConfig<'_> {
     fn drop(&mut self) {
         // SAFETY: `self.raw` came from the matching create call, is destroyed exactly once here, and nothing can still borrow it (children borrow `&self`).
         unsafe { ffi::trtConfigDestroy(self.raw) };
+    }
+}
+
+/// An `IOptimizationProfile`: min / opt / max shapes for each dynamic input.
+/// Owned by the [`Builder`] that created it.
+#[derive(Debug)]
+pub struct OptimizationProfile<'b> {
+    raw: sys::trtIOptimizationProfile_t,
+    _builder: PhantomData<&'b Builder>,
+}
+
+impl OptimizationProfile<'_> {
+    /// Set the `selector` shape of the input `name`. Fails with [`Error::Call`]
+    /// when TensorRT rejects it (unknown rank, a negative extent, ...).
+    pub fn set_dimensions(
+        &self,
+        name: &str,
+        selector: OptProfileSelector,
+        dims: &Dims,
+    ) -> Result<()> {
+        let name = nul_terminated(name)?;
+        let dims = dims.to_raw();
+        // SAFETY: the handle is live (owned by `self`); each pointer argument is a NUL-terminated `CString` or a local that outlives the call.
+        let ok = unsafe {
+            ffi::trtProfileSetDimensions(self.raw, name.as_ptr(), selector as i32, &dims)
+        };
+        if ok {
+            Ok(())
+        } else {
+            Err(Error::Call {
+                op: "IOptimizationProfile::setDimensions",
+            })
+        }
+    }
+
+    /// The `selector` shape previously set for `name` (rank 0 if none).
+    pub fn dimensions(&self, name: &str, selector: OptProfileSelector) -> Result<Dims> {
+        let name = nul_terminated(name)?;
+        // SAFETY: the handle is live (owned by `self`); each pointer argument is a NUL-terminated `CString` or a local that outlives the call.
+        let raw = unsafe { ffi::trtProfileGetDimensions(self.raw, name.as_ptr(), selector as i32) };
+        Ok(Dims::from_raw(raw))
+    }
+
+    /// Whether every dynamic input has consistent min / opt / max shapes (this
+    /// can only be answered once the network's inputs are known at build time).
+    pub fn is_valid(&self) -> bool {
+        // SAFETY: `self.raw` and every tensor / layer / profile handle passed are live, non-null handles of the same network or builder; the borrow checker ties their lifetimes to `self`.
+        unsafe { ffi::trtProfileIsValid(self.raw) }
+    }
+
+    /// Raw `IOptimizationProfile*`.
+    pub fn as_raw(&self) -> sys::trtIOptimizationProfile_t {
+        self.raw
     }
 }
 

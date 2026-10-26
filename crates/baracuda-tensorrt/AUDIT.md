@@ -148,8 +148,8 @@ machine. To finish validation:
   `gpu-run` mutex; see CONTRIBUTING step 3).
 
 ## Deferred (future phases)
-- Optimization-profile *selection* (`setOptimizationProfileAsync`) for dynamic
-  shapes (add a shim symbol + safe method).
+- ~~Optimization-profile selection~~ — done in alpha.34
+  (`ExecutionContext::set_optimization_profile_async`, `Engine::profile_shape`).
 - ~~A typed `Logger`~~ — done in alpha.28 (`Logger`, `Runtime::with_logger`, shim
   `trtLoggerCreate`). TensorRT 10.16 refuses a null logger, so `with_null_logger`
   returns `NullHandle`.

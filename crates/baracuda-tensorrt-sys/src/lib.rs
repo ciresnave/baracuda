@@ -49,6 +49,8 @@ pub type trtINetworkDefinition_t = *mut c_void;
 pub type trtITensor_t = *mut c_void;
 /// TensorRT ILayer opaque handle (always an `ILayer*`, never a subclass pointer).
 pub type trtILayer_t = *mut c_void;
+/// TensorRT IOptimizationProfile opaque handle (owned by the builder that made it).
+pub type trtIOptimizationProfile_t = *mut c_void;
 
 // ---- enums ---------------------------------------------------------------
 
@@ -313,6 +315,21 @@ unsafe extern "C" {
     ) -> *mut c_void;
     /// TensorRT shim: Execution Context Enqueue V3.
     pub fn trtExecutionContextEnqueueV3(ctx: trtIExecutionContext_t, stream: cudaStream_t) -> bool;
+    /// TensorRT shim: Cuda Engine Get Profile Shape.
+    pub fn trtCudaEngineGetProfileShape(
+        engine: trtICudaEngine_t,
+        name: *const c_char,
+        profile: i32,
+        selector: i32,
+    ) -> trtDims_t;
+    /// TensorRT shim: Execution Context Set Optimization Profile Async.
+    pub fn trtExecutionContextSetOptimizationProfileAsync(
+        ctx: trtIExecutionContext_t,
+        profile: i32,
+        stream: cudaStream_t,
+    ) -> bool;
+    /// TensorRT shim: Execution Context Get Optimization Profile.
+    pub fn trtExecutionContextGetOptimizationProfile(ctx: trtIExecutionContext_t) -> i32;
 
     /// TensorRT shim: Host Memory Data.
     pub fn trtHostMemoryData(mem: trtIHostMemory_t) -> *mut c_void;
@@ -602,6 +619,46 @@ mod shim_stubs {
     #[inline]
     pub unsafe fn trtHostMemoryDestroy(_mem: trtIHostMemory_t) {}
 
+    /// TensorRT shim: Cuda Engine Get Profile Shape (no-op without the shim).
+    ///
+    /// # Safety
+    ///
+    /// Shim no-op mirroring the real symbol's signature.
+    #[inline]
+    pub unsafe fn trtCudaEngineGetProfileShape(
+        _engine: trtICudaEngine_t,
+        _name: *const c_char,
+        _profile: i32,
+        _selector: i32,
+    ) -> trtDims_t {
+        trtDims_t {
+            nb_dims: 0,
+            d: [0; TRT_MAX_DIMS],
+        }
+    }
+    /// TensorRT shim: Execution Context Set Optimization Profile Async (no-op without the shim).
+    ///
+    /// # Safety
+    ///
+    /// Shim no-op mirroring the real symbol's signature.
+    #[inline]
+    pub unsafe fn trtExecutionContextSetOptimizationProfileAsync(
+        _ctx: trtIExecutionContext_t,
+        _profile: i32,
+        _stream: cudaStream_t,
+    ) -> bool {
+        false
+    }
+    /// TensorRT shim: Execution Context Get Optimization Profile (no-op without the shim).
+    ///
+    /// # Safety
+    ///
+    /// Shim no-op mirroring the real symbol's signature.
+    #[inline]
+    pub unsafe fn trtExecutionContextGetOptimizationProfile(_ctx: trtIExecutionContext_t) -> i32 {
+        -1
+    }
+
     /// TensorRT shim: create a logger (no-op: always null without the shim).
     ///
     /// # Safety
@@ -748,6 +805,28 @@ pub mod builder {
         pub fn trtShuffleSetSecondTranspose(layer: trtILayer_t, order: *const i32);
         pub fn trtSoftMaxSetAxes(layer: trtILayer_t, axes: u32);
         pub fn trtConcatenationSetAxis(layer: trtILayer_t, axis: i32);
+
+        // optimization profiles
+        pub fn trtBuilderCreateOptimizationProfile(
+            builder: trtIBuilder_t,
+        ) -> trtIOptimizationProfile_t;
+        pub fn trtProfileSetDimensions(
+            profile: trtIOptimizationProfile_t,
+            name: *const c_char,
+            selector: i32,
+            dims: *const trtDims_t,
+        ) -> bool;
+        pub fn trtProfileGetDimensions(
+            profile: trtIOptimizationProfile_t,
+            name: *const c_char,
+            selector: i32,
+        ) -> trtDims_t;
+        pub fn trtProfileIsValid(profile: trtIOptimizationProfile_t) -> bool;
+        pub fn trtConfigAddOptimizationProfile(
+            config: trtIBuilderConfig_t,
+            profile: trtIOptimizationProfile_t,
+        ) -> i32;
+        pub fn trtConfigGetNbOptimizationProfiles(config: trtIBuilderConfig_t) -> i32;
     }
 }
 
