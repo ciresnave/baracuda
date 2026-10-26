@@ -36,10 +36,13 @@ declare -A CUDA_FEATURES=( [baracuda-optim]="sm80 sm89 sm90a" )
 # Crates whose feature-gated code genuinely needs nvcc/CUDA headers → uncovered by
 # design (no CI CUDA runner); recorded so the absence is a stated blindness, not a
 # gap someone "fixes" by adding a step that then skips-green on the runner.
+# (The tensorrt crates' `shim` feature needs the TensorRT SDK headers plus the CUDA headers; no
+# CI runner has either.)
 CUDA_ONLY=(
   baracuda-cutlass baracuda-cutlass-kernels-sys baracuda-flashinfer-sys
   baracuda-flashinfer baracuda-kernels-sys baracuda-kernels baracuda-tensorrt-sys
-  baracuda-tensorrt-builder baracuda-kernels-bench
+  baracuda-tensorrt baracuda-tensorrt-builder
+  baracuda-kernels-bench
 )
 # Crates whose build.rs invokes nvcc UNCONDITIONALLY (graph membership is enough —
 # no feature guard). If an ALL_FEATURES `--all-features` graph pulls one of these,
