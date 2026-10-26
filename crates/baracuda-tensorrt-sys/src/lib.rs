@@ -769,6 +769,8 @@ pub fn plugin_lib() -> Result<&'static PluginLib, LoaderError> {
     let lib = Library::open("nvinfer_plugin", candidates)?;
     // SAFETY: the symbol is `bool initLibNvInferPlugins(void*, const char*)` with C linkage.
     let raw: *mut () = unsafe { lib.raw_symbol("initLibNvInferPlugins")? };
+    // SAFETY: `raw` is the non-null address of that function, and a data pointer and a function pointer
+    // have the same size on every platform this crate supports (the loader macro above relies on the same).
     let init: PFN_initLibNvInferPlugins =
         unsafe { core::mem::transmute_copy::<*mut (), PFN_initLibNvInferPlugins>(&raw) };
     let _ = LIB.set(PluginLib { _lib: lib, init });
