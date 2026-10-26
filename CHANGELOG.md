@@ -16,6 +16,13 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.38 - 2026-10-26
+
+### Fixed
+
+- `baracuda-cuda-emit`: an `f32` kernel's constants are `float` literals (`1.0f`, `1e-5f`), not suffix-less C `double`s (PM ruling, board decision 311 Q4 = A). A `double` literal turned `g / (g + 1.0)` with a `float` `g` into double arithmetic rounded to `float` on the store, so the output was not the `float` arithmetic the IR means. `typed::const_f32` spells the value as `v as f32` in Rust's shortest round-trip form with the `f` suffix (NaN and infinities, and finite values beyond the `f32` range, use `NAN` / `INFINITY`); `f64`, `f16` and `bf16` kernels keep the old spelling. Device-verified on sm_89 (RTX 4070): `tests/const_literal.rs`, 2 passed (scalar and `float4` schedules), the diamond `g / (g + 1)` over about 20,000 inputs is bit-identical to host `f32` arithmetic; with the old spelling 3342 of 20000 and 3313 of 20001 outputs differed by one ULP (about 17% on these inputs). Unit tests pin the spelling and its round trip. Changed emitted text, so 18 golden-string tests in `cuda.rs` now expect the suffix (`0.0f`, `1e-5f`, `7.5f`, `+ 1.0f`).
+- Still `double`-spelled: constants in `f16` / `bf16` kernels (for example the row-reduce epsilon `r0 + 1e-5`, whose accumulator is a `float`). Not changed here; reported to the PM.
+
 ## 0.1.0-alpha.37 - 2026-10-26
 
 ### Added

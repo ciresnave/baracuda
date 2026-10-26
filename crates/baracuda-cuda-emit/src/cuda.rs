@@ -498,8 +498,9 @@ impl Backend for Cuda {
 }
 
 /// `unpopped`'s `Lowering` is `#[non_exhaustive]`; build it via its builder.
-/// The CUDA emitters spell all six of these seams explicitly and never override
-/// `constant` (it keeps its `const_lit` default), so no emitted byte changes.
+/// The CUDA emitters spell all six of these seams explicitly. `constant` is overridden for
+/// `f32` kernels only (`1.0f`, see `typed::const_f32`); every other dtype keeps the
+/// `const_lit` default, so only `f32` constants change.
 fn cuda_lowering<'a>(
     leaf: &'a dyn Fn(u8) -> Result<Spelling, LowerError>,
     reduced: &'a dyn Fn(u8) -> Result<Spelling, LowerError>,
@@ -517,7 +518,12 @@ fn cuda_lowering<'a>(
         ElementKind::F64 => &typed::fma_f64,
         _ => &typed::fma_decline,
     };
+    let constant: &'a dyn Fn(f64) -> Result<Spelling, LowerError> = match dtype {
+        ElementKind::F32 | ElementKind::F32Strict => &typed::const_f32,
+        _ => &typed::const_default,
+    };
     Lowering::builder(leaf, unary, binary)
+        .constant(constant)
         .reduced(reduced)
         .coord(coord)
         .select(select)
@@ -10669,7 +10675,7 @@ got:
             "hoisted to a tmp"
         );
         assert!(
-            k.source.contains("out[oo] = (tmp0 / (tmp0 + 1.0));"),
+            k.source.contains("out[oo] = (tmp0 / (tmp0 + 1.0f));"),
             "and referenced twice, not recomputed"
         );
     }
@@ -11166,7 +11172,7 @@ got:
         // fix: the predicate must lower as a genuine INTEGER comparison
         // (`in0[idx] != 0 ? 1 : 0`) so `acc += elem` is a true `long long`
         // add — exact for a count past 2^24 (16,777,216), unlike the float
-        // predicate `((float)in0[idx] != (float)0.0 ? 1.0f : 0.0f)` this
+        // predicate `((float)in0[idx] != (float)0.0f ? 1.0f : 0.0f)` this
         // replaces (which silently promotes `acc` to `float` in C and stalls
         // at 2^24).
         let mut op = OpDef::reduction(
@@ -11436,7 +11442,7 @@ got:
         // Post is a Cmp (0/1); the store casts the exact predicate to u8.
         assert!(
             k.source
-                .contains("out[row] = (unsigned char)(((float)red0 > (float)0.0 ? 1.0f : 0.0f));")
+                .contains("out[row] = (unsigned char)(((float)red0 > (float)0.0f ? 1.0f : 0.0f));")
         );
     }
 
@@ -11599,7 +11605,7 @@ got:
         assert!(k.source.contains("block_sum_rmsnorm_f32(acc0) / (float)k"));
         assert!(
             k.source
-                .contains("out[idx] = (in0[idx] * rsqrtf((r0 + 1e-5)));")
+                .contains("out[idx] = (in0[idx] * rsqrtf((r0 + 1e-5f)));")
         );
         assert!(k.source.contains("if (k == 0) return;"));
     }
@@ -11747,7 +11753,7 @@ got:
         assert!(k.source.contains("acc0 += (in0[idx]*in0[idx]);"));
         assert!(
             k.source
-                .contains("out[idx] = ((in0[idx] * rsqrtf((r0 + 1e-5))) * in1[j]);")
+                .contains("out[idx] = ((in0[idx] * rsqrtf((r0 + 1e-5f))) * in1[j]);")
         );
         assert!(!k.source.contains("in1[idx]"));
     }
@@ -11768,11 +11774,9 @@ got:
                 .contains("acc1 += ((in0[idx] - r0)*(in0[idx] - r0));")
         );
         // epilogue: (x-mean)*rsqrt(var+eps)*weight[j] + bias[j].
-        assert!(
-            k.source.contains(
-                "out[idx] = ((((in0[idx] - r0) * rsqrtf((r1 + 1e-5))) * in1[j]) + in2[j]);"
-            )
-        );
+        assert!(k.source.contains(
+            "out[idx] = ((((in0[idx] - r0) * rsqrtf((r1 + 1e-5f))) * in1[j]) + in2[j]);"
+        ));
         assert!(!k.source.contains("in1[idx]") && !k.source.contains("in2[idx]"));
     }
 
@@ -12808,7 +12812,7 @@ got:
         assert_eq!(k.name, "baracuda_gen_relu_bw_f32_scalar");
         assert!(
             k.source
-                .contains("out[i] = (in0[i] * ((float)in1[i] > (float)0.0 ? 1.0f : 0.0f));")
+                .contains("out[i] = (in0[i] * ((float)in1[i] > (float)0.0f ? 1.0f : 0.0f));")
         );
         assert!(k.source.contains("float* __restrict__ out"));
         assert!(!k.source.contains("unsigned char"));
@@ -12818,7 +12822,7 @@ got:
         assert_eq!(kv.name, "baracuda_gen_relu_bw_f32_co_v4");
         assert!(
             kv.source
-                .contains("((float)v1.x > (float)0.0 ? 1.0f : 0.0f)")
+                .contains("((float)v1.x > (float)0.0f ? 1.0f : 0.0f)")
         );
     }
 
@@ -13535,7 +13539,7 @@ got:
         // the 0b compute-dtype cmp casts compose.
         assert!(
             k.source.contains(
-                "out[oo] = (in0[o0] * ((float)(float)c1 >= (float)((float)c0 + 0.0) ? 1.0f : 0.0f));"
+                "out[oo] = (in0[o0] * ((float)(float)c1 >= (float)((float)c0 + 0.0f) ? 1.0f : 0.0f));"
             ),
             "triu-mask store golden missing in:\n{}",
             k.source
@@ -14748,7 +14752,7 @@ mod multi_output_tests {
         );
         assert!(
             k.source
-                .contains("out0[i] = (tmp0 * ((float)in1[i] > (float)0.0 ? 1.0f : 0.0f));"),
+                .contains("out0[i] = (tmp0 * ((float)in1[i] > (float)0.0f ? 1.0f : 0.0f));"),
             "{}",
             k.source
         );
@@ -14867,7 +14871,7 @@ mod dropout_hetero_tests {
         // — M9); one multiply of x by the selected multiplier.
         assert!(
             k.source.contains(
-                "out0[i] = (in0[i] * (((float)(tmp0)) != 0.0f ? (float)(p1) : (float)(0.0)));"
+                "out0[i] = (in0[i] * (((float)(tmp0)) != 0.0f ? (float)(p1) : (float)(0.0f)));"
             ),
             "value store reads tmp0 raw:\n{}",
             k.source
@@ -14914,7 +14918,7 @@ mod dropout_hetero_tests {
         );
         assert!(
             k.source.contains(
-                "out0[oo0] = (in0[o0] * (((float)(tmp0)) != 0.0f ? (float)(p1) : (float)(0.0)));"
+                "out0[oo0] = (in0[o0] * (((float)(tmp0)) != 0.0f ? (float)(p1) : (float)(0.0f)));"
             ),
             "value store at oo0 reads tmp0 raw:\n{}",
             k.source
@@ -18306,8 +18310,9 @@ mod select_tests {
         );
         let kz = generate(&z, &sel_key(ElementKind::F32, 3, 4), &Cuda);
         assert!(
-            kz.source
-                .contains("out[i] = (((float)(in0[i])) != 0.0f ? (float)(in1[i]) : (float)(0.0));"),
+            kz.source.contains(
+                "out[i] = (((float)(in0[i])) != 0.0f ? (float)(in1[i]) : (float)(0.0f));"
+            ),
             "f32 const-arm select golden missing in:\n{}",
             kz.source
         );
@@ -18464,8 +18469,8 @@ mod select_tests {
         assert_eq!(k.name, "baracuda_gen_triu_sel_f32_strided_r2");
         assert!(
             k.source.contains(
-                "out[oo] = (((float)(((float)(float)c1 >= (float)((float)c0 + 0.0) ? 1.0f : \
-                 0.0f))) != 0.0f ? (float)(in0[o0]) : (float)(0.0));"
+                "out[oo] = (((float)(((float)(float)c1 >= (float)((float)c0 + 0.0f) ? 1.0f : \
+                 0.0f))) != 0.0f ? (float)(in0[o0]) : (float)(0.0f));"
             ),
             "triu select strided golden missing in:\n{}",
             k.source
@@ -18511,7 +18516,7 @@ mod select_tests {
     // (the house dual-gate rule: every load-bearing emission decision gets a kill).
     //
     // Each golden uses distinguishable const arms `7.5`/`9.25` so the canonical
-    // fragment `!= 0.0f ? (float)(7.5) : (float)(9.25)` pins BOTH the arm order
+    // fragment `!= 0.0f ? (float)(7.5f) : (float)(9.25f)` pins BOTH the arm order
     // (a swap makes it `9.25 : 7.5`) AND the f32 speller (a `dbl`-flip makes it
     // `(double)`); one f64 sibling pins the double branch directly. Every kill is
     // mutation-checked (a site-local `select_f{32,64}(c, b, a)` swap or `dbl`-flip
@@ -18532,7 +18537,7 @@ mod select_tests {
     /// The canonical ordered f32 select fragment — arm order + f32 speller.
     fn assert_ordered_select_f32(src: &str, ctx: &str) {
         assert!(
-            src.contains("!= 0.0f ? (float)(7.5) : (float)(9.25)"),
+            src.contains("!= 0.0f ? (float)(7.5f) : (float)(9.25f)"),
             "{ctx}: ordered f32 select fragment missing (arm swap or dbl-flip?):\n{src}"
         );
     }
