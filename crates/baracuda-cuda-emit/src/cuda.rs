@@ -20,9 +20,9 @@ use unpopped::cfamily::{
     params_used, select_f32, select_f64,
 };
 use unpopped::ir::{
-    Access, AxisRole, BinaryOp, ExprDag, ReduceOp, ScalarExpr, SortOrder, SortOut, UnaryOp,
-    is_admissible_int_reduction_operand, is_bit_move_fold_output, is_bit_move_row_reduce_output,
-    is_bit_or_sign_move, narrow_sign_masks,
+    Access, ArithOp, AxisRole, BinaryOp, ExprDag, ReduceOp, ScalarExpr, SortOrder, SortOut,
+    UnaryOp, is_admissible_int_reduction_operand, is_bit_move_fold_output,
+    is_bit_move_row_reduce_output, is_bit_or_sign_move, narrow_sign_masks,
 };
 use unpopped::plan::{HalfArith, KernelPlan, ReduceAxisClass, RrRole, Schedule, rr_role};
 use unpopped_vocab::structure_key::LayoutOrder;
@@ -510,6 +510,35 @@ fn cuda_lowering<'a>(
     select: &'a dyn Fn(String, String, String) -> Result<Spelling, LowerError>,
     dtype: ElementKind,
 ) -> Lowering<'a> {
+    cuda_lowering_with(leaf, reduced, coord, unary, binary, select, dtype, false)
+}
+
+/// [`cuda_lowering`] for the elementwise emitters, whose operands are native `__half` /
+/// `__nv_bfloat16` values: infix arithmetic with a literal operand is declined in an `f16` /
+/// `bf16` body (see `typed::arith_half_native`), because the literal makes the operator ambiguous.
+fn cuda_lowering_native<'a>(
+    leaf: &'a dyn Fn(u8) -> Result<Spelling, LowerError>,
+    reduced: &'a dyn Fn(u8) -> Result<Spelling, LowerError>,
+    coord: &'a dyn Fn(u8) -> Result<Spelling, LowerError>,
+    unary: &'a dyn Fn(UnaryOp, String) -> Result<Spelling, LowerError>,
+    binary: &'a dyn Fn(BinaryOp, String, String) -> Result<Spelling, LowerError>,
+    select: &'a dyn Fn(String, String, String) -> Result<Spelling, LowerError>,
+    dtype: ElementKind,
+) -> Lowering<'a> {
+    cuda_lowering_with(leaf, reduced, coord, unary, binary, select, dtype, true)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn cuda_lowering_with<'a>(
+    leaf: &'a dyn Fn(u8) -> Result<Spelling, LowerError>,
+    reduced: &'a dyn Fn(u8) -> Result<Spelling, LowerError>,
+    coord: &'a dyn Fn(u8) -> Result<Spelling, LowerError>,
+    unary: &'a dyn Fn(UnaryOp, String) -> Result<Spelling, LowerError>,
+    binary: &'a dyn Fn(BinaryOp, String, String) -> Result<Spelling, LowerError>,
+    select: &'a dyn Fn(String, String, String) -> Result<Spelling, LowerError>,
+    dtype: ElementKind,
+    native_half: bool,
+) -> Lowering<'a> {
     // Fma / Cast / Bitcast (SA-43 / SA-44): spelled exactly or declined, see `typed`.
     // The Fma spelling depends on the compute dtype, so it is picked here as a fn item
     // (a capturing closure could not outlive this function).
@@ -522,7 +551,16 @@ fn cuda_lowering<'a>(
         ElementKind::F32 | ElementKind::F32Strict => &typed::const_f32,
         _ => &typed::const_default,
     };
+    // Native-half bodies spell `+ - * /` as C infix on `__half` / `__nv_bfloat16` operands; a bare
+    // literal operand makes that ambiguous (see `typed::arith_half_native`), so it is declined.
+    let arith: &'a dyn Fn(ArithOp, String, String) -> Result<Spelling, LowerError> =
+        if native_half && matches!(dtype, ElementKind::F16 | ElementKind::Bf16) {
+            &typed::arith_half_native
+        } else {
+            &typed::arith_default
+        };
     Lowering::builder(leaf, unary, binary)
+        .arith(arith)
         .constant(constant)
         .reduced(reduced)
         .coord(coord)
@@ -780,7 +818,7 @@ fn emit_vectorized(
         let (prelude, root) = lower(
             &ExprDag::from_expr(plan.body),
             sctype,
-            &cuda_lowering(
+            &cuda_lowering_native(
                 &acc,
                 &reduced_decline_no_rowreduce,
                 &|d| {
@@ -876,7 +914,7 @@ fn emit_vectorized_packed(
         let (prelude, root) = lower_dag_all(
             &ExprDag::from_expr(plan.body),
             pk.pair_ty,
-            &cuda_lowering(
+            &cuda_lowering_native(
                 &acc,
                 &reduced_decline_no_rowreduce,
                 // Doubly plan-gate-invariant: `body_packs` is Input-leaf-only AND
@@ -955,7 +993,7 @@ fn emit_scalar(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKernel, Lo
     let (prelude, root) = lower(
         &ExprDag::from_expr(plan.body),
         ctype,
-        &cuda_lowering(
+        &cuda_lowering_native(
             &acc,
             &reduced_decline_no_rowreduce,
             &|d| {
@@ -1296,7 +1334,7 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKernel, L
     let (prelude, root) = lower(
         &ExprDag::from_expr(plan.body),
         ctype,
-        &cuda_lowering(
+        &cuda_lowering_native(
             &acc,
             &reduced_decline_no_rowreduce,
             &coord,
@@ -2045,7 +2083,7 @@ fn emit_scalar_multi(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKern
     let (prelude, roots) = lower_dag_multi(
         &dag,
         ctype,
-        &cuda_lowering(
+        &cuda_lowering_native(
             &acc,
             &multi_reduced_decline(plan.op_name),
             &multi_coord_decline(plan.op_name),
@@ -2170,7 +2208,7 @@ fn emit_strided_multi(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKer
     let (prelude, roots) = lower_dag_multi(
         &dag,
         ctype,
-        &cuda_lowering(
+        &cuda_lowering_native(
             &acc,
             &multi_reduced_decline(plan.op_name),
             &multi_coord_decline(plan.op_name),
@@ -2265,7 +2303,7 @@ fn emit_vectorized_multi(
         let (prelude, roots) = lower_dag_multi(
             &dag,
             sctype,
-            &cuda_lowering(
+            &cuda_lowering_native(
                 &acc,
                 &multi_reduced_decline(plan.op_name),
                 &multi_coord_decline(plan.op_name),
@@ -2358,7 +2396,7 @@ fn emit_vectorized_packed_multi(
         let (prelude, roots) = lower_dag_multi(
             &dag,
             pk.pair_ty,
-            &cuda_lowering(
+            &cuda_lowering_native(
                 &acc,
                 &multi_reduced_decline(plan.op_name),
                 &multi_coord_decline(plan.op_name),
@@ -8984,17 +9022,39 @@ mod tests {
     }
 
     #[test]
-    fn f16_const_body_stays_scalar_for_bit_exactness() {
+    fn half_arithmetic_with_a_literal_is_declined_not_emitted() {
         use unpopped::ir::konst;
-        // A Const participates in double-promoted math on the scalar path
-        // (`__half + 1.5` promotes through float to double); a packed pair splat
-        // would pre-round it to f16 and change bits → gated to scalar.
-        let op = OpDef::elementwise("addk", 1, &[ElementKind::F16], input(0) + konst(1.5));
-        let a = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::F16, 256);
+        use unpopped::try_generate;
+        // `__half + 1.5` is an AMBIGUOUS operator (built-in arithmetic vs the cuda_fp16
+        // `operator+(__half, __half)`): NVRTC rejects it with `more than one operator "+"
+        // matches these operands` (measured on CUDA 13.3, f16 and bf16). This test used to
+        // pin the text `out[i] = (in0[i] + 1.5);`, whose comment said it promotes through
+        // float to double; that holds only for older cuda_fp16 headers, and a source-text
+        // golden never compiled it. The emitter now declines instead of emitting source that
+        // cannot compile.
+        for dt in [ElementKind::F16, ElementKind::Bf16] {
+            let op = OpDef::elementwise("addk", 1, &[dt], input(0) + konst(1.5));
+            let a = OperandDesc::new(1, &[1 << 20], &[1], dt, 256);
+            let key = structure_key(OpCategory::UnaryElementwise, &[a, a], ArchSku::Sm89);
+            let err = try_generate(&op, &key, &Cuda)
+                .expect_err("a half body with a literal operand must not be emitted");
+            let msg = format!("{err}");
+            assert!(
+                msg.contains("ambiguous operator"),
+                "{dt:?}: the decline must say why: {msg}"
+            );
+        }
+        // Controls: the same body at f32 is spelled with a float literal, and a half body with
+        // no literal still emits the native infix form.
+        let op = OpDef::elementwise("addk", 1, &[ElementKind::F32], input(0) + konst(1.5));
+        let a = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::F32, 256);
         let key = structure_key(OpCategory::UnaryElementwise, &[a, a], ArchSku::Sm89);
         let k = generate(&op, &key, &Cuda);
-        assert_eq!(k.name, "baracuda_gen_addk_f16_scalar");
-        assert!(k.source.contains("out[i] = (in0[i] + 1.5);"));
+        assert!(k.source.contains("+ 1.5f)"), "{}", k.source);
+        let op = OpDef::elementwise("addtwo", 2, &[ElementKind::F16], input(0) + input(1));
+        let key = binary_scalar_key(ElementKind::F16, 2);
+        let k = generate(&op, &key, &Cuda);
+        assert!(k.source.contains("(in0[i] + in1[i])"), "{}", k.source);
     }
 
     #[test]
@@ -12238,7 +12298,7 @@ got:
             // natively and never touch the float bridge. Only NON-INFIX function
             // ops route through `cuda_binary`, so the cases below use one.
             for (label, body) in [
-                ("move under arithmetic", input(0).max(input(1)) + konst(1.0)),
+                ("move under arithmetic", input(0).max(input(1)) + input(1)),
                 (
                     "arithmetic under move",
                     (input(0) + input(1)).max(konst(1.0)),
@@ -14673,33 +14733,33 @@ mod multi_output_tests {
     }
 
     #[test]
-    fn multi_output_const_body_forces_scalar_fallback() {
-        // A Const in one body disqualifies the packed pair splat → the WHOLE
-        // multi-output DAG falls back to the scalar emitter even on a V8 f16 cell.
-        let op = OpDef::elementwise_multi(
-            "scaled_bw",
-            2,
-            &[ElementKind::F16],
-            vec![input(0) * input(1), input(0) * konst(0.5)],
+    fn multi_output_half_body_with_a_literal_is_declined() {
+        use unpopped::try_generate;
+        // One body multiplies by a literal. At f16 that is an ambiguous operator (see
+        // `half_arithmetic_with_a_literal_is_declined_not_emitted`), so the whole multi-output
+        // op is declined, not emitted with one uncompilable output.
+        let body = |dt| {
+            OpDef::elementwise_multi(
+                "scaled_bw",
+                2,
+                &[dt],
+                vec![input(0) * input(1), input(0) * konst(0.5)],
+            )
+        };
+        let err = try_generate(
+            &body(ElementKind::F16),
+            &contig_key(ElementKind::F16, 4, true),
+            &Cuda,
+        )
+        .expect_err("an f16 multi-output body with a literal operand must be declined");
+        assert!(format!("{err}").contains("ambiguous operator"), "{err}");
+        // Control: the same op at f32 is emitted, with a float literal.
+        let k = generate(
+            &body(ElementKind::F32),
+            &contig_key(ElementKind::F32, 4, true),
+            &Cuda,
         );
-        let k = generate(&op, &contig_key(ElementKind::F16, 4, true), &Cuda);
-        assert_eq!(
-            k.name, "baracuda_gen_scaled_bw_f16_mo2_scalar",
-            "{}",
-            k.source
-        );
-        assert!(
-            !k.source.contains("__half2"),
-            "no packed pairs on the fallback:\n{}",
-            k.source
-        );
-        assert!(k.source.contains("__half tmp0 = in0[i];"), "{}", k.source);
-        assert!(
-            k.source.contains("out0[i] = (tmp0 * in1[i]);"),
-            "{}",
-            k.source
-        );
-        assert!(k.source.contains("out1[i] = (tmp0 * 0.5);"), "{}", k.source);
+        assert!(k.source.contains("* 0.5f"), "{}", k.source);
     }
 
     #[test]
