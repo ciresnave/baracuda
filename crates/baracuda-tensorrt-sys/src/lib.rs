@@ -206,6 +206,10 @@ pub type trtLogCallback =
 pub type PFN_createInferRuntime =
     unsafe extern "C" fn(logger: trtILogger_t, version: c_int) -> trtIRuntime_t;
 
+/// `getPluginRegistry()`, the `extern "C"` accessor `libnvinfer` exports for its
+/// process-wide plugin registry.
+pub type PFN_getPluginRegistry = unsafe extern "C" fn() -> trtIPluginRegistry_t;
+
 /// `createInferBuilder_INTERNAL(void* logger, int32_t version)` — the
 /// `extern "C"` builder factory exported by `libnvinfer`; same contract as
 /// [`PFN_createInferRuntime`].
@@ -682,6 +686,97 @@ mod shim_stubs {
 #[cfg(not(feature = "shim"))]
 pub use shim_stubs::*;
 
+/// Plugin-registry shim symbols (`nvinfer1::IPluginRegistry` and the creators it
+/// holds). Only present with the `shim` feature, like [`builder`].
+#[cfg(feature = "shim")]
+#[allow(
+    missing_docs,
+    reason = "raw FFI mirror of the shim; each name is the TensorRT method it forwards to"
+)]
+pub mod registry {
+    use super::*;
+
+    unsafe extern "C" {
+        /// 1 = `IPluginCreator` (V2 / V1 interface), 2 = `IPluginCreatorV3One`, 0 = unknown.
+        pub fn trtPluginCreatorKind(creator: *mut c_void) -> i32;
+        pub fn trtPluginCreatorName(creator: *mut c_void) -> *const c_char;
+        pub fn trtPluginCreatorVersion(creator: *mut c_void) -> *const c_char;
+        pub fn trtPluginCreatorNamespace(creator: *mut c_void) -> *const c_char;
+        pub fn trtPluginRegistryGetAllCreators(
+            registry: trtIPluginRegistry_t,
+            count: *mut i32,
+        ) -> *const *mut c_void;
+        pub fn trtPluginRegistryGetCreator(
+            registry: trtIPluginRegistry_t,
+            name: *const c_char,
+            version: *const c_char,
+            namespace: *const c_char,
+        ) -> *mut c_void;
+        pub fn trtPluginRegistryLoadLibrary(
+            registry: trtIPluginRegistry_t,
+            path: *const c_char,
+        ) -> *mut c_void;
+        pub fn trtPluginRegistryDeregisterLibrary(
+            registry: trtIPluginRegistry_t,
+            handle: *mut c_void,
+        );
+        pub fn trtPluginRegistryDeregisterCreator(
+            registry: trtIPluginRegistry_t,
+            creator: *mut c_void,
+        ) -> bool;
+    }
+}
+
+/// `initLibNvInferPlugins(void* logger, const char* libNamespace)`, exported by
+/// the TensorRT plugin library; registers TensorRT's built-in plugins.
+pub type PFN_initLibNvInferPlugins =
+    unsafe extern "C" fn(logger: trtILogger_t, namespace: *const c_char) -> bool;
+
+/// Loader handle for TensorRT's plugin library (`nvinfer_plugin_10.dll` /
+/// `libnvinfer_plugin.so.10`).
+pub struct PluginLib {
+    _lib: Library,
+    init: PFN_initLibNvInferPlugins,
+}
+
+impl core::fmt::Debug for PluginLib {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("PluginLib").finish_non_exhaustive()
+    }
+}
+
+impl PluginLib {
+    /// The `initLibNvInferPlugins` entry point.
+    pub fn init_lib_nvinfer_plugins(&self) -> PFN_initLibNvInferPlugins {
+        self.init
+    }
+}
+
+/// Resolve and return the process-wide TensorRT plugin library.
+pub fn plugin_lib() -> Result<&'static PluginLib, LoaderError> {
+    static LIB: OnceLock<PluginLib> = OnceLock::new();
+    if let Some(l) = LIB.get() {
+        return Ok(l);
+    }
+    let candidates: &'static [&'static str] = Box::leak(
+        if cfg!(windows) {
+            vec!["nvinfer_plugin_10.dll", "nvinfer_plugin.dll"]
+        } else {
+            vec!["libnvinfer_plugin.so.10", "libnvinfer_plugin.so"]
+        }
+        .into_boxed_slice(),
+    );
+    let lib = Library::open("nvinfer_plugin", candidates)?;
+    // SAFETY: the symbol is `bool initLibNvInferPlugins(void*, const char*)` with C linkage.
+    let raw: *mut () = unsafe { lib.raw_symbol("initLibNvInferPlugins")? };
+    // SAFETY: `raw` is the non-null address of that function, and a data pointer and a function pointer
+    // have the same size on every platform this crate supports (the loader macro above relies on the same).
+    let init: PFN_initLibNvInferPlugins =
+        unsafe { core::mem::transmute_copy::<*mut (), PFN_initLibNvInferPlugins>(&raw) };
+    let _ = LIB.set(PluginLib { _lib: lib, init });
+    Ok(LIB.get().expect("OnceLock set or lost race"))
+}
+
 /// Builder-side shim symbols (`IBuilder`, `IBuilderConfig`, `INetworkDefinition`,
 /// layers and tensors). Only present with the `shim` feature: there is no
 /// no-op fallback, because a builder that silently does nothing is worse than
@@ -908,6 +1003,7 @@ trt_fns! {
     get_infer_lib_version as "getInferLibVersion": PFN_getInferLibVersion;
     create_infer_runtime as "createInferRuntime_INTERNAL": PFN_createInferRuntime;
     create_infer_builder as "createInferBuilder_INTERNAL": PFN_createInferBuilder;
+    get_plugin_registry as "getPluginRegistry": PFN_getPluginRegistry;
 }
 
 /// `createNvOnnxParser_INTERNAL(void* network, void* logger, int version)`, the
