@@ -47,6 +47,31 @@ fn decline(op: DeclinedOp, why: String) -> Result<Spelling, LowerError> {
     Ok(Spelling::Declined(Decline::UnsupportedOp { op, why }))
 }
 
+/// An `f32` constant as a C `float` literal (`1.0f`, never the double `1.0`).
+///
+/// A suffix-less literal is a C `double`, so `tmp + 1.0` with a `float` `tmp` runs in
+/// double and rounds to `float` once more on the store: a different result from the
+/// `float` arithmetic the IR means (measured: about 14% of inputs of `g / (g + 1)` differ
+/// by one ULP). The value is rounded to `f32` first, which is what `(float)v` does, and
+/// printed with Rust's shortest round-trip form, so the C compiler reads back exactly
+/// that `float`. NaN and infinities use the `float` macros; a finite `v` beyond the `f32`
+/// range overflows to infinity, as the cast would.
+pub(crate) fn const_f32(v: f64) -> Result<Spelling, LowerError> {
+    let f = v as f32;
+    Ok(Spelling::Spelled(if f.is_nan() {
+        "NAN".to_string()
+    } else if f.is_infinite() {
+        if f > 0.0 { "INFINITY" } else { "-INFINITY" }.to_string()
+    } else {
+        format!("{f:?}f")
+    }))
+}
+
+/// Every other dtype keeps unpopped's default constant spelling (`const_lit`).
+pub(crate) fn const_default(v: f64) -> Result<Spelling, LowerError> {
+    Ok(Spelling::Spelled(unpopped::backend::const_lit(v)))
+}
+
 /// `a * b + c` with one rounding, f32.
 pub(crate) fn fma_f32(a: String, b: String, c: String) -> Result<Spelling, LowerError> {
     Ok(Spelling::Spelled(format!("__fmaf_rn({a}, {b}, {c})")))
@@ -238,4 +263,59 @@ pub(crate) fn bitcast(
         }
     };
     Ok(Spelling::Spelled(spelled))
+}
+
+#[cfg(test)]
+mod const_tests {
+    use super::*;
+
+    fn spelled(v: f64) -> String {
+        match const_f32(v).unwrap() {
+            Spelling::Spelled(s) => s,
+            other => panic!("const_f32({v}) declined: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn f32_constants_carry_the_float_suffix_and_round_trip() {
+        for v in [
+            0.0,
+            -0.0,
+            1.0,
+            -1.0,
+            0.1,
+            0.5,
+            1e-5,
+            7.5,
+            9.25,
+            1e10,
+            3.0e38,
+            1e-45,
+            16_777_217.0,
+        ] {
+            let s = spelled(v);
+            let body = s
+                .strip_suffix('f')
+                .unwrap_or_else(|| panic!("`{s}` has no float suffix"));
+            // The C compiler reads `body` as the nearest float; Rust's parser does the same.
+            let back: f32 = body.parse().unwrap();
+            assert_eq!(back.to_bits(), (v as f32).to_bits(), "{v} -> {s}");
+        }
+        assert_eq!(spelled(1.0), "1.0f");
+    }
+
+    #[test]
+    fn non_finite_and_overflowing_constants_use_the_float_macros() {
+        assert_eq!(spelled(f64::NAN), "NAN");
+        assert_eq!(spelled(f64::INFINITY), "INFINITY");
+        assert_eq!(spelled(f64::NEG_INFINITY), "-INFINITY");
+        // Beyond f32 range: `(float)v` is infinity, so the literal must be too.
+        assert_eq!(spelled(1e39), "INFINITY");
+        assert_eq!(spelled(-1e39), "-INFINITY");
+    }
+
+    #[test]
+    fn the_default_spelling_is_still_the_double_literal() {
+        assert!(matches!(const_default(1.0).unwrap(), Spelling::Spelled(s) if s == "1.0"));
+    }
 }
