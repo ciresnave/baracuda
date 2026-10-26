@@ -20,7 +20,7 @@
 //! [`ScalarExpr::Bitcast`]: unpopped::ir::ScalarExpr::Bitcast
 
 use unpopped::backend::{Decline, DeclinedOp, LowerError, Spelling};
-use unpopped::ir::{CastSpec, RoundMode, Saturation};
+use unpopped::ir::{ArithOp, CastSpec, RoundMode, Saturation};
 use unpopped::types::{int_range, is_cast_float, typed_bits};
 use unpopped_vocab::ElementKind;
 
@@ -65,6 +65,44 @@ pub(crate) fn const_f32(v: f64) -> Result<Spelling, LowerError> {
     } else {
         format!("{f:?}f")
     }))
+}
+
+/// Whether a spelled operand is a bare numeric literal (`1.0`, `-0.5`, `1e-5`, `NAN`, ...).
+fn is_bare_literal(s: &str) -> bool {
+    let t = s.trim();
+    matches!(t, "NAN" | "INFINITY" | "-INFINITY")
+        || (!t.is_empty()
+            && t.bytes()
+                .next()
+                .is_some_and(|b| b.is_ascii_digit() || b == b'-' || b == b'.')
+            && t.trim_end_matches('f').parse::<f64>().is_ok())
+}
+
+/// `+ - * /` on native `__half` / `__nv_bfloat16` operands, declined when an operand is a bare
+/// numeric literal.
+///
+/// A C literal beside a native half operand makes the operator ambiguous: NVRTC rejects
+/// `__half + 1.0` with `more than one operator "+" matches these operands` (measured, CUDA
+/// 13.3, f16 and bf16). Spelling the literal as a half would round every operation to half,
+/// which is not the IR's meaning (compute in `f32`, round once at the store); that needs its own
+/// ruling (board 311 R1.11). Until then the emitter refuses rather than emit source that cannot
+/// compile, and the caller falls back. Operands that are not literals keep the plain infix form.
+pub(crate) fn arith_half_native(op: ArithOp, a: String, b: String) -> Result<Spelling, LowerError> {
+    if is_bare_literal(&a) || is_bare_literal(&b) {
+        return decline(
+            DeclinedOp::Arith(op),
+            format!(
+                "cuda backend: infix `{}` with a literal operand in an f16 / bf16 body is not                  spelled: a C literal beside a native half operand is an ambiguous operator, and                  a half-typed literal would round every operation to half; use an f32 body",
+                op.c_operator()
+            ),
+        );
+    }
+    arith_default(op, a, b)
+}
+
+/// The plain C infix spelling (`(a + b)`), as unpopped's default.
+pub(crate) fn arith_default(op: ArithOp, a: String, b: String) -> Result<Spelling, LowerError> {
+    Ok(Spelling::Spelled(format!("({a} {} {b})", op.c_operator())))
 }
 
 /// Every other dtype keeps unpopped's default constant spelling (`const_lit`).

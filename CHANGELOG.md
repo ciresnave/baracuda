@@ -16,6 +16,13 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.39 - 2026-10-26
+
+### Fixed
+
+- `baracuda-cuda-emit`: an `f16` / `bf16` elementwise body with a literal operand of `+ - * /` is declined with a typed `UnsupportedOp { Arith(op) }` instead of emitting source that cannot compile (PM ruling A, follow-up to the f32 constant fix). The emitter spelled `tmp0 / (tmp0 + 1.0)` on `__half` operands, and NVRTC (CUDA 13.3, sm_89) rejects it: `more than one operator "+" matches these operands ... __half + double` (measured for f16 and bf16 alike). Operands that are not literals keep the native infix form; constants in select arms, comparisons and the promote-compute-demote ops (`max`, `min`, ...) are untouched and compile. The golden `f16_const_body_stays_scalar_for_bit_exactness` pinned the uncompilable text `(in0[i] + 1.5)` and a comment that it "promotes through float to double", which holds only for older `cuda_fp16.h`; it is now `half_arithmetic_with_a_literal_is_declined_not_emitted` (both dtypes declined, f32 control emits `+ 1.5f)`, a half body without a literal still emits `(in0[i] + in1[i])`). New `tests/half_const_compiles.rs` compiles 13 half bodies with literals in 3 sizes for both dtypes with NVRTC: 36 compile, 42 are declined, 0 fail; with the decline switched off 42 of them fail with the ambiguous-operator error. Device-verified on sm_89: whole `baracuda-cuda-emit` device suite 438 passed, 0 failed, 0 declared skips; lib tests 332 passed.
+- Not changed (recorded as ROADMAP SA-47): half bodies still round every operation to half instead of computing in `f32` and rounding once at the store (the IR's meaning), and constants in float-accumulator contexts (the f16 row-reduce epsilon `rsqrtf((r0 + 1e-5))`) are still `double` literals. Both wait for the FMA / MathFidelity ruling R1.11.
+
 ## 0.1.0-alpha.38 - 2026-10-26
 
 ### Fixed
