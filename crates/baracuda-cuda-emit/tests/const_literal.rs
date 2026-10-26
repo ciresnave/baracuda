@@ -51,31 +51,35 @@ fn inputs(n: usize) -> (Vec<f32>, Vec<f32>) {
     (a, b)
 }
 
-fn run(n: usize) -> (Vec<f32>, Vec<f32>, Vec<f32>, String) {
-    let kernel = generate(n as i64);
-    let (a, b) = inputs(n);
-
+/// Run the generated kernel on the device over `a` and `b`.
+fn run_on_device(kernel: &unpopped::backend::GeneratedKernel, a: &[f32], b: &[f32]) -> Vec<f32> {
+    let n = a.len();
     init().expect("cuInit");
     let device = Device::get(0).expect("device");
     let ctx = Context::new(&device).expect("context");
     let stream = Stream::new(&ctx).expect("stream");
-    let target = ArchSku::Sm89.into();
-    let compiler = NvrtcCompiler::new(target).expect("nvrtc target");
+    let compiler = NvrtcCompiler::new(ArchSku::Sm89.into()).expect("nvrtc target");
     let ptx = compiler
         .compile(&kernel.source, &kernel.name, 5000)
-        .unwrap_or_else(|e| panic!("nvrtc: {e}\n{}", kernel.source));
+        .unwrap_or_else(|e| {
+            panic!(
+                "nvrtc: {e}
+{}",
+                kernel.source
+            )
+        });
     let module = Module::load_ptx(&ctx, &String::from_utf8(ptx).expect("ptx utf8")).expect("load");
     let func = module.get_function(&kernel.name).expect("function");
 
-    let da = DeviceBuffer::from_slice(&ctx, &a).expect("upload a");
-    let db = DeviceBuffer::from_slice(&ctx, &b).expect("upload b");
+    let da = DeviceBuffer::from_slice(&ctx, a).expect("upload a");
+    let db = DeviceBuffer::from_slice(&ctx, b).expect("upload b");
     let dout = DeviceBuffer::<f32>::zeros(&ctx, n).expect("alloc out");
     let (pa, pb, po, nn) = (da.as_raw(), db.as_raw(), dout.as_raw(), n as i64);
     let block = 256u32;
     let grid = (n as u32).div_ceil(block);
     // SAFETY: the kernel is `(const float* in0, const float* in1, float* out, long long n)`;
-    // the arguments are pushed in that order with those types, and the buffers outlive the
-    // launch because the stream is synchronized before they drop.
+    // the arguments are pushed in that order with those types, and the buffers `da`, `db` and
+    // `dout` outlive the launch because the stream is synchronized before they drop.
     unsafe {
         func.launch()
             .grid((grid, 1, 1))
@@ -91,26 +95,36 @@ fn run(n: usize) -> (Vec<f32>, Vec<f32>, Vec<f32>, String) {
     stream.synchronize().expect("sync");
     let mut got = vec![0f32; n];
     dout.copy_to_host(&mut got).expect("download");
+    got
+}
 
-    // The oracle: `float` arithmetic, as the IR means.
-    let float_form: Vec<f32> = a
+/// The oracle: `float` arithmetic, as the IR means, and the defect: the same expression with a
+/// double constant evaluated in double.
+fn host_forms(a: &[f32], b: &[f32]) -> (Vec<f32>, Vec<f32>) {
+    let float_form = a
         .iter()
-        .zip(&b)
+        .zip(b)
         .map(|(x, y)| {
             let g = x * y;
             g / (g + 1.0f32)
         })
         .collect();
-    // The defect: the same expression with a double constant, evaluated in double.
-    let double_form: Vec<f32> = a
+    let double_form = a
         .iter()
-        .zip(&b)
+        .zip(b)
         .map(|(x, y)| {
             let g = f64::from(x * y);
             (g / (g + 1.0f64)) as f32
         })
         .collect();
-    let _ = &double_form;
+    (float_form, double_form)
+}
+
+fn run(n: usize) -> (Vec<f32>, Vec<f32>, Vec<f32>, String) {
+    let kernel = generate(n as i64);
+    let (a, b) = inputs(n);
+    let got = run_on_device(&kernel, &a, &b);
+    let (float_form, double_form) = host_forms(&a, &b);
     (got, float_form, double_form, kernel.source)
 }
 
