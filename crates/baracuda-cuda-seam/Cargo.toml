@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-cuda-seam"
-version = "0.1.0-alpha.35"
+version = "0.1.0-alpha.36"
 description = "The Fuel kernel-seam `Synthesizer` implementation (`BaracudaSynthesizer`) over the CUDA backend in `baracuda-cuda-emit`."
 edition.workspace = true
 # No `rust-version.workspace = true`: no MSRV CI job builds this crate under 1.88
@@ -28,9 +28,11 @@ unpopped-vocab = { workspace = true }
 # The §5 shared wire grammar + live-call envelope Fuel calls: registry versions
 # (standing rule: no git deps). 0.22 added `JitRequest::target` and
 # `OpAttrs::region_key()`; 0.26.12 is the current release (first on unpopped-vocab 0.24). Both crates must be the SAME
-# version so the graph holds one copy of `fuel-kernel-seam-types`.
-fuel-kernel-seam-types = "=0.26.12"
-fuel-kernel-seam = "=0.26.12"
+# line so the graph holds one copy of `fuel-kernel-seam-types`. Caret, not `=`: Fuel's own
+# workspace carries newer 0.26 patch releases of the same crates, and an exact pin cannot
+# unify with them (two copies, E0308 at lib.rs:275,283).
+fuel-kernel-seam-types = "0.26.12"
+fuel-kernel-seam = "0.26.12"
 
 [lints]
 workspace = true

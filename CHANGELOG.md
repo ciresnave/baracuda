@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.36 - 2026-10-25
+
+### Fixed
+
+- `baracuda-cuda-seam`: `fuel-kernel-seam` and `fuel-kernel-seam-types` are pinned `0.26.12` (caret) instead of `=0.26.12`. Fuel's own workspace carries newer 0.26 patch releases of the same crates, and an exact pin cannot unify with them: cargo held two copies and `BaracudaSynthesizer` stopped implementing Fuel's `Synthesizer` (E0308 at `lib.rs:275,283`). Proof: a scratch crate depending on `baracuda-cuda-seam` and on `fuel-kernel-seam` 0.26.13 (the 0.26.12 sources re-versioned and patched in) fails to resolve with the old pin ("versions that meet the requirements `=0.26.12` ... conflict with previously selected packages") and, with the caret pins, builds and passes `BaracudaSynthesizer` where Fuel's `Synthesizer` is required; `cargo tree -i fuel-kernel-seam` shows one copy. New test `tests/seam_pin.rs` fails when the pin is `=0.26.12`. Not run on device (no GPU code).
+
 ## 0.1.0-alpha.35 - 2026-10-25
 
 ### Added
