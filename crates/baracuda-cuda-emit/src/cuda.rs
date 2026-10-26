@@ -11774,11 +11774,9 @@ got:
                 .contains("acc1 += ((in0[idx] - r0)*(in0[idx] - r0));")
         );
         // epilogue: (x-mean)*rsqrt(var+eps)*weight[j] + bias[j].
-        assert!(
-            k.source.contains(
-                "out[idx] = ((((in0[idx] - r0) * rsqrtf((r1 + 1e-5f))) * in1[j]) + in2[j]);"
-            )
-        );
+        assert!(k.source.contains(
+            "out[idx] = ((((in0[idx] - r0) * rsqrtf((r1 + 1e-5f))) * in1[j]) + in2[j]);"
+        ));
         assert!(!k.source.contains("in1[idx]") && !k.source.contains("in2[idx]"));
     }
 
@@ -18312,8 +18310,9 @@ mod select_tests {
         );
         let kz = generate(&z, &sel_key(ElementKind::F32, 3, 4), &Cuda);
         assert!(
-            kz.source
-                .contains("out[i] = (((float)(in0[i])) != 0.0f ? (float)(in1[i]) : (float)(0.0f));"),
+            kz.source.contains(
+                "out[i] = (((float)(in0[i])) != 0.0f ? (float)(in1[i]) : (float)(0.0f));"
+            ),
             "f32 const-arm select golden missing in:\n{}",
             kz.source
         );
