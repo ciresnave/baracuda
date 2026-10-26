@@ -81,6 +81,13 @@ pub fn shim_built() -> bool {
     sys::SHIM_BUILT
 }
 
+#[cfg(feature = "shim")]
+mod plugin;
+#[cfg(feature = "shim")]
+pub use plugin::{
+    PluginCreatorInfo, PluginCreatorKind, PluginLibraryHandle, PluginRegistry, init_builtin_plugins,
+};
+
 pub use sys::{
     trtDataType_t as DataType, trtExecutionContextAllocationStrategy_t as AllocStrategy,
     trtSeverity_t as Severity, trtTensorIOMode_t as IoMode,

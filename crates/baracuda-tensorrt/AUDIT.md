@@ -156,4 +156,5 @@ machine. To finish validation:
 - ~~Builder path~~ — `baracuda-tensorrt-builder` (alpha.33) covers `IBuilder`,
   `IBuilderConfig` and `INetworkDefinition` with 12 layer kinds; the ONNX `IParser`
   arrived in alpha.35 (`OnnxParser`).
-- INT8 calibration + plugin registry — Tier-2.
+- INT8 calibration — Tier-2 (held, board 307). Plugin registry: listing, lookup, library loading and built-in
+  plugins arrived in alpha.37 (`PluginRegistry`); writing plugins in Rust is still open.

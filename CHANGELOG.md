@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.37 - 2026-10-26
+
+### Added
+
+- `baracuda-tensorrt`: the plugin registry (ROADMAP SA-33 row 5, first slice; needs the `shim` feature). `PluginRegistry::{global, creators, creator, load_library, deregister_library}`, `PluginCreatorInfo { name, version, namespace, kind }`, `PluginCreatorKind` and `init_builtin_plugins(logger, namespace)` (`initLibNvInferPlugins` from `nvinfer_plugin_10.dll` / `libnvinfer_plugin.so.10`). The loader resolves `getPluginRegistry` from libnvinfer; the shim reads a creator's name, version and namespace by vtable after identifying the creator interface (`PLUGIN CREATOR_V1` or `PLUGIN CREATOR_V3ONE`) from `getInterfaceInfo()`. Not covered: writing a plugin (an `IPluginV3` implementation) in Rust. Device-verified on sm_89 (RTX 4070), TensorRT 10.16.1.11: `cargo gpu-test -p baracuda-tensorrt --features shim,device-tests --test plugin_smoke`, 3 passed, 0 failed, 0 declared skips: the built-in plugins register and at least five creators are listed with names and a readable interface kind; a listed creator is found by its name / version / namespace and a name nobody registered is not (the lookup finding what the listing shows is the control); a missing plugin library is refused. With the listing returning nothing, two of the three fail. No int8 dot kernel of ours is added.
+
 ## 0.1.0-alpha.36 - 2026-10-25
 
 ### Fixed

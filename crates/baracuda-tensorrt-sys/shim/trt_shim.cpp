@@ -32,6 +32,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <new>
 
 using namespace nvinfer1;
@@ -467,6 +468,89 @@ void trtConcatenationSetAxis(void* layer, std::int32_t axis) noexcept {
 
 void trtSoftMaxSetAxes(void* layer, std::uint32_t axes) noexcept {
     static_cast<ISoftMaxLayer*>(asLayer(layer))->setAxes(axes);
+}
+
+}  // extern "C"
+
+// ---- plugin registry (nvinfer1::IPluginRegistry) -------------------------
+//
+// The registry is a process-wide singleton reached through libnvinfer's exported
+// `getPluginRegistry`, which the Rust loader resolves; every call here is a
+// vtable dispatch. Creators come back as `IPluginCreatorInterface*`; the concrete
+// creator type is read from `getInterfaceInfo()` (no RTTI crosses the boundary).
+
+namespace {
+
+enum PluginCreatorKind : std::int32_t { kUnknown = 0, kV1 = 1, kV3One = 2 };
+
+PluginCreatorKind creator_kind(void* creator) noexcept {
+    const char* kind = static_cast<IPluginCreatorInterface*>(creator)->getInterfaceInfo().kind;
+    if (kind == nullptr) {
+        return kUnknown;
+    }
+    if (std::strcmp(kind, "PLUGIN CREATOR_V1") == 0) {
+        return kV1;
+    }
+    if (std::strcmp(kind, "PLUGIN CREATOR_V3ONE") == 0) {
+        return kV3One;
+    }
+    return kUnknown;
+}
+
+}  // namespace
+
+extern "C" {
+
+std::int32_t trtPluginCreatorKind(void* creator) noexcept { return creator_kind(creator); }
+
+// The three accessors below return null for a creator kind this shim cannot read.
+const char* trtPluginCreatorName(void* creator) noexcept {
+    switch (creator_kind(creator)) {
+        case kV1: return static_cast<IPluginCreator*>(creator)->getPluginName();
+        case kV3One: return static_cast<IPluginCreatorV3One*>(creator)->getPluginName();
+        default: return nullptr;
+    }
+}
+
+const char* trtPluginCreatorVersion(void* creator) noexcept {
+    switch (creator_kind(creator)) {
+        case kV1: return static_cast<IPluginCreator*>(creator)->getPluginVersion();
+        case kV3One: return static_cast<IPluginCreatorV3One*>(creator)->getPluginVersion();
+        default: return nullptr;
+    }
+}
+
+const char* trtPluginCreatorNamespace(void* creator) noexcept {
+    switch (creator_kind(creator)) {
+        case kV1: return static_cast<IPluginCreator*>(creator)->getPluginNamespace();
+        case kV3One: return static_cast<IPluginCreatorV3One*>(creator)->getPluginNamespace();
+        default: return nullptr;
+    }
+}
+
+// Returns a pointer to the registry's array of creators and writes the count.
+void* const* trtPluginRegistryGetAllCreators(void* registry, std::int32_t* count) noexcept {
+    return reinterpret_cast<void* const*>(
+        static_cast<IPluginRegistry*>(registry)->getAllCreators(count));
+}
+
+void* trtPluginRegistryGetCreator(
+    void* registry, const char* name, const char* version, const char* ns) noexcept {
+    return static_cast<IPluginRegistry*>(registry)->getCreator(name, version, ns);
+}
+
+// Returns an opaque library handle, or null if the library could not be loaded.
+void* trtPluginRegistryLoadLibrary(void* registry, const char* path) noexcept {
+    return static_cast<IPluginRegistry*>(registry)->loadLibrary(path);
+}
+
+void trtPluginRegistryDeregisterLibrary(void* registry, void* handle) noexcept {
+    static_cast<IPluginRegistry*>(registry)->deregisterLibrary(handle);
+}
+
+bool trtPluginRegistryDeregisterCreator(void* registry, void* creator) noexcept {
+    return static_cast<IPluginRegistry*>(registry)->deregisterCreator(
+        *static_cast<IPluginCreatorInterface*>(creator));
 }
 
 }  // extern "C"
