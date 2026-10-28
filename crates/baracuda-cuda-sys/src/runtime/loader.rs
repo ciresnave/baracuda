@@ -384,49 +384,13 @@ runtime_fns! {
     fn cuda_malloc_3d as "cudaMalloc3D": PFN_cudaMalloc3D;
     fn cuda_malloc_3d_array as "cudaMalloc3DArray": PFN_cudaMalloc3DArray;
 
-    // Launch-ex / cluster
-    fn cuda_launch_kernel_ex as "cudaLaunchKernelEx": PFN_cudaLaunchKernelEx;
+    // Launch-ex / cluster. `cudaLaunchKernelEx` is a C++ header template over the exported
+    // `cudaLaunchKernelExC`; only the latter is a symbol in libcudart.
+    fn cuda_launch_kernel_ex_c as "cudaLaunchKernelExC": PFN_cudaLaunchKernelExC;
 
     // Profiler
     fn cuda_profiler_start as "cudaProfilerStart": PFN_cudaProfilerStart;
     fn cuda_profiler_stop as "cudaProfilerStop": PFN_cudaProfilerStop;
-
-    // VMM
-    fn cuda_mem_address_reserve as "cudaMemAddressReserve": PFN_cudaMemAddressReserve;
-    fn cuda_mem_address_free as "cudaMemAddressFree": PFN_cudaMemAddressFree;
-    fn cuda_mem_create as "cudaMemCreate": PFN_cudaMemCreate;
-    fn cuda_mem_release as "cudaMemRelease": PFN_cudaMemRelease;
-    fn cuda_mem_map as "cudaMemMap": PFN_cudaMemMap;
-    fn cuda_mem_unmap as "cudaMemUnmap": PFN_cudaMemUnmap;
-    fn cuda_mem_set_access as "cudaMemSetAccess": PFN_cudaMemSetAccess;
-    fn cuda_mem_get_access as "cudaMemGetAccess": PFN_cudaMemGetAccess;
-    fn cuda_mem_get_allocation_granularity as "cudaMemGetAllocationGranularity":
-        PFN_cudaMemGetAllocationGranularity;
-    fn cuda_mem_get_allocation_properties_from_handle
-        as "cudaMemGetAllocationPropertiesFromHandle":
-        PFN_cudaMemGetAllocationPropertiesFromHandle;
-    fn cuda_mem_export_to_shareable_handle as "cudaMemExportToShareableHandle":
-        PFN_cudaMemExportToShareableHandle;
-    fn cuda_mem_import_from_shareable_handle as "cudaMemImportFromShareableHandle":
-        PFN_cudaMemImportFromShareableHandle;
-    fn cuda_mem_retain_allocation_handle as "cudaMemRetainAllocationHandle":
-        PFN_cudaMemRetainAllocationHandle;
-
-    // Multicast (12.0+)
-    fn cuda_multicast_create as "cudaMulticastCreate": PFN_cudaMulticastCreate;
-    fn cuda_multicast_add_device as "cudaMulticastAddDevice": PFN_cudaMulticastAddDevice;
-    fn cuda_multicast_bind_mem as "cudaMulticastBindMem": PFN_cudaMulticastBindMem;
-    fn cuda_multicast_bind_addr as "cudaMulticastBindAddr": PFN_cudaMulticastBindAddr;
-    fn cuda_multicast_unbind as "cudaMulticastUnbind": PFN_cudaMulticastUnbind;
-    fn cuda_multicast_get_granularity as "cudaMulticastGetGranularity":
-        PFN_cudaMulticastGetGranularity;
-
-    // Green contexts (13.1+)
-    fn cuda_device_create_green_ctx as "cudaDeviceCreateGreenCtx": PFN_cudaDeviceCreateGreenCtx;
-    fn cuda_green_ctx_destroy as "cudaGreenCtxDestroy": PFN_cudaGreenCtxDestroy;
-    fn cuda_green_ctx_record_event as "cudaGreenCtxRecordEvent": PFN_cudaGreenCtxRecordEvent;
-    fn cuda_green_ctx_wait_event as "cudaGreenCtxWaitEvent": PFN_cudaGreenCtxWaitEvent;
-    fn cuda_green_ctx_stream_create as "cudaGreenCtxStreamCreate": PFN_cudaGreenCtxStreamCreate;
 }
 
 /// Lazily-initialized process-wide Runtime singleton.
