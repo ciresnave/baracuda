@@ -16,6 +16,17 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.40 - 2026-10-27
+
+### Changed
+
+- **Breaking** (ROADMAP SA-45): `baracuda-runtime` no longer has the `vmm`, `multicast` and `green` modules, and `baracuda-cuda-sys`'s runtime loader no longer has the 24 entries behind them (`cudaMemCreate` / `Map` / `Unmap` / `AddressReserve` / `AddressFree` / `SetAccess` / `GetAccess` and the rest of the VMM set, `cudaMulticast*`, `cudaDeviceCreateGreenCtx` and the green-context set) nor their `PFN_*` types. `cudart64_13.dll` (CUDA 13.3) does not export any of them: virtual memory management, multicast and green contexts are driver-API only, so those wrappers could never work and their tests only ever declared a skip. The working versions are `baracuda_driver::{vmm, multicast, green}`. Nothing in the workspace used the removed items.
+- `baracuda-cuda-sys`: the runtime loader's `cuda_launch_kernel_ex` (`cudaLaunchKernelEx`, a C++ header template, not a libcudart symbol) is now `cuda_launch_kernel_ex_c` over the exported `cudaLaunchKernelExC` (`PFN_cudaLaunchKernelExC`); `baracuda_runtime::launch_attr::LaunchExBuilder::launch` uses it, so it works for the first time.
+
+### Tests
+
+- Device-verified on sm_89 (RTX 4070, CUDA 13.3): `cargo gpu-test -p baracuda-runtime --features device-tests --test wave5_smoke`, 8 passed, 0 failed, 0 declared skips. `launch_ex_basic_vector_add` now runs a real vector add through `cudaLaunchKernelExC` (it used to declare a skip), and `runtime_wave5_symbols_resolve` now asserts that EVERY listed runtime entry resolves (it used to pin the 25 that could not). `vmm_end_to_end` and the green-context test are removed with the code they exercised.
+
 ## 0.1.0-alpha.39 - 2026-10-26
 
 ### Fixed

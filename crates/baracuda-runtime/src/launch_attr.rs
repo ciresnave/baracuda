@@ -115,7 +115,7 @@ impl<'s> LaunchExBuilder<'s> {
                 self.config.num_attrs = self.attrs.len() as core::ffi::c_uint;
             }
             let r = runtime()?;
-            let cu = r.cuda_launch_kernel_ex()?;
+            let cu = r.cuda_launch_kernel_ex_c()?;
             check(cu(
                 &self.config,
                 kernel.as_launch_ptr(),

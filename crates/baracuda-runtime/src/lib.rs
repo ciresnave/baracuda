@@ -90,7 +90,6 @@ pub mod event;
 pub mod external;
 pub mod graph;
 pub mod graphics;
-pub mod green;
 pub mod init;
 pub mod ipc;
 pub mod launch;
@@ -100,12 +99,10 @@ pub mod memcpy3d;
 pub mod memory;
 pub mod mempool;
 pub mod module;
-pub mod multicast;
 pub mod profiler;
 pub mod query;
 pub mod stream;
 pub mod user_object;
-pub mod vmm;
 
 #[cfg(feature = "driver-interop")]
 pub mod interop;

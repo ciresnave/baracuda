@@ -1,11 +1,11 @@
-//! Runtime Wave 5: arrays + tex/surf, 3D memcpy, launch-ex, profiler,
-//! VMM, multicast, green contexts.
+//! Runtime Wave 5: arrays + tex/surf, 3D memcpy, launch-ex, profiler.
+//!
+//! VMM, multicast and green contexts are driver-API only (libcudart does not export them);
+//! they live in `baracuda-driver` (ROADMAP SA-45).
 
 #[cfg(feature = "device-tests")]
 use baracuda_cuda_sys::runtime::types::{cudaChannelFormatKind, cudaExtent, cudaTextureDesc};
 
-#[cfg(feature = "device-tests")]
-use baracuda_driver::require_optional;
 #[cfg(feature = "device-tests")]
 use baracuda_runtime::array::{Array, MipmappedArray, SurfaceObject, TextureObject, channel_desc};
 #[cfg(feature = "device-tests")]
@@ -13,7 +13,7 @@ use baracuda_runtime::launch_attr::LaunchExBuilder;
 #[cfg(feature = "device-tests")]
 use baracuda_runtime::memcpy3d::Pitched3dBuffer;
 #[cfg(feature = "device-tests")]
-use baracuda_runtime::{Device, Library, Stream, profiler, vmm};
+use baracuda_runtime::{Device, Library, Stream, profiler};
 
 #[cfg(feature = "device-tests")]
 const VECTOR_ADD_PTX: &str = include_str!("kernels/vector_add.ptx");
@@ -114,24 +114,13 @@ fn launch_ex_basic_vector_add() {
         &n as *const _ as *mut _,
     ];
 
-    // cudaLaunchKernelEx is not always exported from the Windows
-    // cudart DLL; skip gracefully if the symbol is missing.
-    let rc = unsafe {
+    // `cudaLaunchKernelEx` is a header template; the exported symbol is `cudaLaunchKernelExC`,
+    // which the loader resolves. Any error is a real failure.
+    unsafe {
         LaunchExBuilder::new(&stream, (n.div_ceil(256), 1, 1), (256, 1, 1))
             .launch(&kernel, &mut args)
-    };
-    // cudaLaunchKernelEx is not always exported from the Windows cudart DLL, so
-    // a missing symbol is a legitimate skip even on the box → require_optional!
-    // (declared, not silent). Any OTHER error is a real failure and still panics.
-    let op = match rc {
-        Ok(()) => Some(()),
-        Err(baracuda_runtime::Error::Loader(_)) => None,
-        Err(e) => panic!("launch_ex: {e:?}"),
-    };
-    require_optional!(
-        op,
-        "cudaLaunchKernelEx export (not always present in the Windows cudart DLL)"
-    );
+            .expect("launch_ex via cudaLaunchKernelExC");
+    }
     stream.synchronize().unwrap();
 
     let mut out = vec![0f32; n as usize];
@@ -152,99 +141,9 @@ fn profiler_start_stop_no_error() {
     assert_eq!(v, 42);
 }
 
-#[test]
-#[cfg(feature = "device-tests")]
-fn vmm_end_to_end() {
-    let device = Device::from_ordinal(0);
-    device.set_current().unwrap();
-    let prop = vmm::device_alloc_prop(&device);
-
-    // VMM requires a supported handle-type on some drivers; where it isn't
-    // available these queries fail legitimately even on the box, so they are
-    // require_optional! (declared skip, not silent). If they DO succeed, the
-    // unsafe map/set_access/unmap/free block below is the assertion (Tier-B).
-    let granularity = require_optional!(
-        vmm::allocation_granularity(&prop, 0),
-        "VMM allocation-granularity query (driver/handle-type dependent)"
-    );
-    let size = granularity.max(1 << 20);
-
-    let handle = require_optional!(
-        vmm::MemHandle::new(size, &prop, 0),
-        "VMM cuMemCreate (requires a supported handle type on this driver)"
-    );
-    let va = require_optional!(
-        vmm::address_reserve(size, granularity, 0),
-        "VMM cuMemAddressReserve"
-    );
-    unsafe {
-        vmm::map(va, size, 0, &handle, 0).unwrap();
-        vmm::set_access(
-            va,
-            size,
-            &device,
-            baracuda_runtime::mempool::AccessFlags::ReadWrite,
-        )
-        .unwrap();
-        vmm::unmap(va, size).unwrap();
-        vmm::address_free(va, size).unwrap();
-    }
-}
-
-#[test]
-#[cfg(feature = "device-tests")]
-fn green_ctx_surface_is_feature_gated_or_works() {
-    Device::from_ordinal(0).set_current().unwrap();
-    // We don't have a cudaDevResourceDesc builder in the runtime crate
-    // (that helper lives in baracuda-driver). Just verify the gate
-    // behaves: either returns FeatureNotSupported on pre-13.1, or a
-    // clean error on a bogus descriptor on 13.1+.
-    let rc =
-        unsafe { baracuda_runtime::green::GreenContext::from_resource_desc(core::ptr::null(), 0) };
-    match rc {
-        Err(baracuda_runtime::Error::FeatureNotSupported { .. }) => {
-            eprintln!("green-ctx not supported on this driver (expected on <13.1)")
-        }
-        Err(e) => eprintln!("green-ctx create with null desc returned {e:?} (expected)"),
-        Ok(_) => panic!("unexpected success with null resource desc"),
-    }
-}
-
-/// Wave-5 runtime entry points that do NOT exist in `libcudart` (CUDA 13.3 `cudart64_13.dll`
-/// exports none of these names: VMM, multicast and green contexts are driver-API only, and
-/// `cudaLaunchKernelEx` is a header inline over the exported `cudaLaunchKernelExC`). The
-/// loader entries can never resolve, so the runtime wrappers over them always declare-skip
-/// (ROADMAP SA-45). Pinned so the set cannot change silently: a symbol that starts to
-/// resolve, or a new one that stops, fails this test.
-const KNOWN_UNRESOLVABLE: &[&str] = &[
-    "cuda_launch_kernel_ex",
-    "cuda_mem_address_reserve",
-    "cuda_mem_address_free",
-    "cuda_mem_create",
-    "cuda_mem_release",
-    "cuda_mem_map",
-    "cuda_mem_unmap",
-    "cuda_mem_set_access",
-    "cuda_mem_get_access",
-    "cuda_mem_get_allocation_granularity",
-    "cuda_mem_get_allocation_properties_from_handle",
-    "cuda_mem_export_to_shareable_handle",
-    "cuda_mem_import_from_shareable_handle",
-    "cuda_mem_retain_allocation_handle",
-    "cuda_multicast_create",
-    "cuda_multicast_add_device",
-    "cuda_multicast_bind_mem",
-    "cuda_multicast_bind_addr",
-    "cuda_multicast_unbind",
-    "cuda_multicast_get_granularity",
-    "cuda_device_create_green_ctx",
-    "cuda_green_ctx_destroy",
-    "cuda_green_ctx_record_event",
-    "cuda_green_ctx_wait_event",
-    "cuda_green_ctx_stream_create",
-];
-
-/// Every other Wave-5 runtime entry point must resolve against the installed `libcudart`.
+/// Every Wave-5 runtime entry point must resolve against the installed `libcudart`. (Until alpha.40 this
+/// test pinned 25 names that could never resolve; ROADMAP SA-45 removed them, and `cudaLaunchKernelEx`,
+/// a header template, became the exported `cudaLaunchKernelExC`.)
 /// Without a CUDA runtime on the machine there is nothing to resolve, so that case is
 /// the only one that returns early; with `device-tests` it fails instead.
 #[test]
@@ -279,36 +178,12 @@ fn runtime_wave5_symbols_resolve() {
         cuda_memset_3d,
         cuda_malloc_3d,
         cuda_malloc_3d_array,
-        cuda_launch_kernel_ex,
+        cuda_launch_kernel_ex_c,
         cuda_profiler_start,
         cuda_profiler_stop,
-        cuda_mem_address_reserve,
-        cuda_mem_address_free,
-        cuda_mem_create,
-        cuda_mem_release,
-        cuda_mem_map,
-        cuda_mem_unmap,
-        cuda_mem_set_access,
-        cuda_mem_get_access,
-        cuda_mem_get_allocation_granularity,
-        cuda_mem_get_allocation_properties_from_handle,
-        cuda_mem_export_to_shareable_handle,
-        cuda_mem_import_from_shareable_handle,
-        cuda_mem_retain_allocation_handle,
-        cuda_multicast_create,
-        cuda_multicast_add_device,
-        cuda_multicast_bind_mem,
-        cuda_multicast_bind_addr,
-        cuda_multicast_unbind,
-        cuda_multicast_get_granularity,
-        cuda_device_create_green_ctx,
-        cuda_green_ctx_destroy,
-        cuda_green_ctx_record_event,
-        cuda_green_ctx_wait_event,
-        cuda_green_ctx_stream_create,
     );
-    assert_eq!(
-        missing, KNOWN_UNRESOLVABLE,
-        "set of unresolvable runtime symbols changed"
+    assert!(
+        missing.is_empty(),
+        "runtime symbols that did not resolve against libcudart: {missing:?}"
     );
 }

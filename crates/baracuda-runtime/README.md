@@ -30,7 +30,8 @@ Mirror of [`baracuda-driver`] for everything the Runtime API exposes:
 - **Device + set_device** — enumeration, attributes, current-device
   control per thread.
 - **Memory** — typed `DeviceBuffer<T>`, slices, async copies, pinned
-  host memory, managed memory, memory pools, multicast.
+  host memory, managed memory, memory pools. (Virtual memory management,
+  multicast and green contexts are driver-API only: see `baracuda-driver`.)
 - **Stream + Event** — ordered async work + sync/timing.
 - **Graph** — capture and replay; cross-API interop with
   `baracuda-driver::Graph` via `from_raw` / `as_raw`.
