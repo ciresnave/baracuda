@@ -16,6 +16,15 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.41 - 2026-10-28
+
+Docs only. No code, no device run.
+
+### Changed
+
+- ROADMAP SA-42 now says what it waits on: Unpopped deleting its CUDA slice from `convert.rs` (0.30.0, publish held), not the KISS registry repoint, which landed (KISS#514).
+- ROADMAP records the CireSnave hold of 2026-10-28 on new CUDA parser / emitter features until the Frontend/Backend seam is settled (see the SA-40 block).
+
 ## 0.1.0-alpha.40 - 2026-10-27
 
 ### Changed
