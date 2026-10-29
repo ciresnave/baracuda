@@ -576,3 +576,113 @@ fn conv2d_f32_bw_filter() {
         );
     }
 }
+
+/// Deterministic f32 inputs for the picker test (same seeds as the f64 reference).
+fn fw_f32_inputs(d: &ConvDims) -> (Vec<f32>, Vec<f32>) {
+    let x = make_x_f64(d, 0x5EED_0001)
+        .iter()
+        .map(|&v| v as f32)
+        .collect();
+    let w = make_w_f64(d, 0x5EED_0002)
+        .iter()
+        .map(|&v| v as f32)
+        .collect();
+    (x, w)
+}
+
+/// f32 plan for `d` with the FW picker set to `picker`.
+fn fw_f32_plan(stream: &Stream, d: &ConvDims, picker: bool) -> Conv2dPlan<f32> {
+    let desc = Conv2dDescriptor::new(
+        d.n,
+        d.c_in,
+        d.h_in,
+        d.w_in,
+        d.c_out,
+        d.h_filt,
+        d.w_filt,
+        ElementKind::F32,
+    )
+    .with_padding(d.pad_h, d.pad_w);
+    Conv2dPlan::<f32>::select(stream, &desc, PlanPreference::default())
+        .expect("select")
+        .with_fw_algo_picker(picker)
+}
+
+/// One f32 FW pass; returns the output and the resolved algorithm tag.
+fn run_fw_f32(
+    ctx: &Context,
+    stream: &Stream,
+    d: &ConvDims,
+    picker: bool,
+) -> (Vec<f32>, Option<i32>) {
+    let (x, w) = fw_f32_inputs(d);
+    let (h_out, w_out) = d.output_dims();
+    let y_numel = (d.n * d.c_out * h_out * w_out) as usize;
+    let dev_x = DeviceBuffer::from_slice(ctx, &x).expect("up x");
+    let dev_w = DeviceBuffer::from_slice(ctx, &w).expect("up w");
+    let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(ctx, y_numel).expect("alloc y");
+    let plan = fw_f32_plan(stream, d, picker);
+    let ws_bytes = plan.query_fw_workspace_size(stream).expect("ws query");
+    let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(ctx, ws_bytes.max(1)).expect("alloc ws");
+    let (xs, ws_, ys) = (
+        [d.n, d.c_in, d.h_in, d.w_in],
+        [d.c_out, d.c_in, d.h_filt, d.w_filt],
+        [d.n, d.c_out, h_out, w_out],
+    );
+    let workspace = if ws_bytes == 0 {
+        Workspace::None
+    } else {
+        Workspace::Borrowed(dev_ws.as_slice_mut())
+    };
+    plan.run_fw(
+        stream,
+        workspace,
+        Conv2dArgs::<f32> {
+            x: TensorRef::new(dev_x.as_slice(), xs, contiguous_stride(xs)).unwrap(),
+            w: TensorRef::new(dev_w.as_slice(), ws_, contiguous_stride(ws_)).unwrap(),
+            y: TensorMut::new(dev_y.as_slice_mut(), ys, contiguous_stride(ys)).unwrap(),
+        },
+    )
+    .expect("run_fw");
+    stream.synchronize().expect("sync");
+    let mut got = vec![0f32; y_numel];
+    dev_y.copy_to_host(&mut got).expect("dl y");
+    (got, plan.fw_algo())
+}
+
+/// Opt-in FW algorithm picker: default stays pinned to IMPLICIT_GEMM (0);
+/// picker-on output matches the f64 reference and repeats bit-for-bit
+/// across two plans on this device (observation, not a guarantee).
+#[test]
+fn conv2d_f32_fw_algo_picker() {
+    let (ctx, stream) = setup();
+    let d = ConvDims {
+        n: 2,
+        c_in: 16,
+        h_in: 32,
+        w_in: 32,
+        c_out: 16,
+        pad_h: 1,
+        pad_w: 1,
+        ..TRAILBLAZER
+    };
+    let (_, pinned) = run_fw_f32(&ctx, &stream, &d, false);
+    assert_eq!(pinned, Some(0), "default must stay IMPLICIT_GEMM");
+    let (a, algo) = run_fw_f32(&ctx, &stream, &d, true);
+    let (b, _) = run_fw_f32(&ctx, &stream, &d, true);
+    eprintln!("conv2d picker resolved FW algo = {algo:?}");
+    assert!(algo.is_some());
+    assert_eq!(a, b, "picker output differed between two runs");
+    let expected = host_conv2d_fw_f64(
+        &d,
+        &make_x_f64(&d, 0x5EED_0001),
+        &make_w_f64(&d, 0x5EED_0002),
+    );
+    for (i, (g, e)) in a.iter().zip(&expected).enumerate() {
+        let tol = 1.0e-3 * e.abs().max(1.0);
+        assert!(
+            (*g as f64 - e).abs() <= tol,
+            "picker FW mismatch @ {i}: got={g}, want={e}"
+        );
+    }
+}

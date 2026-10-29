@@ -56039,6 +56039,41 @@ mod cudnn_ffi {
     /// accepts).
     pub const CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM: i32 = 0;
 
+    /// `CUDNN_CONVOLUTION_FWD_ALGO_COUNT` — number of forward algorithms
+    /// in the cuDNN 9 enum; the row capacity to request from
+    /// `cudnnGetConvolutionForwardAlgorithm_v7` to see every candidate.
+    pub const CUDNN_CONVOLUTION_FWD_ALGO_COUNT: i32 = 8;
+
+    /// `cudnnDeterminism_t` from the C header.
+    pub type cudnnDeterminism_t = i32;
+    /// `CUDNN_NON_DETERMINISTIC`.
+    pub const CUDNN_NON_DETERMINISTIC: i32 = 0;
+    /// `CUDNN_DETERMINISTIC`.
+    pub const CUDNN_DETERMINISTIC: i32 = 1;
+
+    /// `cudnnConvolutionFwdAlgoPerf_t` — one result row of
+    /// `cudnnGetConvolutionForwardAlgorithm_v7`. Layout mirrors the C
+    /// struct (`algo`, `status`, `time`, `memory`, `determinism`,
+    /// `mathType`, `reserved[3]`).
+    #[repr(C)]
+    #[derive(Copy, Clone, Debug)]
+    pub struct cudnnConvolutionFwdAlgoPerf_t {
+        /// Algorithm tag (`cudnnConvolutionFwdAlgo_t`).
+        pub algo: cudnnConvolutionFwdAlgo_t,
+        /// Per-row `cudnnStatus_t`; `0` means the algo is usable.
+        pub status: i32,
+        /// Time in ms (`-1` for heuristic rows, which do not time).
+        pub time: f32,
+        /// Workspace bytes the algo needs.
+        pub memory: usize,
+        /// `cudnnDeterminism_t` of the algo.
+        pub determinism: cudnnDeterminism_t,
+        /// `cudnnMathType_t` the row was ranked under.
+        pub math_type: i32,
+        /// Reserved; do not use.
+        pub reserved: [i32; 3],
+    }
+
     /// cuDNN backward-data-convolution algorithm tag —
     /// `cudnnConvolutionBwdDataAlgo_t` from the C header. Trailblazer
     /// pins [`CUDNN_CONVOLUTION_BWD_DATA_ALGO_1`] (algo `1`, the
@@ -56309,6 +56344,26 @@ mod cudnn_ffi {
             y_desc: cudnnTensorDescriptor_t,
             algo: cudnnConvolutionFwdAlgo_t,
             size_in_bytes: *mut usize,
+        ) -> i32;
+
+        /// `cudnnGetConvolutionForwardAlgorithm_v7(handle, x_desc,
+        /// w_desc, conv_desc, y_desc, requested_count, &returned_count,
+        /// perf_results)` — heuristic ranking of forward algorithms for
+        /// the descriptor set, best first. Returns 0 on success.
+        ///
+        /// # Safety
+        /// All descriptors must be live and consistent; `perf_results`
+        /// must point to `requested_count` writable rows and
+        /// `returned_count` to one writable `i32`.
+        pub fn cudnnGetConvolutionForwardAlgorithm_v7(
+            handle: cudnnHandle_t,
+            x_desc: cudnnTensorDescriptor_t,
+            w_desc: cudnnFilterDescriptor_t,
+            conv_desc: cudnnConvolutionDescriptor_t,
+            y_desc: cudnnTensorDescriptor_t,
+            requested_algo_count: i32,
+            returned_algo_count: *mut i32,
+            perf_results: *mut cudnnConvolutionFwdAlgoPerf_t,
         ) -> i32;
 
         /// `cudnnGetConvolutionBackwardDataWorkspaceSize(handle, w_desc,

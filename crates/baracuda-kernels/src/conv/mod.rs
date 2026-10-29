@@ -37,8 +37,9 @@
 //! - Backward data: `ALGO_1` (`IMPLICIT_PRECOMP_GEMM`).
 //! - Backward filter: `ALGO_1`.
 //!
-//! Heuristic algorithm search via
-//! `cudnnGetConvolutionForwardAlgorithm_v7` is a perf-tuning follow-up.
+//! `Conv2dPlan::with_fw_algo_picker(true)` opts the forward pass into
+//! `cudnnGetConvolutionForwardAlgorithm_v7` (best deterministic row, else
+//! `IMPLICIT_GEMM`); backward heuristics remain a follow-up.
 //!
 //! ## Handle ownership
 //!

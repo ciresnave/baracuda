@@ -15,17 +15,18 @@ use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_sys::{
     CUDNN_CONVOLUTION_BWD_DATA_ALGO_1, CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1,
-    CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM, CUDNN_CROSS_CORRELATION, CUDNN_DATA_BFLOAT16,
-    CUDNN_DATA_DOUBLE, CUDNN_DATA_FLOAT, CUDNN_DATA_HALF, CUDNN_TENSOR_NCHW,
-    cudnnConvolutionBackwardData, cudnnConvolutionBackwardFilter, cudnnConvolutionDescriptor_t,
-    cudnnConvolutionForward, cudnnCreate, cudnnCreateConvolutionDescriptor,
+    CUDNN_CONVOLUTION_FWD_ALGO_COUNT, CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_BFLOAT16, CUDNN_DATA_DOUBLE, CUDNN_DATA_FLOAT,
+    CUDNN_DATA_HALF, CUDNN_DETERMINISTIC, CUDNN_TENSOR_NCHW, cudnnConvolutionBackwardData,
+    cudnnConvolutionBackwardFilter, cudnnConvolutionDescriptor_t, cudnnConvolutionForward,
+    cudnnConvolutionFwdAlgoPerf_t, cudnnCreate, cudnnCreateConvolutionDescriptor,
     cudnnCreateFilterDescriptor, cudnnCreateTensorDescriptor, cudnnDestroy,
     cudnnDestroyConvolutionDescriptor, cudnnDestroyFilterDescriptor, cudnnDestroyTensorDescriptor,
     cudnnFilterDescriptor_t, cudnnGetConvolutionBackwardDataWorkspaceSize,
-    cudnnGetConvolutionBackwardFilterWorkspaceSize, cudnnGetConvolutionForwardWorkspaceSize,
-    cudnnHandle_t, cudnnSetConvolution2dDescriptor, cudnnSetConvolutionGroupCount,
-    cudnnSetFilter4dDescriptor, cudnnSetStream, cudnnSetTensor4dDescriptor,
-    cudnnTensorDescriptor_t,
+    cudnnGetConvolutionBackwardFilterWorkspaceSize, cudnnGetConvolutionForwardAlgorithm_v7,
+    cudnnGetConvolutionForwardWorkspaceSize, cudnnHandle_t, cudnnSetConvolution2dDescriptor,
+    cudnnSetConvolutionGroupCount, cudnnSetFilter4dDescriptor, cudnnSetStream,
+    cudnnSetTensor4dDescriptor, cudnnTensorDescriptor_t,
 };
 use baracuda_kernels_types::{
     ArchSku, BackendKind, ConvKind, Element, ElementKind, KernelSku, MathPrecision, OpCategory,
@@ -228,8 +229,11 @@ pub struct Conv2dDwArgs<'a, T: Element> {
 /// should size the workspace at the max across directions.
 ///
 /// **Algorithm pinning**: FW = `IMPLICIT_GEMM` (algo 0), BW-data /
-/// BW-filter = `ALGO_1` (`IMPLICIT_PRECOMP_GEMM`). Heuristic search
-/// via `cudnnGet*Algorithm_v7` is a perf-tuning follow-up.
+/// BW-filter = `ALGO_1` (`IMPLICIT_PRECOMP_GEMM`). Opt-in, forward only:
+/// [`Self::with_fw_algo_picker`] asks `cudnnGetConvolutionForwardAlgorithm_v7`
+/// for its ranking and takes the best row that is usable and reported
+/// deterministic, falling back to `IMPLICIT_GEMM` when none is (or the
+/// query fails). Backward stays pinned.
 ///
 /// **Precision guarantee**: deterministic per run, but **not**
 /// bit-stable across runs — cuDNN's `IMPLICIT_GEMM` with tensor-core
@@ -251,6 +255,10 @@ pub struct Conv2dPlan<T: Element> {
     workspace_bytes_fw: Cell<usize>,
     workspace_bytes_bw_data: Cell<usize>,
     workspace_bytes_bw_filter: Cell<usize>,
+    /// Opt-in forward algorithm picker (see [`Self::with_fw_algo_picker`]).
+    pick_fw_algo: bool,
+    /// Resolved forward algorithm; `-1` until first resolved.
+    fw_algo: Cell<i32>,
     _marker: PhantomData<T>,
 }
 
@@ -358,8 +366,78 @@ impl<T: Element> Conv2dPlan<T> {
             workspace_bytes_fw: Cell::new(0),
             workspace_bytes_bw_data: Cell::new(0),
             workspace_bytes_bw_filter: Cell::new(0),
+            pick_fw_algo: false,
+            fw_algo: Cell::new(-1),
             _marker: PhantomData,
         })
+    }
+
+    /// Opt in (or out) of the forward algorithm picker. Off by default,
+    /// which keeps the forward pass pinned to `IMPLICIT_GEMM`. On, the
+    /// first forward workspace query / run resolves the algorithm via
+    /// `cudnnGetConvolutionForwardAlgorithm_v7`: the best-ranked row whose
+    /// status is OK and whose determinism is `CUDNN_DETERMINISTIC`, else
+    /// `IMPLICIT_GEMM`. The math type of the chosen row is not applied to
+    /// the convolution descriptor, so the algorithm runs under the
+    /// descriptor's default math. Backward passes are unaffected. Call
+    /// before the first forward query / run; the choice is cached.
+    #[inline]
+    pub fn with_fw_algo_picker(mut self, enabled: bool) -> Self {
+        self.pick_fw_algo = enabled;
+        self.fw_algo.set(-1);
+        self
+    }
+
+    /// The forward algorithm tag in use (`cudnnConvolutionFwdAlgo_t`), or
+    /// `None` before the first forward workspace query / run resolves it.
+    #[inline]
+    pub fn fw_algo(&self) -> Option<i32> {
+        let a = self.fw_algo.get();
+        (a >= 0).then_some(a)
+    }
+
+    /// Resolve (and cache) the forward algorithm. Descriptors must be live.
+    fn resolve_fw_algo(&self, h: cudnnHandle_t) -> i32 {
+        let cached = self.fw_algo.get();
+        if cached >= 0 {
+            return cached;
+        }
+        let mut algo = CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM;
+        if self.pick_fw_algo {
+            let mut rows = [cudnnConvolutionFwdAlgoPerf_t {
+                algo: 0,
+                status: 0,
+                time: 0.0,
+                memory: 0,
+                determinism: 0,
+                math_type: 0,
+                reserved: [0; 3],
+            }; CUDNN_CONVOLUTION_FWD_ALGO_COUNT as usize];
+            let mut returned: i32 = 0;
+            // SAFETY: handle and the four descriptors are live (the caller ran
+            // `ensure_descriptors`); `rows` has `ALGO_COUNT` writable rows and
+            // `returned` is a writable i32.
+            let status = unsafe {
+                cudnnGetConvolutionForwardAlgorithm_v7(
+                    h,
+                    self.x_desc.get(),
+                    self.w_desc.get(),
+                    self.conv_desc.get(),
+                    self.y_desc.get(),
+                    CUDNN_CONVOLUTION_FWD_ALGO_COUNT,
+                    &mut returned as *mut i32,
+                    rows.as_mut_ptr(),
+                )
+            };
+            if status == 0 {
+                let n = (returned.max(0) as usize).min(rows.len());
+                if let Some(a) = choose_deterministic_fw_algo(&rows[..n]) {
+                    algo = a;
+                }
+            }
+        }
+        self.fw_algo.set(algo);
+        algo
     }
 
     /// Kernel SKU identity.
@@ -408,6 +486,7 @@ impl<T: Element> Conv2dPlan<T> {
         let h = self.ensure_handle()?;
         self.bind_stream(h, stream)?;
         self.ensure_descriptors()?;
+        let algo = self.resolve_fw_algo(h);
         let mut bytes: usize = 0;
         let status = unsafe {
             cudnnGetConvolutionForwardWorkspaceSize(
@@ -416,7 +495,7 @@ impl<T: Element> Conv2dPlan<T> {
                 self.w_desc.get(),
                 self.conv_desc.get(),
                 self.y_desc.get(),
-                CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM,
+                algo,
                 &mut bytes as *mut usize,
             )
         };
@@ -496,6 +575,7 @@ impl<T: Element> Conv2dPlan<T> {
             self.workspace_bytes_fw.get()
         };
         let (ws_ptr, _ws_bytes) = unpack_workspace(workspace, needed)?;
+        let algo = self.resolve_fw_algo(h);
 
         // Host-side alpha / beta. The scalar dtype is f32 for
         // f16/bf16/f32 inputs and f64 for f64 inputs (matching the
@@ -512,7 +592,7 @@ impl<T: Element> Conv2dPlan<T> {
                     self.w_desc.get(),
                     args.w.data().as_raw().0 as *const c_void,
                     self.conv_desc.get(),
-                    CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM,
+                    algo,
                     ws_ptr,
                     needed,
                     &beta as *const f64 as *const c_void,
@@ -532,7 +612,7 @@ impl<T: Element> Conv2dPlan<T> {
                     self.w_desc.get(),
                     args.w.data().as_raw().0 as *const c_void,
                     self.conv_desc.get(),
-                    CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM,
+                    algo,
                     ws_ptr,
                     needed,
                     &beta as *const f32 as *const c_void,
@@ -986,6 +1066,15 @@ impl<T: Element> Drop for Conv2dPlan<T> {
 }
 
 // ----- helpers --------------------------------------------------------
+
+/// First row (rows arrive best-first) that cuDNN reports usable
+/// (`status == 0`) and deterministic. `None` means "keep the pinned algo".
+#[inline]
+fn choose_deterministic_fw_algo(rows: &[cudnnConvolutionFwdAlgoPerf_t]) -> Option<i32> {
+    rows.iter()
+        .find(|r| r.status == 0 && r.determinism == CUDNN_DETERMINISTIC)
+        .map(|r| r.algo)
+}
 
 /// `(H_out, W_out) = floor((dim_in + 2·pad - dilation·(filt - 1) - 1) /
 /// stride) + 1` — the standard PyTorch / cuDNN formula.
