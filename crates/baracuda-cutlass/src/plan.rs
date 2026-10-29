@@ -1249,6 +1249,9 @@ mod dispatch {
             | (_, ElementKind::Fp8E4M3FNUZ)
             | (_, ElementKind::Fp8E5M2FNUZ)
             | (_, ElementKind::F8E8M0)
+            | (_, ElementKind::F4E2M1)
+            | (_, ElementKind::F6E2M3)
+            | (_, ElementKind::F6E3M2)
             | (_, ElementKind::F8E6M2)
             | (_, ElementKind::Complex64)
             | (_, ElementKind::Complex128) => 3,
@@ -1311,6 +1314,9 @@ mod dispatch {
             | (_, ElementKind::Fp8E4M3FNUZ)
             | (_, ElementKind::Fp8E5M2FNUZ)
             | (_, ElementKind::F8E8M0)
+            | (_, ElementKind::F4E2M1)
+            | (_, ElementKind::F6E2M3)
+            | (_, ElementKind::F6E3M2)
             | (_, ElementKind::F8E6M2)
             | (_, ElementKind::Complex64)
             | (_, ElementKind::Complex128) => 0,
@@ -1395,6 +1401,9 @@ mod dispatch {
             | (_, ElementKind::Fp8E4M3FNUZ)
             | (_, ElementKind::Fp8E5M2FNUZ)
             | (_, ElementKind::F8E8M0)
+            | (_, ElementKind::F4E2M1)
+            | (_, ElementKind::F6E2M3)
+            | (_, ElementKind::F6E3M2)
             | (_, ElementKind::F8E6M2)
             | (_, ElementKind::Complex64)
             | (_, ElementKind::Complex128) => 3,
@@ -2050,6 +2059,9 @@ mod dispatch {
             | ElementKind::Fp8E4M3FNUZ
             | ElementKind::Fp8E5M2FNUZ
             | ElementKind::F8E8M0
+            | ElementKind::F4E2M1
+            | ElementKind::F6E2M3
+            | ElementKind::F6E3M2
             | ElementKind::F8E6M2
             | ElementKind::Complex64
             | ElementKind::Complex128 => 0,
@@ -2105,6 +2117,9 @@ mod dispatch {
             | ElementKind::Fp8E4M3FNUZ
             | ElementKind::Fp8E5M2FNUZ
             | ElementKind::F8E8M0
+            | ElementKind::F4E2M1
+            | ElementKind::F6E2M3
+            | ElementKind::F6E3M2
             | ElementKind::F8E6M2
             | ElementKind::Complex64
             | ElementKind::Complex128 => 0,
@@ -2157,6 +2172,9 @@ mod dispatch {
             | ElementKind::Fp8E4M3FNUZ
             | ElementKind::Fp8E5M2FNUZ
             | ElementKind::F8E8M0
+            | ElementKind::F4E2M1
+            | ElementKind::F6E2M3
+            | ElementKind::F6E3M2
             | ElementKind::F8E6M2
             | ElementKind::Complex64
             | ElementKind::Complex128 => 3,
@@ -2248,6 +2266,9 @@ mod dispatch {
             | ElementKind::Fp8E4M3FNUZ
             | ElementKind::Fp8E5M2FNUZ
             | ElementKind::F8E8M0
+            | ElementKind::F4E2M1
+            | ElementKind::F6E2M3
+            | ElementKind::F6E3M2
             | ElementKind::F8E6M2
             | ElementKind::Complex64
             | ElementKind::Complex128 => 3,

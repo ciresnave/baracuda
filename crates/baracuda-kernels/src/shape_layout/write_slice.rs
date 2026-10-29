@@ -512,7 +512,9 @@ fn dispatch_kind(k: ElementKind) -> Option<(i32, bool)> {
         ElementKind::I4 => (1, true),
         ElementKind::U4 => (1, true),
         // Bin (1-bit packed) is out of scope — distinct packing model.
-        ElementKind::B1 => return None,
+        ElementKind::B1 | ElementKind::F4E2M1 | ElementKind::F6E2M3 | ElementKind::F6E3M2 => {
+            return None;
+        }
     })
 }
 

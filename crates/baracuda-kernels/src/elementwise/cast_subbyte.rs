@@ -661,7 +661,9 @@ fn type_size_matches_kind<T>(kind: ElementKind) -> bool {
         ElementKind::F32 | ElementKind::F32Strict | ElementKind::I32 | ElementKind::U32 => 4,
         ElementKind::F64 | ElementKind::I64 | ElementKind::U64 | ElementKind::Complex64 => 8,
         ElementKind::Complex128 => 16,
-        ElementKind::B1 => return false,
+        ElementKind::B1 | ElementKind::F4E2M1 | ElementKind::F6E2M3 | ElementKind::F6E3M2 => {
+            return false;
+        }
     };
     core::mem::size_of::<T>() == want
 }
