@@ -10,7 +10,8 @@ use baracuda_cuda_emit::Cuda;
 // unpopped 0.3.0 renamed the language-suffixed lifters to a `Frontend`-parameterized
 // pair (`lift_elementwise_slang` → `lift_elementwise(&SLANG, …)`, `lift_reduction_cuda`
 // → `lift_reduction(&CUDA, …)`); the language is now the `Frontend` const, not the name.
-use unpopped::convert::{CUDA, SLANG, lift_elementwise, lift_reduction};
+use baracuda_cuda_parse::CUDA;
+use unpopped::convert::{SLANG, lift_elementwise, lift_reduction};
 use unpopped::generate;
 use unpopped_cpu_c::CpuC;
 use unpopped_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};

@@ -372,7 +372,7 @@ impl Backend for Cuda {
             // un-viewed operand. This pins: a real view ⇒ Elementwise + single-output
             // + the Strided schedule, and re-validates each view's structure. A
             // view-free / all-identity plan returns immediately (byte-identical).
-            assert_views_lowerable(plan);
+            assert_views_lowerable(plan)?;
             // Increment 4: independent GATHER backstop, beside the plan gate
             // `plan::assert_valid_gather` (the 0a lesson: gate every layer). A gathered
             // input reads a data-dependent address that ONLY the strided emitter folds;
@@ -673,6 +673,15 @@ fn body_packs(e: &ScalarExpr) -> bool {
         // pair-split spelling for a fused op or a type change, so these decline to
         // the scalar path (SA-43 / SA-44).
         ScalarExpr::Fma(..) | ScalarExpr::Cast(..) | ScalarExpr::Bitcast(..) => false,
+        // Integer leaves, kernel locals and packed values are declined by
+        // `assert_coord_lowerable` before any emitter runs; none packs.
+        ScalarExpr::ConstInt(..)
+        | ScalarExpr::CoordInt(..)
+        | ScalarExpr::Local(_)
+        | ScalarExpr::Pack(_)
+        | ScalarExpr::Extract(..)
+        | ScalarExpr::BitcastPacked(..)
+        | ScalarExpr::Qualified(..) => false,
     }
 }
 
@@ -1935,9 +1944,9 @@ fn assert_multi_output_lowerable(plan: &KernelPlan<'_>) {
 /// - Each view is re-validated (`is_valid`), a `Permute` operand's broadcast mask
 ///   is empty, a `Broadcast` view agrees with the key, a `Reshape` is same-rank —
 ///   the same rules as the plan gate, held independently here.
-fn assert_views_lowerable(plan: &KernelPlan<'_>) {
+fn assert_views_lowerable(plan: &KernelPlan<'_>) -> Result<(), LowerError> {
     if !plan.views.iter().any(unpopped::plan::view_is_addressing) {
-        return; // view-free / all-identity — the established path, unchanged.
+        return Ok(()); // view-free / all-identity — the established path, unchanged.
     }
     let name = plan.op_name;
     assert!(
@@ -1993,8 +2002,21 @@ fn assert_views_lowerable(plan: &KernelPlan<'_>) {
                  (producer_rank {producer_rank} != rank {rank}) is out of item-01 \
                  scope"
             ),
+            // Unpopped 0.32.0 `View::Layout`: not folded into `offset_expr` here, so
+            // a typed decline rather than a silent read of the un-viewed operand.
+            unpopped::ir::View::Layout { .. } => {
+                return Err(Decline::UnsupportedOp {
+                    op: DeclinedOp::Leaf(u8::try_from(i).unwrap_or(u8::MAX)),
+                    why: format!(
+                        "cuda backend: viewed op '{name}' input {i} Layout view is not \
+                         spelled by this emitter"
+                    ),
+                }
+                .into());
+            }
         }
     }
+    Ok(())
 }
 
 /// Declining `reduced`/`coord` closures for the multi-output elementwise
@@ -4341,7 +4363,14 @@ fn contains_subexpr(e: &ScalarExpr, t: &ScalarExpr) -> bool {
         | ScalarExpr::Const(_)
         | ScalarExpr::Param(_)
         | ScalarExpr::Reduced(_)
-        | ScalarExpr::Coord(_) => false,
+        | ScalarExpr::Coord(_)
+        | ScalarExpr::ConstInt(..)
+        | ScalarExpr::CoordInt(..)
+        | ScalarExpr::Local(_) => false,
+        ScalarExpr::Pack(xs) => xs.iter().any(|x| contains_subexpr(x, t)),
+        ScalarExpr::Extract(x, _)
+        | ScalarExpr::BitcastPacked(x, _, _)
+        | ScalarExpr::Qualified(x, _) => contains_subexpr(x, t),
         ScalarExpr::Unary(_, x) => contains_subexpr(x, t),
         ScalarExpr::Add(a, b)
         | ScalarExpr::Sub(a, b)
@@ -4367,7 +4396,16 @@ fn substitute_subexpr(e: &ScalarExpr, t: &ScalarExpr, marker: u8) -> ScalarExpr 
         | ScalarExpr::Const(_)
         | ScalarExpr::Param(_)
         | ScalarExpr::Reduced(_)
-        | ScalarExpr::Coord(_) => e.clone(),
+        | ScalarExpr::Coord(_)
+        | ScalarExpr::ConstInt(..)
+        | ScalarExpr::CoordInt(..)
+        | ScalarExpr::Local(_) => e.clone(),
+        ScalarExpr::Pack(xs) => ScalarExpr::Pack(xs.iter().map(|x| *bx(x)).collect()),
+        ScalarExpr::Extract(x, lane) => ScalarExpr::Extract(bx(x), *lane),
+        ScalarExpr::Qualified(x, numerics) => ScalarExpr::Qualified(bx(x), *numerics),
+        ScalarExpr::BitcastPacked(x, lane_ty, lanes) => {
+            ScalarExpr::BitcastPacked(bx(x), *lane_ty, *lanes)
+        }
         ScalarExpr::Unary(op, x) => ScalarExpr::Unary(*op, bx(x)),
         ScalarExpr::Add(a, b) => ScalarExpr::Add(bx(a), bx(b)),
         ScalarExpr::Sub(a, b) => ScalarExpr::Sub(bx(a), bx(b)),
@@ -8118,6 +8156,41 @@ fn assert_coord_lowerable(e: &ScalarExpr, plan: &KernelPlan<'_>) -> Result<(), L
             assert_coord_lowerable(b, plan)?;
         }
         ScalarExpr::Cast(x, _) | ScalarExpr::Bitcast(x, _) => assert_coord_lowerable(x, plan)?,
+        // Unpopped 0.26-0.32 nodes this emitter does not spell: a typed decline, not
+        // a panic and not a silent drop (the hold on new emitter features, 2026-10-28).
+        ScalarExpr::ConstInt(..) | ScalarExpr::CoordInt(..) => {
+            return Err(Decline::UnsupportedOp {
+                op: DeclinedOp::Integer,
+                why: "cuda backend: integer-typed leaf (ConstInt / CoordInt) is not spelled \
+                      by this emitter"
+                    .to_string(),
+            }
+            .into());
+        }
+        ScalarExpr::Qualified(..) => {
+            return Err(Decline::UnsupportedOp {
+                op: DeclinedOp::Qualified,
+                why: "cuda backend: Qualified (rounding / flush-to-zero / approximate) is not \n                      spelled by this emitter yet (ROADMAP SA-46, held)"
+                    .to_string(),
+            }
+            .into());
+        }
+        ScalarExpr::Local(_) => {
+            return Err(Decline::UnsupportedOp {
+                op: DeclinedOp::Kernel,
+                why: "cuda backend: kernel-layer Local is not spelled by this emitter".to_string(),
+            }
+            .into());
+        }
+        ScalarExpr::Pack(_) | ScalarExpr::Extract(..) | ScalarExpr::BitcastPacked(..) => {
+            return Err(Decline::UnsupportedOp {
+                op: DeclinedOp::Packed,
+                why: "cuda backend: packed values (Pack / Extract / BitcastPacked) are not \
+                      spelled by this emitter"
+                    .to_string(),
+            }
+            .into());
+        }
     }
     Ok(())
 }

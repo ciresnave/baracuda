@@ -332,6 +332,9 @@ impl GemmSku {
             | ElementKind::U16
             | ElementKind::U64
             | ElementKind::F8E8M0
+            | ElementKind::F4E2M1
+            | ElementKind::F6E2M3
+            | ElementKind::F6E3M2
             | ElementKind::F8E6M2
             | ElementKind::Fp8E4M3FNUZ
             | ElementKind::Fp8E5M2FNUZ => MathPrecision::Int8,
