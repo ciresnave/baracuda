@@ -577,26 +577,21 @@ fn conv2d_f32_bw_filter() {
     }
 }
 
-/// One f32 FW pass; returns the output and the resolved algorithm tag.
-fn run_fw_f32(
-    ctx: &Context,
-    stream: &Stream,
-    d: &ConvDims,
-    picker: bool,
-) -> (Vec<f32>, Option<i32>) {
-    let x: Vec<f32> = make_x_f64(d, 0x5EED_0001)
+/// Deterministic f32 inputs for the picker test (same seeds as the f64 reference).
+fn fw_f32_inputs(d: &ConvDims) -> (Vec<f32>, Vec<f32>) {
+    let x = make_x_f64(d, 0x5EED_0001)
         .iter()
         .map(|&v| v as f32)
         .collect();
-    let w: Vec<f32> = make_w_f64(d, 0x5EED_0002)
+    let w = make_w_f64(d, 0x5EED_0002)
         .iter()
         .map(|&v| v as f32)
         .collect();
-    let (h_out, w_out) = d.output_dims();
-    let y_numel = (d.n * d.c_out * h_out * w_out) as usize;
-    let dev_x = DeviceBuffer::from_slice(ctx, &x).expect("up x");
-    let dev_w = DeviceBuffer::from_slice(ctx, &w).expect("up w");
-    let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(ctx, y_numel).expect("alloc y");
+    (x, w)
+}
+
+/// f32 plan for `d` with the FW picker set to `picker`.
+fn fw_f32_plan(stream: &Stream, d: &ConvDims, picker: bool) -> Conv2dPlan<f32> {
     let desc = Conv2dDescriptor::new(
         d.n,
         d.c_in,
@@ -608,9 +603,25 @@ fn run_fw_f32(
         ElementKind::F32,
     )
     .with_padding(d.pad_h, d.pad_w);
-    let plan = Conv2dPlan::<f32>::select(stream, &desc, PlanPreference::default())
+    Conv2dPlan::<f32>::select(stream, &desc, PlanPreference::default())
         .expect("select")
-        .with_fw_algo_picker(picker);
+        .with_fw_algo_picker(picker)
+}
+
+/// One f32 FW pass; returns the output and the resolved algorithm tag.
+fn run_fw_f32(
+    ctx: &Context,
+    stream: &Stream,
+    d: &ConvDims,
+    picker: bool,
+) -> (Vec<f32>, Option<i32>) {
+    let (x, w) = fw_f32_inputs(d);
+    let (h_out, w_out) = d.output_dims();
+    let y_numel = (d.n * d.c_out * h_out * w_out) as usize;
+    let dev_x = DeviceBuffer::from_slice(ctx, &x).expect("up x");
+    let dev_w = DeviceBuffer::from_slice(ctx, &w).expect("up w");
+    let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(ctx, y_numel).expect("alloc y");
+    let plan = fw_f32_plan(stream, d, picker);
     let ws_bytes = plan.query_fw_workspace_size(stream).expect("ws query");
     let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(ctx, ws_bytes.max(1)).expect("alloc ws");
     let (xs, ws_, ys) = (
