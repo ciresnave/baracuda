@@ -27,13 +27,17 @@ facade). The two -sys crates are siblings; the unified
 | Grouped GEMM | same SKU set | sm80 pair (variable M per group) |
 
 `RCR` = `A` row-major `[M,K]`, `B` column-major `[K,N]`, `C/D` row-major
-`[M,N]`, `f32` accumulator, `f32` alpha/beta. **Epilogue: Identity only.**
-The `Bias` epilogue was planned for v0 but removed during the Fuel team's
-design review (it was advertised in the safe API but no kernel
-implemented it); per their roadmap it returns "after grouped GEMM lands
-and a real caller asks for it." sm90a kernels are deferred until Hopper
-hardware is available for validation; the safe layer's selection wiring
-is already in place for them.
+`[M,N]`, `f32` accumulator, `f32` alpha/beta. **Epilogue: Identity only
+for the v0 f16/bf16 pair above.**
+
+> **Update 2026-10-29.** The v0 table above is the original scope, not
+> today's inventory. `kernels/` now also holds `*_bias` epilogue kernels
+> (f16/bf16 `gemm_rcr_sm80_bias.cu`, `gemm_rrr_sm80_bias.cu`, and the f32,
+> f64, tf32 and s8/u8 siblings), plus f32 SIMT, f64, tf32, s8 and u8 GEMMs
+> and a batched variant (see the file list in
+> `crates/baracuda-cutlass-kernels-sys/kernels/`). The statement that the
+> `Bias` epilogue was removed is historical. No sm_90a kernel exists:
+> sm90a stays deferred until Hopper hardware is available for validation.
 
 ## Features
 

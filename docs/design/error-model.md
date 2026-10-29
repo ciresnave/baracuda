@@ -52,8 +52,18 @@ symbol isn't exported (common on version mismatches, e.g. asking for
   list exhausted without a match.
 - `SymbolNotFound { library, symbol }` — the library loaded but the
   function isn't exported. Almost always a version-skew issue.
+- `VersionTooOld { symbol, required, installed }` — `cuGetProcAddress`
+  reported the installed driver does not provide `symbol` at the version
+  baracuda asked for.
+- `Libloading(libloading::Error)` — a raw `libloading` error, kept for
+  platform-specific diagnostics the other variants can't express.
 - `UnsupportedPlatform { platform }` — the library has no binaries for
   the caller's OS (macOS for anything CUDA; Windows for cuFile; etc.).
+- `EnvOverrideUnusable { library, env_var, path, source }` — an env-var
+  override (e.g. `BARACUDA_NVRTC_PATH`) was set but the library could not be
+  loaded from the path it names; returned instead of silently falling back.
+
+(Six variants, per `crates/baracuda-core/src/error.rs` on 2026-10-29.)
 
 Loader errors flow up through the generic error via `From<LoaderError>`.
 

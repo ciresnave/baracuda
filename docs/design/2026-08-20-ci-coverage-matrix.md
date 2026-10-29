@@ -58,9 +58,9 @@ Axes: **crate × feature × target-kind × platform × toolchain.**
 
 ### Platform
 - **COVERED:** `ubuntu-latest`, `windows-latest` (no-CUDA).
-- **UNCOVERED:** any CUDA/GPU platform (no runner).
+- **UNCOVERED:** any CUDA/GPU platform (no runner). *(Historical: as of 2026-10-29 `.github/workflows/device-tests.yml` runs the device tests on a self-hosted device runner, with `device-tests-detector.yml` going red when it has not succeeded recently.)*
 
-### Toolchain — **UNPINNED AXIS**
+### Toolchain — **UNPINNED AXIS** (historical; **now pinned**: `rust-toolchain.toml` is `channel = "1.98.0"`, re-checked 2026-10-29 — the paragraph below describes the 2026-08-20 state)
 `rust-toolchain.toml` = `channel = "stable"` — a **moving alias, not a pin.** This box resolves it to **1.97.1** (2026-07-14); CI's `@stable` resolves **1.98.0** (2026-08-18). So local `cargo clippy`/`build` checks a **different diagnostic set** than the gate: a lint that postdates 1.97.1 reds CI on a locally-green tree. Exposure is **lint/warning reproducibility only, not numerics** — and the reason is SCOPE, not a Rust guarantee. Rust/LLVM do NOT promise bit-for-bit FP reproducibility across compiler versions in general (codegen and FP contraction can change results). Here the numerics are insulated from rustc on both sides: (a) Baracuda's KERNELS are CUDA compiled by **nvcc** — rustc never touches them, so a rustc bump cannot change what a kernel computes; (b) the host-side reference values the tests compare against are **exact IEEE-754 ops only** (relu / add / max / integer — no transcendentals compared bit-exact), and Rust does not fast-math or FP-contract these by default, so they are bit-stable across the 1.97.1↔1.98.0 versions in play. So the skew is a diagnostic-set difference, not a numeric one — scoped, not asserted as a language guarantee. **Recorded, not fixed** — a portfolio-wide pin decision is with the maintainer; fixing it here alone is the one-decision-three-ways trap this audit exists to prevent.
 
 ---

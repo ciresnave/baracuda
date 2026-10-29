@@ -16,6 +16,15 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.47 - 2026-10-29
+
+Docs and test housekeeping. No library code, no device run.
+
+### Changed
+
+- Doc staleness sweep, SA-38 (d), first batch: `LESSONS.md` 8.3 (MoE-on-GGUF assertion is live), `docs/planning/foundational/09-half2-packed-simd.md` (first DoD box ticked, the rest marked unverified), `docs/design/2026-08-20-ci-coverage-matrix.md` (toolchain is now pinned to 1.98.0; a self-hosted device runner exists), `docs/design/loader.md` (re-init returns `Err`, does not panic), `docs/design/error-model.md` (all six `LoaderError` variants), `crates/baracuda-cutlass-kernels-sys/README.md` (bias / f32 / f64 / tf32 / s8 / u8 kernels exist), `crates/baracuda-cutlass/README.md` (`Int4GemmPlan` / `BinGemmPlan` ship in `baracuda-kernels`).
+- `tests/kernelgen_cli.rs` scratch directory now `env!("CARGO_TARGET_TMPDIR")` instead of `std::env::temp_dir()` (PM condition on #279).
+
 ## 0.1.0-alpha.46 - 2026-10-29
 
 ### Fixed
