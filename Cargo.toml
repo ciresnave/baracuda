@@ -60,18 +60,18 @@ baracuda-cuda-seam = { version = "0.1.0-alpha.41", path = "crates/baracuda-cuda-
 # see `unpopped` below), and PATCH is baracuda's own counter, because crates.io
 # versions are immutable and a baracuda-only fix still needs a new number.
 # Moving to unpopped 0.12 means moving both to 0.12.0 in the same change.
-baracuda-cuda-emit = { version = "0.24.0", path = "crates/baracuda-cuda-emit" }
+baracuda-cuda-emit = { version = "0.32.0", path = "crates/baracuda-cuda-emit" }
 # Version 0.11.0 allocated by the PM 2026-09-25, verifying the rule above
 # (not overriding it). Cleared for crates.io publication per CireSnave's
 # ruling on board item 63(c) (2026-09-26).
-baracuda-cuda-parse = { version = "0.24.0", path = "crates/baracuda-cuda-parse" }
+baracuda-cuda-parse = { version = "0.32.0", path = "crates/baracuda-cuda-parse" }
 baracuda-cuda-vocab = { version = "0.1.0-alpha.41", path = "crates/baracuda-cuda-vocab" }
 # The neutral kernel generator + its classifier vocab were carved out and PUBLISHED
 # as the standalone vendor-neutral `unpopped` / `unpopped-vocab` (crates.io). Baracuda
 # is now a CONSUMER of the published crates, not their host — the local
 # `baracuda-kernelgen` / `baracuda-kernel-vocab` are retired.
-unpopped = "0.24.0"
-unpopped-vocab = "0.24.0"
+unpopped = "0.32.1"
+unpopped-vocab = "0.32.1"
 baracuda-seam = { version = "0.1.0-alpha.41", path = "crates/baracuda-seam" }
 baracuda-cuda-sys = { version = "0.1.0-alpha.41", path = "crates/baracuda-cuda-sys" }
 baracuda-driver = { version = "0.1.0-alpha.41", path = "crates/baracuda-driver" }
