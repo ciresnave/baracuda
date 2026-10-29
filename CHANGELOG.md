@@ -18,10 +18,12 @@ at alpha.82.
 
 ## 0.1.0-alpha.41 - 2026-10-28
 
-Docs only. No code, no device run.
-
 ### Changed
 
+- **Breaking** (ROADMAP SA-42): `baracuda-cuda-parse` and `baracuda-cuda-emit` move from 0.24.0 to 0.32.0 and build against `unpopped` / `unpopped-vocab` 0.32.1 (and `unpopped-cpu-c`, `unpopped-slang` 0.32.1 as dev-dependencies). `baracuda-cuda-seam` moves to `fuel-kernel-seam` / `fuel-kernel-seam-types` 0.28.0 (caret, as `tests/seam_pin.rs` requires); `tools/kiss-ref-diff` pins 0.32.1. What changed under us between unpopped 0.24 and 0.32, and how this repo answers it:
+  - `unpopped::convert` no longer has the CUDA front end (0.30.0): `baracuda_cuda_parse::CUDA` is the `Frontend` now, `crates/baracuda-cuda-emit/tests/convert.rs` uses it, and `baracuda-cuda-parse/tests/convert.rs` gains `slang_and_cuda_lift_to_the_same_ir` (moved from unpopped 43dda06).
+  - `ScalarExpr` gains `ConstInt`, `CoordInt`, `Local`, `Pack`, `Extract`, `BitcastPacked` and `Qualified`, and `View` gains `Layout { shape, stride }` (0.32.0). The CUDA emitter does NOT spell any of them: its exhaustive matches take typed declines (`DeclinedOp::Integer`, `Kernel`, `Packed`, `Qualified`; a `Layout` view is `Decline::UnsupportedOp`), so nothing is dropped silently. `assert_views_lowerable` now returns a `Result`. No new emit: CireSnave's hold of 2026-10-28 bars new CUDA parser / emitter features, so SA-46 (spell `Qualified`) stays unbuilt.
+  - Structure keys stay `sk6` (the `sk7` batch is KISS#724, still a draft).
 - ROADMAP SA-42 now says what it waits on: Unpopped deleting its CUDA slice from `convert.rs` (0.30.0, publish held), not the KISS registry repoint, which landed (KISS#514).
 - ROADMAP records the CireSnave hold of 2026-10-28 on new CUDA parser / emitter features until the Frontend/Backend seam is settled (see the SA-40 block).
 
