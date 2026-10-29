@@ -50,6 +50,8 @@ unpopped-cpu-c = "0.32.1"
 unpopped-slang = "0.32.1"
 # Runs the emitted Fma / Cast / Bitcast kernels on the device (`tests/typed_exprs.rs`).
 baracuda-driver = { workspace = true }
+# The CUDA `Frontend` for `tests/convert.rs` (unpopped 0.30 removed it from `unpopped::convert`).
+baracuda-cuda-parse = { workspace = true }
 
 [lints]
 workspace = true

@@ -8178,8 +8178,7 @@ fn assert_coord_lowerable(e: &ScalarExpr, plan: &KernelPlan<'_>) -> Result<(), L
         ScalarExpr::Local(_) => {
             return Err(Decline::UnsupportedOp {
                 op: DeclinedOp::Kernel,
-                why: "cuda backend: kernel-layer Local is not spelled by this emitter"
-                    .to_string(),
+                why: "cuda backend: kernel-layer Local is not spelled by this emitter".to_string(),
             }
             .into());
         }

@@ -16,7 +16,7 @@
 //! **Not a correctness proof for CUDA parsing in general** -- see the crate's
 //! module doc. These are CUDA-idiom golden vectors.
 
-use unpopped::convert::{lift_elementwise, lift_reduction, lift_scan};
+use unpopped::convert::{SLANG, lift_elementwise, lift_reduction, lift_scan};
 use unpopped::ir::{Access, BinaryOp, ReduceOp, ScalarExpr, UnaryOp};
 use unpopped::lift::{LiftError, Lifted};
 use unpopped_vocab::ElementKind;
@@ -229,4 +229,23 @@ fn cuda_lifts_cumprod_and_cummax() {
             .0,
         ReduceOp::Max
     );
+}
+
+const SLANG_MUL: &str = "StructuredBuffer<float> input0;
+    StructuredBuffer<float> input1;
+    RWStructuredBuffer<float> output;
+    [numthreads(256, 1, 1)]
+    void mul(uint3 tid : SV_DispatchThreadID) {
+        uint i = tid.x;
+        output[i] = input0[i] * input1[i];
+    }";
+
+/// Moved from `unpopped::convert`'s tests (unpopped 43dda06) when the CUDA front end
+/// left that crate: a CUDA and a Slang kernel for the same math lift to the SAME body.
+#[test]
+fn slang_and_cuda_lift_to_the_same_ir() {
+    let cuda = "__global__ void mul(const float* in0, const float* in1, float* out, long long n){ out[i] = in0[i] * in1[i]; }";
+    let c = lift_elementwise(&CUDA, cuda, "m", F32).unwrap();
+    let s = lift_elementwise(&SLANG, SLANG_MUL, "m", F32).unwrap();
+    assert_eq!(c.op.body, s.op.body);
 }
