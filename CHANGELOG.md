@@ -16,6 +16,14 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.43 - 2026-10-29
+
+Docs only. No code, no device run.
+
+### Changed
+
+- `docs/PATENT-SWEEP.md`: a dated re-check note in the header. The CHANGELOG entries for alpha.29-42 were read against the 14 swept ideas and add no new mechanism. A changelog read, not a new search; the queries were not re-run.
+
 ## 0.1.0-alpha.42 - 2026-10-29
 
 ### Changed
