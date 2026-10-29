@@ -16,7 +16,7 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
-## 0.1.0-alpha.41 - 2026-10-28
+## 0.1.0-alpha.42 - 2026-10-29
 
 ### Changed
 
@@ -24,6 +24,13 @@ at alpha.82.
   - `unpopped::convert` no longer has the CUDA front end (0.30.0): `baracuda_cuda_parse::CUDA` is the `Frontend` now, `crates/baracuda-cuda-emit/tests/convert.rs` uses it, and `baracuda-cuda-parse/tests/convert.rs` gains `slang_and_cuda_lift_to_the_same_ir` (moved from unpopped 43dda06).
   - `ScalarExpr` gains `ConstInt`, `CoordInt`, `Local`, `Pack`, `Extract`, `BitcastPacked` and `Qualified`, and `View` gains `Layout { shape, stride }` (0.32.0). The CUDA emitter does NOT spell any of them: its exhaustive matches take typed declines (`DeclinedOp::Integer`, `Kernel`, `Packed`, `Qualified`; a `Layout` view is `Decline::UnsupportedOp`), so nothing is dropped silently. `assert_views_lowerable` now returns a `Result`. No new emit: CireSnave's hold of 2026-10-28 bars new CUDA parser / emitter features, so SA-46 (spell `Qualified`) stays unbuilt.
   - Structure keys stay `sk6` (the `sk7` batch is KISS#724, still a draft).
+
+## 0.1.0-alpha.41 - 2026-10-28
+
+Docs only. No code, no device run.
+
+### Changed
+
 - ROADMAP SA-42 now says what it waits on: Unpopped deleting its CUDA slice from `convert.rs` (0.30.0, publish held), not the KISS registry repoint, which landed (KISS#514).
 - ROADMAP records the CireSnave hold of 2026-10-28 on new CUDA parser / emitter features until the Frontend/Backend seam is settled (see the SA-40 block).
 
