@@ -21,11 +21,45 @@ use unpopped_vocab::{
     seed_winner, structure_key,
 };
 
+const USAGE: &str = "usage: kernelgen [OUT_DIR [TELEMETRY.jsonl]]\n\n\
+    Emits the pilot kernel set into OUT_DIR (default: generated). An optional Fuel\n\
+    telemetry JSONL is folded into the dispatch table first.\n\n\
+    options:\n  -h, --help     print this help and exit\n  -V, --version  print the version and exit";
+
+/// Parse `[OUT_DIR [TELEMETRY]]`. `--help` / `--version` print and exit 0; any
+/// other `-`-prefixed argument, or a third positional, is a usage error (exit 2)
+/// that writes nothing -- before this, every argument (even `--version`) was
+/// taken as the output directory and 74 files were written.
+fn parse_args() -> (String, Option<String>) {
+    let mut positional = Vec::new();
+    for arg in std::env::args().skip(1) {
+        match arg.as_str() {
+            "-h" | "--help" => {
+                println!("{USAGE}");
+                std::process::exit(0);
+            }
+            "-V" | "--version" => {
+                println!("kernelgen {}", env!("CARGO_PKG_VERSION"));
+                std::process::exit(0);
+            }
+            a if a.starts_with('-') => {
+                eprintln!("kernelgen: unknown option: {a}\n{USAGE}");
+                std::process::exit(2);
+            }
+            _ => positional.push(arg),
+        }
+    }
+    if positional.len() > 2 {
+        eprintln!("kernelgen: too many arguments\n{USAGE}");
+        std::process::exit(2);
+    }
+    let mut it = positional.into_iter();
+    let out_dir = it.next().unwrap_or_else(|| "generated".to_string());
+    (out_dir, it.next())
+}
+
 fn main() {
-    let out_dir = std::env::args()
-        .nth(1)
-        .unwrap_or_else(|| "generated".to_string());
-    let telemetry_path = std::env::args().nth(2);
+    let (out_dir, telemetry_path) = parse_args();
     fs::create_dir_all(&out_dir).expect("create out dir");
 
     // v1 pilot op: elementwise add, fanned out over a few dtype cells.

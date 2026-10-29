@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-cublas-sys"
-version = "0.1.0-alpha.45"
+version = "0.1.0-alpha.46"
 description = "Raw FFI bindings and dynamic loader for NVIDIA cuBLAS (classic, Lt, Xt) libraries."
 edition.workspace = true
 license.workspace = true

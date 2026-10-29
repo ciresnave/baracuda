@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.46 - 2026-10-29
+
+### Fixed
+
+- CLI basics (CodeRipper OPS-011). `kernelgen` took ANY argument as its output directory, so `--version` or a mistyped flag wrote 74 files and exited 0: it now handles `-h/--help` and `-V/--version`, and rejects an unknown `-` option or a third positional with exit 2, writing nothing (`tests/kernelgen_cli.rs`). `xtask` handles `--help` / `--version` (it exited 2 with "unknown subcommand: --version"). `tools/kiss-ref-diff` ignored its arguments and launched the on-device run for any of them; it now handles `--help` / `--version` and rejects other arguments with exit 2 before touching the device.
+
 ## 0.1.0-alpha.45 - 2026-10-29
 
 ### Added

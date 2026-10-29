@@ -16,6 +16,14 @@ use std::process::ExitCode;
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
+        Some("-h" | "--help" | "help") => {
+            print_usage();
+            ExitCode::SUCCESS
+        }
+        Some("-V" | "--version") => {
+            println!("xtask {}", env!("CARGO_PKG_VERSION"));
+            ExitCode::SUCCESS
+        }
         Some("regen-all") => regen_all(&args[1..]),
         Some("regen") => regen_one(&args[1..]),
         Some("test-gpu") => test_gpu(&args[1..]),

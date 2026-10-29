@@ -689,7 +689,38 @@ fn device_leg(
     host
 }
 
+const USAGE: &str = "usage: kiss-ref-diff\n\n\
+    Runs the kiss-ref differential suite (needs a CUDA toolkit and a GPU).\n\
+    Takes no arguments.\n\n\
+    options:\n  -h, --help     print this help and exit\n  -V, --version  print the version and exit";
+
+/// No arguments are accepted. Handle `--help` / `--version` and reject anything
+/// else BEFORE any device work: the tool previously ignored its arguments, so a
+/// mistyped flag launched the full on-device run (and touched the NVIDIA
+/// compute cache) and exited 0.
+fn check_args() {
+    let Some(arg) = std::env::args().nth(1) else {
+        return;
+    };
+    match arg.as_str() {
+        "-h" | "--help" => {
+            println!("{USAGE}");
+            std::process::exit(0);
+        }
+        "-V" | "--version" => {
+            println!("kiss-ref-diff {}", env!("CARGO_PKG_VERSION"));
+            std::process::exit(0);
+        }
+        a => {
+            eprintln!("kiss-ref-diff: unexpected argument: {a}
+{USAGE}");
+            std::process::exit(2);
+        }
+    }
+}
+
 fn main() {
+    check_args();
     // Adversarial value set: ±0.0, NaN, ±inf, negatives, tiny/huge magnitudes.
     let a = vec![
         -1.0f32,
