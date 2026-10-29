@@ -16,6 +16,13 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.45 - 2026-10-29
+
+### Added
+
+- `Conv2dPlan::with_fw_algo_picker(bool)` + `Conv2dPlan::fw_algo()`: opt-in forward algorithm picker (SA-25, Conv2d half). On, the plan asks `cudnnGetConvolutionForwardAlgorithm_v7` for its ranking and uses the best row that is usable and reported `CUDNN_DETERMINISTIC`, else `IMPLICIT_GEMM`. Off by default: default behaviour, SKU and `PrecisionGuarantee` are unchanged. Forward only; backward stays pinned (`ALGO_1`). The chosen row's math type is not applied to the convolution descriptor.
+- `baracuda-kernels-sys`: `cudnnGetConvolutionForwardAlgorithm_v7`, `cudnnConvolutionFwdAlgoPerf_t`, `CUDNN_DETERMINISTIC` / `CUDNN_NON_DETERMINISTIC`, `CUDNN_CONVOLUTION_FWD_ALGO_COUNT` (cudnn feature; foreign cuDNN declarations, which `abi/abi-manifest.tsv` does not list; `check-abi-manifest.py` passes).
+
 ## 0.1.0-alpha.44 - 2026-10-29
 
 Docs only. No code, no device run.
