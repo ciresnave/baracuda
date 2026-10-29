@@ -66,9 +66,10 @@ direction before committing to a full sweep.
 
 ## Baseline results
 
-Recorded baseline tables for the RTX 4070 (sm_89, CUDA 13.0, cuDNN
-9.16) live in [`BENCH-sm89.md`](BENCH-sm89.md). Numbers there are
-placeholders until each cell is populated from a real run on the
-target hardware.
+Measured results (cross-implementation deltas against cuBLAS / cuDNN) live
+in [`BENCHMARKS.md`](BENCHMARKS.md); the per-run perf-baseline captures are
+produced by `baracuda-bench run --report`. The former `BENCH-sm89.md`
+placeholder tables were removed (SA-25): an unpopulated table reads as a
+result.
 
 [`baracuda-kernels`]: ../baracuda-kernels

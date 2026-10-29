@@ -16,6 +16,14 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.44 - 2026-10-29
+
+Docs only. No code, no device run.
+
+### Removed
+
+- `crates/baracuda-kernels-bench/BENCH-sm89.md`: every table cell was `--` (no measured number); the crate README and the root README now point at `BENCHMARKS.md` (SA-25, placeholder half).
+
 ## 0.1.0-alpha.43 - 2026-10-29
 
 Docs only. No code, no device run.

@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-cusolver-sys"
-version = "0.1.0-alpha.43"
+version = "0.1.0-alpha.44"
 description = "Raw FFI bindings and dynamic loader for NVIDIA cuSOLVER (Dn subset)."
 edition.workspace = true
 license.workspace = true

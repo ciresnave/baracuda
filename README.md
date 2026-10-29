@@ -611,8 +611,8 @@ cargo bench -p baracuda-kernels-bench --features sm89,cudnn
 
 The full sweep takes ~30 minutes on an RTX 4070. Scope to a single family
 with `--bench gemm` / `--bench flash_attention` / `--bench conv2d`. See
-[`crates/baracuda-kernels-bench/BENCH-sm89.md`](crates/baracuda-kernels-bench/BENCH-sm89.md)
-for the baseline table format and methodology.
+[`crates/baracuda-kernels-bench/BENCHMARKS.md`](crates/baracuda-kernels-bench/BENCHMARKS.md)
+for the measured results.
 
 ## Project documentation
 
