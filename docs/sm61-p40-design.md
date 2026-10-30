@@ -37,12 +37,46 @@ reachable through `BARACUDA_NVRTC_PATH` (see the toolkit-selection doc). `nvrtc-
 sit beside it; the loader prepends that directory to `PATH`. CUDA 12.9 is the last toolkit with Pascal.
 The driver on the P40 box must support the PTX/cubin it is given (a cubin for sm_61 needs no JIT).
 
+## Toolchain: the P40 cannot share a CUDA 13 build with the 4060
+
+Measured by the PM on this box, 2026-10-30: CUDA 13.3 `nvcc --list-gpu-arch` starts at `compute_75`, and
+`nvcc -arch=sm_61` fails with "Unsupported gpu architecture 'sm_61'". Measured here: CUDA 13.3 NVRTC
+rejects `--gpu-architecture=sm_61` (`NVRTC_ERROR_INVALID_OPTION`) and the 12.9.86 NVRTC redist compiles it.
+So the sm_61 path needs a PINNED 12.9 toolchain, separate from the CUDA 13 one that builds for the
+RTX 4060 (sm_89).
+
+How the build selects per device (decision for the PM; the recommendation is the first):
+
+1. Runtime JIT, no second build (recommended). The emitter already produces source per `TargetId`; at
+   run time `NvrtcCompiler` picks the NVRTC by target (`BARACUDA_NVRTC_PATH` for sm_61, the default for
+   sm_75+) and loads the resulting PTX/cubin per device. The hand-written AOT library stays a CUDA 13
+   build for sm_80+ and is simply not offered on the P40 (typed decline). Cost: a pinned 12.9 NVRTC
+   (315 MB redist; NVIDIA licence, never copied into a repo or artifact) shipped or located on the
+   P40 host.
+2. Two AOT builds of the same sources, one per toolchain (CUDA 12.9 for sm_61, 13.x for the rest), chosen
+   at install/link time. Only worth it if a hand-written kernel (the MMVQ dp4a file) is built for sm_61;
+   doubles build time (a fresh nvcc build of `baracuda-kernels-sys` is ~1h45m on this box).
+3. One fat binary with SASS/PTX per arch from two toolchains: not possible from a single nvcc
+   invocation, since 13.x cannot emit sm_61 and 12.9 cannot emit what 13.x targets later; it would be
+   two builds merged by hand. Not recommended.
+
+What the driver does with old SASS: UNVERIFIED until the P40 is in the box. Expectations to test, not
+facts: a cubin is matched on exact SM major plus minor at or below the device; PTX is JIT-compiled by
+the driver for any newer device; a CUDA 13-era driver (needed by the 4060) may have dropped Pascal
+(NVIDIA's CUDA 13 notes drop Maxwell/Pascal/Volta offline compilation, and support for the GPUs in the
+driver branch is a separate question). Whether one driver install serves both the P40 and the 4060 is
+therefore an open hardware question, and it decides whether both cards can share a process at all.
+
 ## Hardware-free part (doable now, no P40)
 
-1. Compile a representative sample of emitted kernels (elementwise, reduce, matmul-scalar, softmax,
-   cast, a half-typed one) with NVRTC 12.9 for `cuda:sm61` and assert success; also target sm_70 / sm_75.
-   Run on any box with a 12.9 NVRTC; skip with a labelled reason where it is absent (`require!`).
-   BLOCKED on this box: only CUDA 13.3 is installed (an `[ASK]` for a 12.9 NVRTC is with the PM).
+1. DONE 2026-10-30 (`crates/baracuda-cuda-emit/tests/sm61_compiles.rs`, NVRTC 12.9.86 redist via
+   `BARACUDA_NVRTC_PATH`): 14 elementwise bodies (add, mul, max, relu, silu, gelu, sigmoid, tanh, exp,
+   sqrt, sin, pow, floor, select) and 3 reductions (sum, max, min), each for f32, f64, f16, bf16, emitted
+   for `cuda:sm61`, `sm70`, `sm75` and `sm89` (control) and compiled to PTX. Result, identical on all
+   four targets: 0 compile failures; f32/f64 14+3 compiled; f16 and bf16 13+3 compiled and 1 typed
+   decline each (elementwise). PTX generation only: NOT run on device. The f16/bf16 headers came from the
+   CUDA 13.3 include dir (the redist ships none), so a 12.9 header set is still unchecked. Without a 12.x
+   NVRTC the test declares a skip (13.x rejects sm_61).
 2. Catch Pascal-incompatible PTX the grep-based claim in the gap analysis cannot: `__activemask`-class
    warp primitives, 64-bit float atomics, `cp.async`. A successful sm_61 compile is the test.
 3. Check `unpopped::generate()` does not gate unknown `cuda:smNN` tokens before reaching `cuda.rs`.
@@ -55,4 +89,5 @@ above. Evidence must be labelled "device-verified sm61" only after a P40 run.
 ## Open questions
 
 - Which sm_61 build of the MMVQ file, if any, belongs in `baracuda-kernels-sys` (needs the PM / 307 view).
+- Whether one NVIDIA driver serves both the P40 and the 4060 (see Toolchain).
 - Whether the Fuel dispatcher selects the emitter path automatically on a sub-sm_80 device.

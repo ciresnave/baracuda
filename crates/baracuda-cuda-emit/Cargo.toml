@@ -49,7 +49,7 @@ baracuda-nvrtc = { workspace = true, optional = true }
 unpopped-cpu-c = "0.34.3"
 unpopped-slang = "0.34.3"
 # Runs the emitted Fma / Cast / Bitcast kernels on the device (`tests/typed_exprs.rs`).
-baracuda-driver = { workspace = true }
+baracuda-driver = { workspace = true, features = ["test-support"] }
 # The CUDA `Frontend` for `tests/convert.rs` (unpopped 0.30 removed it from `unpopped::convert`).
 baracuda-cuda-parse = { workspace = true }
 
