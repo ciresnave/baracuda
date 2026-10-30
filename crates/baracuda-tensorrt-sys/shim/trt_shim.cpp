@@ -334,6 +334,14 @@ void* trtNetworkAddPoolingNd(void* network, void* in, std::int32_t type, const D
     return Out(asNetwork(network)->addPoolingNd(*asTensor(in), static_cast<PoolingType>(type), *windowSize));
 }
 
+void* trtNetworkAddDeconvolutionNd(void* network, void* in, std::int64_t nbOutputMaps,
+                                   const Dims* kernelSize, const void* kernel, std::int64_t kernelCount,
+                                   const void* bias, std::int64_t biasCount) noexcept {
+    Weights k{DataType::kFLOAT, kernel, kernelCount};
+    Weights b{DataType::kFLOAT, bias, biasCount};
+    return Out(asNetwork(network)->addDeconvolutionNd(*asTensor(in), nbOutputMaps, *kernelSize, k, b));
+}
+
 // ---- ILayer / ITensor ---------------------------------------------------
 
 void* trtLayerGetOutput(void* layer, std::int32_t index) noexcept { return asLayer(layer)->getOutput(index); }
@@ -499,6 +507,19 @@ void trtPoolingSetStrideNd(void* layer, const Dims* d) noexcept {
 }
 void trtPoolingSetPaddingNd(void* layer, const Dims* d) noexcept {
     static_cast<IPoolingLayer*>(asLayer(layer))->setPaddingNd(*d);
+}
+
+void trtDeconvolutionSetStrideNd(void* layer, const Dims* d) noexcept {
+    static_cast<IDeconvolutionLayer*>(asLayer(layer))->setStrideNd(*d);
+}
+void trtDeconvolutionSetPaddingNd(void* layer, const Dims* d) noexcept {
+    static_cast<IDeconvolutionLayer*>(asLayer(layer))->setPaddingNd(*d);
+}
+void trtDeconvolutionSetDilationNd(void* layer, const Dims* d) noexcept {
+    static_cast<IDeconvolutionLayer*>(asLayer(layer))->setDilationNd(*d);
+}
+void trtDeconvolutionSetNbGroups(void* layer, std::int64_t n) noexcept {
+    static_cast<IDeconvolutionLayer*>(asLayer(layer))->setNbGroups(n);
 }
 
 }  // extern "C"

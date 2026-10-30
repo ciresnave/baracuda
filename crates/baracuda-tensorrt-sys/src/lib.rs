@@ -894,6 +894,16 @@ pub mod builder {
             bias: *const c_void,
             bias_count: i64,
         ) -> trtILayer_t;
+        pub fn trtNetworkAddDeconvolutionNd(
+            network: trtINetworkDefinition_t,
+            input: trtITensor_t,
+            nb_output_maps: i64,
+            kernel_size: *const trtDims_t,
+            kernel: *const c_void,
+            kernel_count: i64,
+            bias: *const c_void,
+            bias_count: i64,
+        ) -> trtILayer_t;
         pub fn trtNetworkAddPoolingNd(
             network: trtINetworkDefinition_t,
             input: trtITensor_t,
@@ -922,6 +932,10 @@ pub mod builder {
         pub fn trtConvolutionSetPaddingNd(layer: trtILayer_t, dims: *const trtDims_t);
         pub fn trtConvolutionSetDilationNd(layer: trtILayer_t, dims: *const trtDims_t);
         pub fn trtConvolutionSetNbGroups(layer: trtILayer_t, groups: i64);
+        pub fn trtDeconvolutionSetStrideNd(layer: trtILayer_t, dims: *const trtDims_t);
+        pub fn trtDeconvolutionSetPaddingNd(layer: trtILayer_t, dims: *const trtDims_t);
+        pub fn trtDeconvolutionSetDilationNd(layer: trtILayer_t, dims: *const trtDims_t);
+        pub fn trtDeconvolutionSetNbGroups(layer: trtILayer_t, groups: i64);
         pub fn trtPoolingSetStrideNd(layer: trtILayer_t, dims: *const trtDims_t);
         pub fn trtPoolingSetPaddingNd(layer: trtILayer_t, dims: *const trtDims_t);
 

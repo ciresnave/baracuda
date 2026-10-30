@@ -4,11 +4,11 @@ version = 4
 
 [[package]]
 name = "baracuda-build"
-version = "0.1.0-alpha.53"
+version = "0.1.0-alpha.54"
 
 [[package]]
 name = "baracuda-core"
-version = "0.1.0-alpha.53"
+version = "0.1.0-alpha.54"
 dependencies = [
  "baracuda-types",
  "libloading",
@@ -25,7 +25,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cuda-sys"
-version = "0.1.0-alpha.53"
+version = "0.1.0-alpha.54"
 dependencies = [
  "baracuda-build",
  "baracuda-core",
@@ -34,7 +34,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-driver"
-version = "0.1.0-alpha.53"
+version = "0.1.0-alpha.54"
 dependencies = [
  "baracuda-core",
  "baracuda-cuda-sys",
@@ -44,7 +44,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-nvrtc"
-version = "0.1.0-alpha.53"
+version = "0.1.0-alpha.54"
 dependencies = [
  "baracuda-core",
  "baracuda-nvrtc-sys",
@@ -54,7 +54,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-nvrtc-sys"
-version = "0.1.0-alpha.53"
+version = "0.1.0-alpha.54"
 dependencies = [
  "baracuda-build",
  "baracuda-core",
@@ -63,7 +63,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-types"
-version = "0.1.0-alpha.53"
+version = "0.1.0-alpha.54"
 dependencies = [
  "unpopped-vocab",
 ]

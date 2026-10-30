@@ -714,6 +714,42 @@ impl Network<'_> {
         self.layer(raw, "addConvolutionNd")
     }
 
+    /// An N-d transposed convolution over `input` (`[N, C, spatial...]`).
+    /// `kernel` holds the `f32` weights laid out
+    /// `[C, num_output_maps / groups, kernel_size...]`; `bias` is one value per
+    /// output map, or `None`. Configure stride, padding, dilation and groups
+    /// with the `Layer::set_deconv_*` setters.
+    pub fn add_deconvolution<'a>(
+        &'a self,
+        input: &Tensor<'a>,
+        num_output_maps: i64,
+        kernel_size: &Dims,
+        kernel: &[f32],
+        bias: Option<&[f32]>,
+    ) -> Result<Layer<'a>> {
+        let (kernel_ptr, kernel_count) = self.hold_f32(kernel);
+        let (bias_ptr, bias_count) = match bias {
+            Some(b) => self.hold_f32(b),
+            None => (std::ptr::null(), 0),
+        };
+        let size = kernel_size.to_raw();
+        let raw =
+            // SAFETY: the weight pointers point into boxed buffers held in `self.weights` until the network drops (or are null with count 0); `size` is a local that outlives the call.
+            unsafe {
+                ffi::trtNetworkAddDeconvolutionNd(
+                    self.raw,
+                    input.raw,
+                    num_output_maps,
+                    &size,
+                    kernel_ptr,
+                    kernel_count,
+                    bias_ptr,
+                    bias_count,
+                )
+            };
+        self.layer(raw, "addDeconvolutionNd")
+    }
+
     /// An N-d pooling layer with the given window; stride defaults to 1 (set it
     /// with [`Layer::set_pool_stride`]).
     pub fn add_pooling<'a>(
@@ -875,6 +911,33 @@ impl<'n> Layer<'n> {
     pub fn set_conv_num_groups(&self, groups: i64) {
         // SAFETY: the handle is live (owned by `self`).
         unsafe { ffi::trtConvolutionSetNbGroups(self.raw, groups) };
+    }
+
+    /// For a deconvolution layer: the stride, one entry per spatial axis.
+    pub fn set_deconv_stride(&self, dims: &Dims) {
+        let dims = dims.to_raw();
+        // SAFETY: the handle is live (owned by `self`); `dims` is a local that outlives the call.
+        unsafe { ffi::trtDeconvolutionSetStrideNd(self.raw, &dims) };
+    }
+
+    /// For a deconvolution layer: symmetric padding, one entry per spatial axis.
+    pub fn set_deconv_padding(&self, dims: &Dims) {
+        let dims = dims.to_raw();
+        // SAFETY: the handle is live (owned by `self`); `dims` is a local that outlives the call.
+        unsafe { ffi::trtDeconvolutionSetPaddingNd(self.raw, &dims) };
+    }
+
+    /// For a deconvolution layer: the dilation, one entry per spatial axis.
+    pub fn set_deconv_dilation(&self, dims: &Dims) {
+        let dims = dims.to_raw();
+        // SAFETY: the handle is live (owned by `self`); `dims` is a local that outlives the call.
+        unsafe { ffi::trtDeconvolutionSetDilationNd(self.raw, &dims) };
+    }
+
+    /// For a deconvolution layer: the number of groups.
+    pub fn set_deconv_num_groups(&self, groups: i64) {
+        // SAFETY: the handle is live (owned by `self`).
+        unsafe { ffi::trtDeconvolutionSetNbGroups(self.raw, groups) };
     }
 
     /// For a pooling layer: the stride, one entry per spatial axis.

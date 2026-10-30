@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.54 - 2026-10-30
+
+### Added
+
+- `baracuda-tensorrt-builder`: deconvolution (transposed convolution) layer (ROADMAP SA-33, remaining layer types, second slice). `Network::add_deconvolution` and `Layer::{set_deconv_stride, set_deconv_padding, set_deconv_dilation, set_deconv_num_groups}`; the `baracuda-tensorrt-sys` shim gains `trtNetworkAddDeconvolutionNd` and the setters. `f32` weights laid out `[C, num_output_maps / groups, kernel...]`. Device-verified on sm_89 (RTX 4070), TensorRT 10.16.1.11: `cargo gpu-test -p baracuda-tensorrt-builder --features shim,device-tests --test builder_smoke`, 13 passed, 0 failed (2 new): a 2x2 ones-kernel at stride 2 replicates each input over a 2x2 block (the stride setter is live, else the output would be 3x3); a 2x2 kernel with bias at stride 1 equals the CPU scatter-add. The dilation and group setters are not exercised by a test. Not covered: slice, gather, select, resize and the other layer kinds.
+
 ## 0.1.0-alpha.53 - 2026-10-30
 
 ### Added
