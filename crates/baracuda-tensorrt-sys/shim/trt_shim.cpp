@@ -355,6 +355,10 @@ void* trtNetworkAddSelect(void* network, void* cond, void* then_in, void* else_i
     return Out(asNetwork(network)->addSelect(*asTensor(cond), *asTensor(then_in), *asTensor(else_in)));
 }
 
+void* trtNetworkAddResize(void* network, void* in) noexcept {
+    return Out(asNetwork(network)->addResize(*asTensor(in)));
+}
+
 // ---- ILayer / ITensor ---------------------------------------------------
 
 void* trtLayerGetOutput(void* layer, std::int32_t index) noexcept { return asLayer(layer)->getOutput(index); }
@@ -514,6 +518,12 @@ void trtConvolutionSetDilationNd(void* layer, const Dims* d) noexcept {
 }
 void trtConvolutionSetNbGroups(void* layer, std::int64_t n) noexcept {
     static_cast<IConvolutionLayer*>(asLayer(layer))->setNbGroups(n);
+}
+void trtResizeSetOutputDimensions(void* layer, const Dims* d) noexcept {
+    static_cast<IResizeLayer*>(asLayer(layer))->setOutputDimensions(*d);
+}
+void trtResizeSetMode(void* layer, std::int32_t mode) noexcept {
+    static_cast<IResizeLayer*>(asLayer(layer))->setResizeMode(static_cast<InterpolationMode>(mode));
 }
 void trtPoolingSetStrideNd(void* layer, const Dims* d) noexcept {
     static_cast<IPoolingLayer*>(asLayer(layer))->setStrideNd(*d);

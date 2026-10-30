@@ -916,6 +916,10 @@ pub mod builder {
             then_input: trtITensor_t,
             else_input: trtITensor_t,
         ) -> trtILayer_t;
+        pub fn trtNetworkAddResize(
+            network: trtINetworkDefinition_t,
+            input: trtITensor_t,
+        ) -> trtILayer_t;
         pub fn trtNetworkAddSlice(
             network: trtINetworkDefinition_t,
             input: trtITensor_t,
@@ -955,6 +959,8 @@ pub mod builder {
         pub fn trtDeconvolutionSetPaddingNd(layer: trtILayer_t, dims: *const trtDims_t);
         pub fn trtDeconvolutionSetDilationNd(layer: trtILayer_t, dims: *const trtDims_t);
         pub fn trtDeconvolutionSetNbGroups(layer: trtILayer_t, groups: i64);
+        pub fn trtResizeSetOutputDimensions(layer: trtILayer_t, dims: *const trtDims_t);
+        pub fn trtResizeSetMode(layer: trtILayer_t, mode: i32);
         pub fn trtPoolingSetStrideNd(layer: trtILayer_t, dims: *const trtDims_t);
         pub fn trtPoolingSetPaddingNd(layer: trtILayer_t, dims: *const trtDims_t);
 

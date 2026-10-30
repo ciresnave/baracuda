@@ -14,8 +14,8 @@ use std::sync::Arc;
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, require_optional};
 use baracuda_tensorrt::{DataType, Dims, Logger, Runtime, Severity};
 use baracuda_tensorrt_builder::{
-    Activation, Builder, BuilderConfig, BuilderFlag, ElementWiseOp, MatrixOp, MemoryPool, Network,
-    NetworkFlags, PoolingType, ReduceOp, UnaryOp,
+    Activation, Builder, BuilderConfig, BuilderFlag, ElementWiseOp, InterpolationMode, MatrixOp,
+    MemoryPool, Network, NetworkFlags, PoolingType, ReduceOp, UnaryOp,
 };
 
 fn logger() -> Option<Arc<Logger>> {
@@ -526,4 +526,39 @@ fn select_on_greater_is_elementwise_max() {
         4,
     );
     assert_close(&got, &[4.0, 5.0, 3.5, 8.0], 0.0);
+}
+
+/// Resizes a `[1,1,2,2]` input `0..4` to `[1,1,4,4]` with `mode`; returns the 16 outputs.
+fn resize_2x2_to_4x4(logger: Arc<Logger>, mode: InterpolationMode) -> Vec<f32> {
+    let x = [0.0f32, 1.0, 2.0, 3.0];
+    build_and_run(
+        logger,
+        |net| {
+            let tx = net.add_input("x", DataType::Float, &Dims::new(&[1, 1, 2, 2]))?;
+            let r = net.add_resize(&tx)?;
+            r.set_resize_output_dims(&Dims::new(&[1, 1, 4, 4]));
+            r.set_resize_mode(mode);
+            let out = r.output(0)?;
+            out.set_name("out")?;
+            net.mark_output(&out)
+        },
+        &[("x", &x)],
+        "out",
+        16,
+    )
+}
+
+#[test]
+fn resize_nearest_replicates_and_linear_interpolates() {
+    let logger = require_optional!(logger(), "C-ABI shim (Logger::new)");
+    let nearest = resize_2x2_to_4x4(Arc::clone(&logger), InterpolationMode::Nearest);
+    let want = [
+        0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 2.0, 2.0, 3.0, 3.0, 2.0, 2.0, 3.0, 3.0,
+    ];
+    assert_close(&nearest, &want, 1e-6);
+    // The default coordinate transform is asymmetric: corner (0,0) stays 0, values stay in [0,3].
+    let linear = resize_2x2_to_4x4(logger, InterpolationMode::Linear);
+    assert!(linear[0].abs() < 1e-5, "corner {}", linear[0]);
+    assert!(linear.iter().all(|v| (-1e-5..=3.0 + 1e-5).contains(v)));
+    assert_ne!(linear, nearest.to_vec(), "linear must differ from nearest");
 }

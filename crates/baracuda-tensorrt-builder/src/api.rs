@@ -164,6 +164,18 @@ trt_enum! {
 }
 
 trt_enum! {
+    /// `nvinfer1::InterpolationMode`.
+    InterpolationMode {
+        /// Nearest neighbour.
+        Nearest = 0,
+        /// Linear / bilinear / trilinear.
+        Linear = 1,
+        /// Bicubic (2-D).
+        Cubic = 2,
+    }
+}
+
+trt_enum! {
     /// `nvinfer1::PoolingType`.
     PoolingType {
         /// Maximum over the window.
@@ -779,6 +791,14 @@ impl Network<'_> {
         self.layer(raw, "addSelect")
     }
 
+    /// A resize layer. Set the target shape with [`Layer::set_resize_output_dims`]
+    /// and the interpolation with [`Layer::set_resize_mode`] (default nearest).
+    pub fn add_resize<'a>(&'a self, input: &Tensor<'a>) -> Result<Layer<'a>> {
+        // SAFETY: `self.raw` and `input.raw` are live handles of this network.
+        let raw = unsafe { ffi::trtNetworkAddResize(self.raw, input.raw) };
+        self.layer(raw, "addResize")
+    }
+
     /// A static slice: `size` elements per axis starting at `start`, stepping by
     /// `stride` (all three have the input's rank). Out-of-range reads are an
     /// error at build time (the default `SampleMode::kSTRICT_BOUNDS`).
@@ -984,6 +1004,19 @@ impl<'n> Layer<'n> {
     pub fn set_deconv_num_groups(&self, groups: i64) {
         // SAFETY: the handle is live (owned by `self`).
         unsafe { ffi::trtDeconvolutionSetNbGroups(self.raw, groups) };
+    }
+
+    /// For a resize layer: the output shape (same rank as the input).
+    pub fn set_resize_output_dims(&self, dims: &Dims) {
+        let dims = dims.to_raw();
+        // SAFETY: the handle is live (owned by `self`); `dims` is a local that outlives the call.
+        unsafe { ffi::trtResizeSetOutputDimensions(self.raw, &dims) };
+    }
+
+    /// For a resize layer: the interpolation mode.
+    pub fn set_resize_mode(&self, mode: InterpolationMode) {
+        // SAFETY: the handle is live (owned by `self`).
+        unsafe { ffi::trtResizeSetMode(self.raw, mode as i32) };
     }
 
     /// For a pooling layer: the stride, one entry per spatial axis.

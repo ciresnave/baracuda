@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.60 - 2026-10-30
+
+### Added
+
+- `baracuda-tensorrt-builder`: resize layer (ROADMAP SA-33, remaining layer types, sixth slice). `Network::add_resize(input)`, `Layer::set_resize_output_dims`, `Layer::set_resize_mode`, `InterpolationMode`; the `baracuda-tensorrt-sys` shim gains `trtNetworkAddResize`, `trtResizeSetOutputDimensions`, `trtResizeSetMode`. Device-verified on sm_89 (RTX 4070), TensorRT 10.16.1.11: `cargo gpu-test -p baracuda-tensorrt-builder --features shim,device-tests --test builder_smoke`, 17 passed, 0 failed (1 new): a [1,1,2,2] input resized to [1,1,4,4] replicates exactly under nearest; under linear the output differs from nearest, keeps the corner and stays within the input range (the interpolated values are NOT compared against a CPU reference). Not covered: cubic, scales, coordinate transformation / nearest rounding, dynamic output shape.
+
 ## 0.1.0-alpha.59 - 2026-10-30
 
 ### Added
