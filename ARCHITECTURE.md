@@ -728,7 +728,7 @@ The original "Phase 11 = Hopper sm_90a" and "Phase 12 = 1.0 freeze"
 items remain valid targets but are sequenced behind ongoing
 downstream-driven work.
 
-The workspace is at **v0.1.0-alpha.61**. The most recent structural
+The workspace is at **v0.1.0-alpha.62**. The most recent structural
 change is that the kernel-generation layer described above moved out to the
 standalone `unpopped` crates, leaving the CUDA emitter, parser, vocabulary and
 seam crates here. Consult `CHANGELOG.md` for the release-by-release detail;
