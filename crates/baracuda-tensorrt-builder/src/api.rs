@@ -750,6 +750,23 @@ impl Network<'_> {
         self.layer(raw, "addDeconvolutionNd")
     }
 
+    /// A static slice: `size` elements per axis starting at `start`, stepping by
+    /// `stride` (all three have the input's rank). Out-of-range reads are an
+    /// error at build time (the default `SampleMode::kSTRICT_BOUNDS`).
+    pub fn add_slice<'a>(
+        &'a self,
+        input: &Tensor<'a>,
+        start: &Dims,
+        size: &Dims,
+        stride: &Dims,
+    ) -> Result<Layer<'a>> {
+        let (start, size, stride) = (start.to_raw(), size.to_raw(), stride.to_raw());
+        let raw =
+            // SAFETY: `self.raw` and `input.raw` are live handles of this network; the three dims are locals that outlive the call.
+            unsafe { ffi::trtNetworkAddSlice(self.raw, input.raw, &start, &size, &stride) };
+        self.layer(raw, "addSlice")
+    }
+
     /// An N-d pooling layer with the given window; stride defaults to 1 (set it
     /// with [`Layer::set_pool_stride`]).
     pub fn add_pooling<'a>(

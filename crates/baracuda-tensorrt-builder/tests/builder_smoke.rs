@@ -436,3 +436,47 @@ fn deconvolution_with_bias_matches_cpu() {
     let want = [1.5, 4.5, 4.5, 6.5, 20.5, 16.5, 9.5, 24.5, 16.5];
     assert_close(&got, &want, 1e-4);
 }
+
+#[test]
+fn slice_window_and_stride_match_cpu() {
+    let logger = require_optional!(logger(), "C-ABI shim (Logger::new)");
+    let x: Vec<f32> = (0..16).map(|i| i as f32).collect(); // [4,4]
+    let window = build_and_run(
+        Arc::clone(&logger),
+        |net| {
+            let tx = net.add_input("x", DataType::Float, &Dims::new(&[4, 4]))?;
+            let s = net.add_slice(
+                &tx,
+                &Dims::new(&[1, 1]),
+                &Dims::new(&[2, 2]),
+                &Dims::new(&[1, 1]),
+            )?;
+            let out = s.output(0)?;
+            out.set_name("out")?;
+            net.mark_output(&out)
+        },
+        &[("x", &x)],
+        "out",
+        4,
+    );
+    assert_close(&window, &[5.0, 6.0, 9.0, 10.0], 1e-6);
+    let strided = build_and_run(
+        logger,
+        |net| {
+            let tx = net.add_input("x", DataType::Float, &Dims::new(&[4, 4]))?;
+            let s = net.add_slice(
+                &tx,
+                &Dims::new(&[0, 0]),
+                &Dims::new(&[2, 2]),
+                &Dims::new(&[2, 2]),
+            )?;
+            let out = s.output(0)?;
+            out.set_name("out")?;
+            net.mark_output(&out)
+        },
+        &[("x", &x)],
+        "out",
+        4,
+    );
+    assert_close(&strided, &[0.0, 2.0, 8.0, 10.0], 1e-6);
+}
