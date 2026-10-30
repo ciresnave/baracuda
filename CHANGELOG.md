@@ -16,6 +16,14 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.63 - 2026-10-30
+
+Docs only. No code, no device run.
+
+### Added
+
+- ROADMAP SA-49: the Conv2d algorithm measurement gap left by alpha.62 (f16 / bf16, backward, other GPUs, more 1x1 and grouped shapes, repeat runs) as a tracked row.
+
 ## 0.1.0-alpha.62 - 2026-10-30
 
 ### Added
