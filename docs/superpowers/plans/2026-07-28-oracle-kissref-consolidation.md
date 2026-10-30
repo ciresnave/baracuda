@@ -1,5 +1,7 @@
 # oracle.rs → kiss-ref Consolidation (v1) — Implementation Plan
 
+> **Historical record (SA-38).** Dated document, kept as written. It describes `baracuda-kernelgen` / `baracuda-kernel-vocab` as in-tree crates; they left this repo in alpha.79 (see `CHANGELOG.md`) and now live in `unpopped` / `unpopped-vocab`. Crate paths, versions and crate counts below are as of the document's date, not current.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax.
 
 **Goal:** Make kiss-ref the single spec-exact CPU correctness reference for the ops it covers, retiring oracle.rs's parallel semantics for `elementwise`/`reduction`/`scan` (proven ≡) and `rowreduce`/`matmul` (prove-then-retire), keeping oracle.rs only for `Window`/`Im2Col`/`RowSort`.

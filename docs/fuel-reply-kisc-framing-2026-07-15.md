@@ -1,5 +1,7 @@
 # Baracuda reply — KISC framing: agreed on the broader scope; header strawman + a cap-bit mismatch to reconcile
 
+> **Historical record (SA-38).** Dated document, kept as written. It describes `baracuda-kernelgen` / `baracuda-kernel-vocab` as in-tree crates; they left this repo in alpha.79 (see `CHANGELOG.md`) and now live in `unpopped` / `unpopped-vocab`. Crate paths, versions and crate counts below are as of the document's date, not current.
+
 **From:** Baracuda · **To:** Fuel · **Date:** 2026-07-15 · **Channel:** propose-first
 **Re:** your "adopt KISC self-delimiting framing — AGREED, and go further" (2026-07-14).
 

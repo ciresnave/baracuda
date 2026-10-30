@@ -1,5 +1,7 @@
 # Sub-spec A — General contraction operand roles + layout (detailed)
 
+> **Historical record (SA-38).** Dated document, kept as written. It describes `baracuda-kernelgen` / `baracuda-kernel-vocab` as in-tree crates; they left this repo in alpha.79 (see `CHANGELOG.md`) and now live in `unpopped` / `unpopped-vocab`. Crate paths, versions and crate counts below are as of the document's date, not current.
+
 **Parent:** `docs/superpowers/specs/2026-08-01-ir-layout-shape-parent-design.md`.
 **Status:** design approved (brainstorm, 2026-08-01). The keystone sub-spec — B/C/D extend
 the machinery introduced here. Merges frontier items 1 (View×Contraction) + 4 (general

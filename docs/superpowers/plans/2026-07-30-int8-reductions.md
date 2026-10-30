@@ -1,5 +1,7 @@
 # int8/uint8 Reduction Support Implementation Plan
 
+> **Historical record (SA-38).** Dated document, kept as written. It describes `baracuda-kernelgen` / `baracuda-kernel-vocab` as in-tree crates; they left this repo in alpha.79 (see `CHANGELOG.md`) and now live in `unpopped` / `unpopped-vocab`. Crate paths, versions and crate counts below are as of the document's date, not current.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add S8 (int8) / U8 (uint8) support to the kernelgen reduction ops — `sum`/`max`/`min`/`prod` plus the predicate folds `any`/`all`/`count` — with wrapping two's-complement semantics byte-exact to KISS-Ops and differentially verified against kiss-ref.

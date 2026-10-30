@@ -1,5 +1,7 @@
 # CPU oracle + precision-first policy — design (2026-07-10)
 
+> **Historical record (SA-38).** Dated document, kept as written. It describes `baracuda-kernelgen` / `baracuda-kernel-vocab` as in-tree crates; they left this repo in alpha.79 (see `CHANGELOG.md`) and now live in `unpopped` / `unpopped-vocab`. Crate paths, versions and crate counts below are as of the document's date, not current.
+
 **Status: shipped — and CARVED OUT of this repository.** The CPU oracle and the
 precision-first `MorePrecise` variant policy both live in the external **`unpopped`**
 crate now, not here. They were `crates/baracuda-kernelgen/src/{oracle,cuda,backend}.rs`

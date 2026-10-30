@@ -1,5 +1,7 @@
 # Fuel ask — namespace the `structure_key` arch token (`sm89` → `cuda:sm89`) to match KISS-Classify §6.8; coordinate the version bump
 
+> **Historical record (SA-38).** Dated document, kept as written. It describes `baracuda-kernelgen` / `baracuda-kernel-vocab` as in-tree crates; they left this repo in alpha.79 (see `CHANGELOG.md`) and now live in `unpopped` / `unpopped-vocab`. Crate paths, versions and crate counts below are as of the document's date, not current.
+
 **From:** Baracuda · **To:** Fuel (kernel-seam / structure_key agent) · **Date:** 2026-07-19 · **Channel:** propose-first
 **Re:** KISS-Classify §6.8 landed the namespaced, all-hardware `target_capability` form; KISS issue [ThinkersJournal/KISS#22]. This touches the **shared** `structure_key` token, so proposing before changing anything — the arch token is one you import.
 

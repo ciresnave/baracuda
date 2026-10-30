@@ -1,5 +1,7 @@
 # sk3 emit — Baracuda implementation blueprint
 
+> **Historical record (SA-38).** Dated document, kept as written. It describes `baracuda-kernelgen` / `baracuda-kernel-vocab` as in-tree crates; they left this repo in alpha.79 (see `CHANGELOG.md`) and now live in `unpopped` / `unpopped-vocab`. Crate paths, versions and crate counts below are as of the document's date, not current.
+
 **Status: APPLIED (2026-07-22, branch `feat/sk3-codec-bump`).** sk3 was formally adopted 2026-07-21 (RFC `C:\Projects\KISS\rfcs\sk3-gemm-precision-coordinates.md`, all sign-offs in, §6.17 pin folded); Eric greenlit the Baracuda bump ("Now, on a branch"). The plan below executed as written, with two implementation resolutions the code surfaced (recorded in §Resolutions at the bottom): (1) the `F32Strict` fold lives at the TOKEN codec only — the `StructureKey` STRUCT keeps `F32Strict` as the in-process MathPrecision carrier (`plan.dtype` reads `key.dtype`, so a derivation-side fold would have silently downgraded the strict-reduce kernels); (2) the kernelgen skinny-contraction kernel's `F32Strict` accumulator changed `double`→`float` to honor the §4.2 `accumulation_type`↔`<acc>` pin and the F32Strict element contract ("full IEEE 754 binary32 multiply-add throughout"). Golden regen with KISS + Fuel still pending (coordinates when the KISS spec clauses complete).
 
 ---

@@ -1,5 +1,7 @@
 # Design: oracle.rs → kiss-ref consolidation (v2)
 
+> **Historical record (SA-38).** Dated document, kept as written. It describes `baracuda-kernelgen` / `baracuda-kernel-vocab` as in-tree crates; they left this repo in alpha.79 (see `CHANGELOG.md`) and now live in `unpopped` / `unpopped-vocab`. Crate paths, versions and crate counts below are as of the document's date, not current.
+
 **Date:** 2026-07-28 (v1); amended 2026-07-29 (v2, after execution).
 **Status:** value-retirement sweep COMPLETE — Tasks 0–6 + the select retirement landed (PR #6). v2 reshaped the model after a Task-2 finding.
 **Scope owner:** Baracuda (kernelgen), coordinated with kiss-ref (peer `3vgwagtz`).

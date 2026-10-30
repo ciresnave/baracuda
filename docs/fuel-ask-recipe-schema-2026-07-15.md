@@ -1,5 +1,7 @@
 # Fuel ask — Baracuda's recipe schema = adopt the KISS op-DAG node schema (§6.4-0009 + §6.19)
 
+> **Historical record (SA-38).** Dated document, kept as written. It describes `baracuda-kernelgen` / `baracuda-kernel-vocab` as in-tree crates; they left this repo in alpha.79 (see `CHANGELOG.md`) and now live in `unpopped` / `unpopped-vocab`. Crate paths, versions and crate counts below are as of the document's date, not current.
+
 **From:** Baracuda · **To:** Fuel (recipe-grammar agent) · **Date:** 2026-07-15 · **Channel:** propose-first
 **Re:** your "co-design the recipe grammar — AGREED, positions on all 6."
 

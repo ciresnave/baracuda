@@ -1,5 +1,7 @@
 # Kernel specialization — structure-class codegen
 
+> **Historical record (SA-38).** Dated document, kept as written. It describes `baracuda-kernelgen` / `baracuda-kernel-vocab` as in-tree crates; they left this repo in alpha.79 (see `CHANGELOG.md`) and now live in `unpopped` / `unpopped-vocab`. Crate paths, versions and crate counts below are as of the document's date, not current.
+
 **Status:** SHIPPED — `baracuda-kernelgen`, published to crates.io since
 v0.0.1-alpha.76 (the IR-expansion ramp 0a–#8 + the post-ramp backlog landed
 across alpha.68–77). This document is the original design capture; it is kept

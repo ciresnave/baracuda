@@ -16,6 +16,14 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.51 - 2026-10-30
+
+Docs only. No code, no device run.
+
+### Changed
+
+- Doc staleness sweep, SA-38 (a), dated records: 39 dated documents under `docs/design/`, `docs/planning/`, `docs/superpowers/`, `docs/fuel-*`, `docs/kiss-*` and two others that describe `baracuda-kernelgen` / `baracuda-kernel-vocab` as in-tree now open with a "Historical record (SA-38)" banner. Their text is unchanged.
+
 ## 0.1.0-alpha.50 - 2026-10-30
 
 Docs only. No code, no device run.

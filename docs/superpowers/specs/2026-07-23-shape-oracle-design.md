@@ -1,5 +1,7 @@
 # Design: the §6.20 output-shape oracle for `baracuda-kernelgen`
 
+> **Historical record (SA-38).** Dated document, kept as written. It describes `baracuda-kernelgen` / `baracuda-kernel-vocab` as in-tree crates; they left this repo in alpha.79 (see `CHANGELOG.md`) and now live in `unpopped` / `unpopped-vocab`. Crate paths, versions and crate counts below are as of the document's date, not current.
+
 **Date:** 2026-07-23
 **Status:** design approved; ready for an implementation plan.
 **Scope owner:** Baracuda (kernelgen + kernel-vocab).

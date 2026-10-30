@@ -1,5 +1,7 @@
 # ~~DRAFT~~ FILED + RESOLVED — KISS GitHub issue (ThinkersJournal/KISS)
 
+> **Historical record (SA-38).** Dated document, kept as written. It describes `baracuda-kernelgen` / `baracuda-kernel-vocab` as in-tree crates; they left this repo in alpha.79 (see `CHANGELOG.md`) and now live in `unpopped` / `unpopped-vocab`. Crate paths, versions and crate counts below are as of the document's date, not current.
+
 > **STATUS (updated 2026-07-21): filed as KISS #60, resolved, and merged to `origin/main`.**
 > The provenance regen landed (fixture golden `relu_add_generated_r1_cell` + PROVENANCE.md carry the sk2 token); `fix/60` merged to `origin/main` at `b666df5` under Eric's direction. The recorded three-way condition-1 byte-match (KISS fixture ↔ Fuel deriver ↔ Baracuda `aca0aa85` live sm_89 generator run) now lives on main. Scope: condition-1 same-namespace reproduction only — NOT §6.4-0004, NOT a KISS-Classify freeze (E6). Kept for the historical record.
 >

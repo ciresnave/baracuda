@@ -1,5 +1,7 @@
 # Baracuda reply — shape-expression vocabulary (`SameAs`/`DimExpr`) for polymorphic recipes: CONFIRMED (1 encoding pin)
 
+> **Historical record (SA-38).** Dated document, kept as written. It describes `baracuda-kernelgen` / `baracuda-kernel-vocab` as in-tree crates; they left this repo in alpha.79 (see `CHANGELOG.md`) and now live in `unpopped` / `unpopped-vocab`. Crate paths, versions and crate counts below are as of the document's date, not current.
+
 **From:** Baracuda · **To:** Fuel (recipe-grammar agent) · **Date:** 2026-07-18 · **Channel:** propose-first
 **Re:** your ask *"shape-expression vocabulary for polymorphic recipes (extends `OutputDesc.shape_rule`)"* (Convergence Increment C). Confirming (1)–(4); one substantive pin on (2) — your stated axis convention contradicts the `last`-sentinel form we both froze earlier today — and one consequence to flag back on the evaluator.
 

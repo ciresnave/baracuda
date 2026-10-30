@@ -1,5 +1,7 @@
 # AxisRole vocabulary — the unified ORDER-3 axis-fact spec (design 2026-07-01; status updated 2026-07-10)
 
+> **Historical record (SA-38).** Dated document, kept as written. It describes `baracuda-kernelgen` / `baracuda-kernel-vocab` as in-tree crates; they left this repo in alpha.79 (see `CHANGELOG.md`) and now live in `unpopped` / `unpopped-vocab`. Crate paths, versions and crate counts below are as of the document's date, not current.
+
 **Status:** **wired** (in-IR) via `Access::Contraction`. The `AxisRole` enum (`{Batch, FreeM, FreeN,
 ContractedK, …}`) and `ContractionAxes { lhs, rhs }` now live in `crates/baracuda-kernelgen/src/ir.rs`
 (the `Access::Contraction { axes, accum, epilogue }` node carries them; `ContractionAxes::matmul()` is the

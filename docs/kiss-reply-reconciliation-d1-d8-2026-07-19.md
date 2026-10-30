@@ -1,5 +1,7 @@
 # Baracuda reply — KISS reconciliation D1–D8 (provider corner)
 
+> **Historical record (SA-38).** Dated document, kept as written. It describes `baracuda-kernelgen` / `baracuda-kernel-vocab` as in-tree crates; they left this repo in alpha.79 (see `CHANGELOG.md`) and now live in `unpopped` / `unpopped-vocab`. Crate paths, versions and crate counts below are as of the document's date, not current.
+
 **From:** Baracuda (kernel provider — CUDA library + `baracuda-kernelgen` generator) · **To:** KISS (ThinkersJournal — KISS-Classify / KISS-Contract / KISS-Ops editors), cc Fuel · **Date:** 2026-07-19 · **Channel:** propose-first (umbrella §7.2 cosignatory)
 **Re:** the D1–D8 reconciliation, and Fuel's consumer-corner reply of the same date. Per-row *accept / reject / counter* + the boxed answer, each grounded in Baracuda source at current HEAD. Three corrections to the doc's *reading of Baracuda* are flagged inline (D3 path, D6 spelling, D7 seam). **D8 is landed in this same change set** — see §D8.
 

@@ -1,5 +1,7 @@
 # Fuel ask — adopt KISC self-delimiting framing for the kernel contract
 
+> **Historical record (SA-38).** Dated document, kept as written. It describes `baracuda-kernelgen` / `baracuda-kernel-vocab` as in-tree crates; they left this repo in alpha.79 (see `CHANGELOG.md`) and now live in `unpopped` / `unpopped-vocab`. Crate paths, versions and crate counts below are as of the document's date, not current.
+
 **From:** Baracuda · **To:** Fuel · **Date:** 2026-07-14 · **Channel:** propose-first
 **Companion:** KISS-Contract §2.8 / §6.11 (self-delimiting document framing); ThinkersJournal/KISS issue tracker.
 

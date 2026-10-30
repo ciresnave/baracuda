@@ -1,5 +1,7 @@
 # Backend-agnostic emission — design + plan (2026-07-10)
 
+> **Historical record (SA-38).** Dated document, kept as written. It describes `baracuda-kernelgen` / `baracuda-kernel-vocab` as in-tree crates; they left this repo in alpha.79 (see `CHANGELOG.md`) and now live in `unpopped` / `unpopped-vocab`. Crate paths, versions and crate counts below are as of the document's date, not current.
+
 Feasibility scout done. This records the load-bearing decisions for making non-CUDA backend emission first-class, starting with a CPU C-emitter. Goal: prove the `KernelPlan` IR is genuinely backend-neutral, give a GPU-free execution path, and add a third independent leg to the correctness triangle (CUDA emitter ↔ CPU-C emitter ↔ Rust oracle).
 
 ## Verdict up front

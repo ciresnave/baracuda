@@ -1,5 +1,7 @@
 # IR layout/shape for non-Elementwise access classes — parent design
 
+> **Historical record (SA-38).** Dated document, kept as written. It describes `baracuda-kernelgen` / `baracuda-kernel-vocab` as in-tree crates; they left this repo in alpha.79 (see `CHANGELOG.md`) and now live in `unpopped` / `unpopped-vocab`. Crate paths, versions and crate counts below are as of the document's date, not current.
+
 **Status:** design approved (brainstorm, 2026-08-01). Parent of sub-specs A (detailed,
 this cycle) and B/C/D (scoped stubs, each earns its own brainstorm when started).
 **Grounded against code 2026-07-31/08-01.** Companion kickoff brief:

@@ -1,5 +1,7 @@
 # int8/uint8 Reduction Support — Design
 
+> **Historical record (SA-38).** Dated document, kept as written. It describes `baracuda-kernelgen` / `baracuda-kernel-vocab` as in-tree crates; they left this repo in alpha.79 (see `CHANGELOG.md`) and now live in `unpopped` / `unpopped-vocab`. Crate paths, versions and crate counts below are as of the document's date, not current.
+
 **Goal:** Add S8 (int8) / U8 (uint8) support to the Baracuda kernelgen reduction ops — `sum`, `max`, `min`, `prod`, and the predicate/count folds `any`/`all`/`count` — with wrapping two's-complement semantics that are byte-exact to KISS-Ops and differentially verified against kiss-ref.
 
 **Status:** **IMPLEMENTED.** Decisions below were made by Eric on 2026-07-29 (four forks)

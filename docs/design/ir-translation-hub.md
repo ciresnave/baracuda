@@ -1,5 +1,7 @@
 # The IR as a universal kernel-translation hub — design + roadmap (2026-07-10)
 
+> **Historical record (SA-38).** Dated document, kept as written. It describes `baracuda-kernelgen` / `baracuda-kernel-vocab` as in-tree crates; they left this repo in alpha.79 (see `CHANGELOG.md`) and now live in `unpopped` / `unpopped-vocab`. Crate paths, versions and crate counts below are as of the document's date, not current.
+
 **Status: in progress — several phases shipped.** This captures a multi-phase
 initiative that grows `baracuda-kernelgen` from "a generator that emits
 specialized CUDA kernels" into the **single source of truth** for every
