@@ -16,6 +16,11 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.57 - 2026-10-30
+
+### Documentation and tests
+
+- ROADMAP SA-13 promoted (P40 hardware exists per CireSnave 2026-10-30); new `docs/sm61-p40-design.md`: which kernels have an sm_61 path (emitter yes, hand-written no), what falls back, NVRTC 12.9 requirement, dp4a/MMVQ question, hardware-free vs hardware steps. New test `baracuda-cuda-emit/tests/sm61_compiles.rs` (dev-dep `baracuda-driver` gains `test-support`): 14 elementwise bodies and 3 reductions x f32/f64/f16/bf16 compile to PTX for sm_61/70/75 (sm_89 control) with NVRTC 12.9.86, 0 failures; needs `BARACUDA_NVRTC_PATH` (declares a skip otherwise). PTX only, NOT run on a P40.
 ## 0.1.0-alpha.56 - 2026-10-30
 
 ### Added
