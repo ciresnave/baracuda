@@ -904,6 +904,12 @@ pub mod builder {
             bias: *const c_void,
             bias_count: i64,
         ) -> trtILayer_t;
+        pub fn trtNetworkAddGather(
+            network: trtINetworkDefinition_t,
+            data: trtITensor_t,
+            indices: trtITensor_t,
+            axis: i32,
+        ) -> trtILayer_t;
         pub fn trtNetworkAddSlice(
             network: trtINetworkDefinition_t,
             input: trtITensor_t,

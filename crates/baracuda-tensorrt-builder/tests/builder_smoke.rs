@@ -474,3 +474,31 @@ fn slice_window_and_stride_match_cpu() {
     let strided = slice_4x4(logger, &x, [0, 0], [2, 2], [2, 2]);
     assert_close(&strided, &[0.0, 2.0, 8.0, 10.0], 1e-6);
 }
+
+/// Gathers `idx` along `axis` of a `[4,3]` input holding `0..12`; returns the `out_len` outputs.
+fn gather_4x3(logger: Arc<Logger>, idx: &[i32], axis: i32, out_len: usize) -> Vec<f32> {
+    let x: Vec<f32> = (0..12).map(|i| i as f32).collect();
+    build_and_run(
+        logger,
+        |net| {
+            let tx = net.add_input("x", DataType::Float, &Dims::new(&[4, 3]))?;
+            let ti = net.add_constant_i32(&Dims::new(&[idx.len() as i64]), idx)?;
+            let g = net.add_gather(&tx, &ti.output(0)?, axis)?;
+            let out = g.output(0)?;
+            out.set_name("out")?;
+            net.mark_output(&out)
+        },
+        &[("x", &x)],
+        "out",
+        out_len,
+    )
+}
+
+#[test]
+fn gather_rows_and_columns_match_cpu() {
+    let logger = require_optional!(logger(), "C-ABI shim (Logger::new)");
+    let rows = gather_4x3(Arc::clone(&logger), &[3, 1], 0, 6);
+    assert_close(&rows, &[9.0, 10.0, 11.0, 3.0, 4.0, 5.0], 1e-6);
+    let cols = gather_4x3(logger, &[2, 0], 1, 8);
+    assert_close(&cols, &[2.0, 0.0, 5.0, 3.0, 8.0, 6.0, 11.0, 9.0], 1e-6);
+}

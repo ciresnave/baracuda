@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.58 - 2026-10-30
+
+### Added
+
+- `baracuda-tensorrt-builder`: gather layer (ROADMAP SA-33, remaining layer types, fourth slice). `Network::add_gather(data, indices, axis)`; the `baracuda-tensorrt-sys` shim gains `trtNetworkAddGather`. Device-verified on sm_89 (RTX 4070), TensorRT 10.16.1.11: `cargo gpu-test -p baracuda-tensorrt-builder --features shim,device-tests --test builder_smoke`, 15 passed, 0 failed (1 new): rows [3, 1] along axis 0 and columns [2, 0] along axis 1 of a [4, 3] input equal the CPU results. Not covered: gather modes kND / kELEMENT, elementwise batch dimensions, Int64 indices, dynamic indices; select and resize.
+
 ## 0.1.0-alpha.57 - 2026-10-30
 
 ### Documentation and tests
