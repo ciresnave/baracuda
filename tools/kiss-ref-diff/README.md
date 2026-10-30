@@ -71,7 +71,7 @@ cargo run --manifest-path tools/kiss-ref-diff/Cargo.toml
 The 3a device leg needs a CUDA driver + NVRTC (it JITs for the detected
 compute capability). `POC_DUMP=1` prints each generated kernel's source.
 
-**The converter has been promoted in-tree**: `baracuda-kernelgen`'s
+**The converter has been promoted in-tree**: `baracuda-kernelgen`'s (since retired into `unpopped`)
 `#[cfg(test)]` `kiss_ref_diff` module is now the CPU value-semantics reference
 (the oracle → kiss-ref consolidation, merged — see
 `docs/superpowers/specs/2026-07-28-oracle-kissref-consolidation-design.md`). This

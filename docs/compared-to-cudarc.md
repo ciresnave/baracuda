@@ -17,7 +17,7 @@ contains a binding layer *and* two layers cudarc does not attempt:
 - an **op facade** (`baracuda-kernels`) — ready-made ML ops (softmax, layernorm,
   the GEMM families, attention, …) as `Plan` types, not just library handles you
   assemble yourself;
-- a **kernel generator + correctness stack** (`baracuda-kernelgen`) — a neutral
+- a **kernel generator + correctness stack** (`unpopped` + `baracuda-cuda-emit`) — a neutral
   op IR that *emits* specialized CUDA (and portable-C) kernels, validated against
   an independent CPU oracle, with precision-tiered variants and a live JIT seam.
 
@@ -55,7 +55,7 @@ differentiation today is the op + codegen layers, not the bindings.
   `baracuda-kernels` presents hundreds of ready ops through one `Plan` API, each
   routing to the right NVIDIA library or a bespoke kernel.
 - **You want generated / specialized kernels with a correctness guarantee.**
-  `baracuda-kernelgen` emits specialized kernels from an IR, checks them
+  `unpopped` with `baracuda-cuda-emit` emits specialized kernels from an IR, checks them
   bit-for-bit against an independent CPU oracle, and can offer precision-first
   variants (e.g. a more-accurate, bitwise-reproducible reduction). cudarc
   generates nothing and has no oracle — it is a pass-through to the vendor

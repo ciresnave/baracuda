@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-cuvs-sys"
-version = "0.1.0-alpha.49"
+version = "0.1.0-alpha.50"
 description = "Raw FFI bindings and dynamic loader for NVIDIA cuVS (GPU vector search / ANN)."
 edition.workspace = true
 license.workspace = true

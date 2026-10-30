@@ -49,7 +49,7 @@ build-time toolkit — see below).
   ships separate first-class `baracuda-driver` and `baracuda-runtime` crates.
 - **You want ready ops + generated kernels + a correctness oracle**, not just a
   place to launch your own PTX. That's baracuda's `baracuda-kernels` op facade +
-  the `baracuda-kernelgen` IR/emitter/oracle stack; Rust-CUDA has no equivalent
+  the `unpopped` + `baracuda-cuda-emit` IR/emitter/oracle stack; Rust-CUDA has no equivalent
   op or codegen-from-IR layer — you bring the kernels, it runs them.
 - **You want breadth of NVIDIA libraries under one error model.** Rust-CUDA has
   `cudnn` and `blastoff` (cuBLAS) in-tree (narrow, git-only); baracuda wraps ~22

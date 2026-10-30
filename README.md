@@ -8,7 +8,7 @@
 A unified Rust ML-op facade over the NVIDIA CUDA ecosystem.
 
 ![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)
-![Status](https://img.shields.io/badge/status-alpha.85-orange)
+![Status](https://img.shields.io/badge/status-alpha.50-orange)
 ![CUDA](https://img.shields.io/badge/CUDA-12.x%2F13.x-76b900)
 ![Tests](https://img.shields.io/badge/GPU%20regression-green-success)
 
@@ -38,59 +38,51 @@ workspace also ships idiomatic stand-alone wrappers for every CUDA library
 under `crates/baracuda-<lib>` if you want to skip the kernel facade and
 talk to one library directly.
 
-## Kernel generation ([`baracuda-kernelgen`])
+## Kernel generation (`unpopped` + `baracuda-cuda-*`)
 
 Newer in the workspace — and where the current development frontier sits —
-is [`baracuda-kernelgen`], a build-time **kernel-generation backend**. Where
-`baracuda-kernels` dispatches to hand-rolled `.cu` files and NVIDIA
-libraries, kernelgen describes an op as a **neutral IR** and *emits* the
-specialized kernel from it, so the same op definition can be lowered to more
-than one backend and transformed (vectorized, hoisted, fused) along the way.
+is **kernel generation**. Where `baracuda-kernels` dispatches to hand-rolled
+`.cu` files and NVIDIA libraries, a generator describes an op as a **neutral
+IR** and *emits* the specialized kernel from it, so the same op definition can
+be lowered to more than one backend and transformed (vectorized, hoisted,
+fused) along the way.
 
-The pieces (see `crates/baracuda-kernelgen/src/lib.rs`):
+The generator itself is no longer in this repo. The former
+`baracuda-kernelgen` crate was retired: its neutral core is the standalone
+[`unpopped`](https://crates.io/crates/unpopped) crate (with
+`unpopped-vocab`), consumed here from crates.io. Baracuda supplies the
+CUDA-specific stages from outside that core:
 
-- **Neutral IR** (`ir.rs`) — a `ScalarExpr` DAG for the arithmetic plus an
-  `Access` enum for the schedule shape: `Elementwise`, `Reduction`,
-  `RowReduce`, `Contraction`, `Scan`, `Window`, `Im2Col`, `RowSort`. Fully
-  backend-agnostic.
-- **Plan** (`plan.rs`) — `build_plan` turns an op + a `StructureKey`
-  (schedule cell) into a `KernelPlan`.
-- **Backends** — a `Backend` trait with two implementations today: `cuda.rs`
-  (the CUDA emitter) and `cpu_c.rs` (a portable-C emitter that exists to prove
-  the IR is genuinely backend-neutral). A shared expression seam (`Lowering` +
-  `lower_dag`) is the only lowering-specific code.
-- **CPU correctness oracle** (`oracle.rs`) — an *independent* Rust
-  plan-interpreter that computes what a generated kernel should compute, from
-  the same IR but via a separate code path (sharing **zero** lowering code with
-  the emitters). It is a universal numeric reference and a GPU-free CI base.
-- **Precision-first variants** — `VariantFidelity::MorePrecise` emits a
-  double-precision serial fold that is both more accurate and bit-reproducible
-  across IEEE-754 hardware, for f32 `Sum`/`Mean` reductions and
-  softmax/norm row-reductions, alongside the default `BitIdentical` lowering.
-- **The FKC / kernel-seam to Fuel** — kernelgen's output (contracts + a live
-  JIT `Synthesizer`, behind the `seam` feature; the negotiation envelope lives
-  in [`baracuda-seam`]) feeds [Fuel](https://github.com/ciresnave/fuel), the
-  sibling ML library, which stays the runtime kernel selector. (The
-  capture-safe `gemv_dense_m1` + `gather_rows` decode kernels in
-  [`baracuda-kernels-sys`] are hand-authored bespoke `.cu`, not generator
-  output — kernelgen's emitted artifacts live behind the `seam`/AOT path.)
+- [`baracuda-cuda-emit`] — the `Cuda` `Backend` (IR -> `.cu` emitter) and the
+  NVRTC on-demand JIT compiler.
+- [`baracuda-cuda-parse`] — the CUDA -> IR frontend (tree-sitter binding,
+  CUDA residue list, `CUDA` `Frontend` descriptor).
+- [`baracuda-cuda-vocab`] — the `cuda:` namespace vocabulary (the sm-token set
+  and its admission relations).
+- [`baracuda-cuda-seam`] — the Fuel kernel-seam `Synthesizer` implementation
+  (`BaracudaSynthesizer`) over `baracuda-cuda-emit`; the negotiation envelope
+  lives in [`baracuda-seam`]. This feeds [Fuel](https://github.com/ciresnave/fuel),
+  the sibling ML library, which stays the runtime kernel selector.
 
-This is alpha, generator-internal machinery: only the `seam` surface is
-treated as a stable contract with Fuel; the IR, plans, emitters, and
-optimizer are fluid across `alpha.N` bumps.
+The capture-safe `gemv_dense_m1` + `gather_rows` decode kernels in
+[`baracuda-kernels-sys`] are hand-authored bespoke `.cu`, not generator output.
+
+This is alpha, generator-internal machinery: only the seam surface is treated
+as a stable contract with Fuel; the IR, plans, and emitters are fluid across
+`alpha.N` bumps. For the IR, plan and oracle design, see the `unpopped`
+repository; the historical design notes under `docs/design/` describe the
+pre-split `baracuda-kernelgen`.
 
 ## Status
 
-**In active development — alpha.85** (72 crates, 71 publishable — `baracuda-kernels-bench` carries `publish = false`).
-**Publishing to crates.io in two phases (2026-10-03):** Phase 1 — `baracuda-types-derive`, `baracuda-core`, `baracuda-cuda-sys`, `baracuda-types`, `baracuda-driver`, `baracuda-kernels-types`, `baracuda-cuda-vocab`, `baracuda-cuda-emit`, `baracuda-cuda-parse` — publishes now. Phase 2 — the remaining ~63 crates, including the 7 CUTLASS-forging ones — publishes later, during a scheduled quiet window. Until Phase 2 completes, those crates are still only available on crates.io at their previous published version even though the source tree here is uniformly at alpha.85 — check the registry, not just this repo, before `cargo add`-ing one of them. The GPU
+**In active development — alpha.50** (75 crates, 73 publishable — `baracuda-kernels-bench` and `baracuda-bench-stats` carry `publish = false`).
+**Publishing to crates.io in two phases (2026-10-03):** Phase 1 — `baracuda-types-derive`, `baracuda-core`, `baracuda-cuda-sys`, `baracuda-types`, `baracuda-driver`, `baracuda-kernels-types`, `baracuda-cuda-vocab`, `baracuda-cuda-emit`, `baracuda-cuda-parse` — publishes now. Phase 2 — the remaining ~63 crates, including the 7 CUTLASS-forging ones — publishes later, during a scheduled quiet window. Until Phase 2 completes, those crates are still only available on crates.io at their previous published version even though the source tree here is uniformly at the workspace version — check the registry, not just this repo, before `cargo add`-ing one of them. The GPU
 regression sweep runs green on an RTX 4070 (sm_89); the current frontier
-is the **kernel-specialization era** — the [`baracuda-kernelgen`] IR +
-multi-backend emitter, its CPU oracle and precision-first variants, and
-the FKC/JIT seam to the sibling [Fuel](https://github.com/ciresnave/fuel)
-library (see the [Kernel generation](#kernel-generation-baracuda-kernelgen)
-section above). The whole IR ramp — layout/shape, reductions, contraction,
-scan, window, sort, im2col — is shipped, with a `cpu_c` portable-C emitter
-now proving the IR is backend-neutral.
+is the **kernel-specialization era** — the neutral `unpopped` generator with
+Baracuda's CUDA emitter, parser and vocabulary on top of it, and the
+FKC/JIT seam to the sibling [Fuel](https://github.com/ciresnave/fuel)
+library (see the [Kernel generation](#kernel-generation-unpopped--baracuda-cuda-)
+section above).
 
 The paragraphs below capture the earlier, still-accurate milestone history
 of the `baracuda-kernels` op facade. alpha.67 (Phase 74, Fuel-ask) shipped
@@ -261,7 +253,7 @@ baracuda-kernels = { version = "0.0.1-alpha.82", features = ["sm89", "cudnn"] }
 baracuda-driver  = "0.0.1-alpha.82"
 ```
 
-> `main` is at `0.0.1-alpha.85`; the example above stays at the last version
+> `main` is at `0.1.0-alpha.50`; the example above stays at the last version
 > actually published to crates.io until that publish happens (main version and
 > published version are allowed to differ briefly — see `CHANGELOG.md`).
 
@@ -346,7 +338,8 @@ The user-facing crates a typical caller will reach for:
 
 ```text
 baracuda-kernels             # the unified Plan-based ML op facade
-baracuda-kernelgen           # neutral-IR kernel-generation backend + CPU oracle + FKC seam
+baracuda-cuda-emit           # CUDA backend for the neutral `unpopped` generator + NVRTC JIT
+baracuda-cuda-seam           # Fuel kernel-seam `Synthesizer` over baracuda-cuda-emit
 baracuda-seam                # kernel-seam handshake envelope (Profile v1, frozen with Fuel)
 baracuda-kernels-types       # shared type vocabulary (Element, TensorRef, KernelSku, ...)
 baracuda-kernels-sys         # raw FFI to bespoke + generated .cu kernels
@@ -700,5 +693,8 @@ the design lineage.
 
 [`baracuda-kernels`]: crates/baracuda-kernels
 [`baracuda-kernels-sys`]: crates/baracuda-kernels-sys
-[`baracuda-kernelgen`]: crates/baracuda-kernelgen
+[`baracuda-cuda-emit`]: crates/baracuda-cuda-emit
+[`baracuda-cuda-parse`]: crates/baracuda-cuda-parse
+[`baracuda-cuda-vocab`]: crates/baracuda-cuda-vocab
+[`baracuda-cuda-seam`]: crates/baracuda-cuda-seam
 [`baracuda-seam`]: crates/baracuda-seam
