@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.56 - 2026-10-30
+
+### Added
+
+- `baracuda-tensorrt-builder`: static slice layer (ROADMAP SA-33, remaining layer types, third slice). `Network::add_slice(input, start, size, stride)`; the `baracuda-tensorrt-sys` shim gains `trtNetworkAddSlice`. Device-verified on sm_89 (RTX 4070), TensorRT 10.16.1.11: `cargo gpu-test -p baracuda-tensorrt-builder --features shim,device-tests --test builder_smoke`, 14 passed, 0 failed (1 new): a 2x2 window at offset (1,1) of a 4x4 input and a 2x2 sample at stride 2 equal the CPU results (the stride is live, else the second would be [0, 1, 4, 5]). Not covered: the sample mode (wrap / clamp / fill / reflect), dynamic start / size / stride tensors, axes; gather, select and resize.
+
 ## 0.1.0-alpha.55 - 2026-10-30
 
 ### Changed

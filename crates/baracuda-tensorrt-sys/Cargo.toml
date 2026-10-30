@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-tensorrt-sys"
-version = "0.1.0-alpha.55"
+version = "0.1.0-alpha.56"
 description = "Raw FFI bindings + dynamic loader for NVIDIA TensorRT, plus an optional C++ shim exposing a flat C ABI over TensorRT's C++-only runtime."
 edition.workspace = true
 license.workspace = true

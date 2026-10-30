@@ -342,6 +342,11 @@ void* trtNetworkAddDeconvolutionNd(void* network, void* in, std::int64_t nbOutpu
     return Out(asNetwork(network)->addDeconvolutionNd(*asTensor(in), nbOutputMaps, *kernelSize, k, b));
 }
 
+void* trtNetworkAddSlice(void* network, void* in, const Dims* start, const Dims* size,
+                         const Dims* stride) noexcept {
+    return Out(asNetwork(network)->addSlice(*asTensor(in), *start, *size, *stride));
+}
+
 // ---- ILayer / ITensor ---------------------------------------------------
 
 void* trtLayerGetOutput(void* layer, std::int32_t index) noexcept { return asLayer(layer)->getOutput(index); }
