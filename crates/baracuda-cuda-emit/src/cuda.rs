@@ -678,6 +678,7 @@ fn body_packs(e: &ScalarExpr) -> bool {
         ScalarExpr::ConstInt(..)
         | ScalarExpr::CoordInt(..)
         | ScalarExpr::Local(_)
+        | ScalarExpr::Exec(_)
         | ScalarExpr::Pack(_)
         | ScalarExpr::Extract(..)
         | ScalarExpr::BitcastPacked(..)
@@ -4366,7 +4367,8 @@ fn contains_subexpr(e: &ScalarExpr, t: &ScalarExpr) -> bool {
         | ScalarExpr::Coord(_)
         | ScalarExpr::ConstInt(..)
         | ScalarExpr::CoordInt(..)
-        | ScalarExpr::Local(_) => false,
+        | ScalarExpr::Local(_)
+        | ScalarExpr::Exec(_) => false,
         ScalarExpr::Pack(xs) => xs.iter().any(|x| contains_subexpr(x, t)),
         ScalarExpr::Extract(x, _)
         | ScalarExpr::BitcastPacked(x, _, _)
@@ -4399,7 +4401,8 @@ fn substitute_subexpr(e: &ScalarExpr, t: &ScalarExpr, marker: u8) -> ScalarExpr 
         | ScalarExpr::Coord(_)
         | ScalarExpr::ConstInt(..)
         | ScalarExpr::CoordInt(..)
-        | ScalarExpr::Local(_) => e.clone(),
+        | ScalarExpr::Local(_)
+        | ScalarExpr::Exec(_) => e.clone(),
         ScalarExpr::Pack(xs) => ScalarExpr::Pack(xs.iter().map(|x| *bx(x)).collect()),
         ScalarExpr::Extract(x, lane) => ScalarExpr::Extract(bx(x), *lane),
         ScalarExpr::Qualified(x, numerics) => ScalarExpr::Qualified(bx(x), *numerics),
@@ -8179,6 +8182,15 @@ fn assert_coord_lowerable(e: &ScalarExpr, plan: &KernelPlan<'_>) -> Result<(), L
             return Err(Decline::UnsupportedOp {
                 op: DeclinedOp::Kernel,
                 why: "cuda backend: kernel-layer Local is not spelled by this emitter".to_string(),
+            }
+            .into());
+        }
+        ScalarExpr::Exec(_) => {
+            return Err(Decline::UnsupportedOp {
+                op: DeclinedOp::Kernel,
+                why:
+                    "cuda backend: kernel-layer Exec (execution id) is not spelled by this emitter"
+                        .to_string(),
             }
             .into());
         }
