@@ -26,8 +26,9 @@ library is not an sm_61 library and this note does not propose making it one.
   store fp16 where the format needs it. Do not choose fp16 arithmetic for speed on this card.
 - Quantised decode (Q4_K_M etc.): `__dp4a` is the one useful int8 primitive on sm_61. The existing MMVQ
   dot is the candidate; making it build for sm_61 is a build-matrix change, not a new kernel.
-  Board 307 holds NEW int8/int4 at-bitwidth dot kernels; building the existing dp4a file for another arch
-  is not that, but ask the PM before starting.
+  sm_61 MMVQ via `__dp4a`: portable in principle, BLOCKED by board 307 (the Nvidia quantized-dot-product
+  patent; MMVQ is one of the two kernels it names). PM ruling 2026-10-30: no build-matrix change for MMVQ
+  while 307 is unruled.
 - Unified memory / peer access over the PEX switch: out of scope here.
 
 ## NVRTC requirement
@@ -47,7 +48,7 @@ RTX 4060 (sm_89).
 
 How the build selects per device (decision for the PM; the recommendation is the first):
 
-1. Runtime JIT, no second build (recommended). The emitter already produces source per `TargetId`; at
+1. Runtime JIT, no second build (recommended, accepted by the PM 2026-10-30 for the elementwise/reduction paths). The emitter already produces source per `TargetId`; at
    run time `NvrtcCompiler` picks the NVRTC by target (`BARACUDA_NVRTC_PATH` for sm_61, the default for
    sm_75+) and loads the resulting PTX/cubin per device. The hand-written AOT library stays a CUDA 13
    build for sm_80+ and is simply not offered on the P40 (typed decline). Cost: a pinned 12.9 NVRTC
@@ -88,6 +89,6 @@ above. Evidence must be labelled "device-verified sm61" only after a P40 run.
 
 ## Open questions
 
-- Which sm_61 build of the MMVQ file, if any, belongs in `baracuda-kernels-sys` (needs the PM / 307 view).
+- sm_61 MMVQ: blocked by board 307 (above); revisit on the ruling.
 - Whether one NVIDIA driver serves both the P40 and the 4060 (see Toolchain).
 - Whether the Fuel dispatcher selects the emitter path automatically on a sub-sm_80 device.
