@@ -21,6 +21,11 @@ at alpha.82.
 ### Documentation and tests
 
 - ROADMAP SA-13 promoted (P40 hardware exists per CireSnave 2026-10-30); new `docs/sm61-p40-design.md`: which kernels have an sm_61 path (emitter yes, hand-written no), what falls back, NVRTC 12.9 requirement, dp4a/MMVQ question, hardware-free vs hardware steps. New test `baracuda-cuda-emit/tests/sm61_compiles.rs` (dev-dep `baracuda-driver` gains `test-support`): 14 elementwise bodies and 3 reductions x f32/f64/f16/bf16 compile to PTX for sm_61/70/75 (sm_89 control) with NVRTC 12.9.86, 0 failures; needs `BARACUDA_NVRTC_PATH` (declares a skip otherwise). PTX only, NOT run on a P40.
+## 0.1.0-alpha.56 - 2026-10-30
+
+### Added
+
+- `baracuda-tensorrt-builder`: static slice layer (ROADMAP SA-33, remaining layer types, third slice). `Network::add_slice(input, start, size, stride)`; the `baracuda-tensorrt-sys` shim gains `trtNetworkAddSlice`. Device-verified on sm_89 (RTX 4070), TensorRT 10.16.1.11: `cargo gpu-test -p baracuda-tensorrt-builder --features shim,device-tests --test builder_smoke`, 14 passed, 0 failed (1 new): a 2x2 window at offset (1,1) of a 4x4 input and a 2x2 sample at stride 2 equal the CPU results (the stride is live, else the second would be [0, 1, 4, 5]). Not covered: the sample mode (wrap / clamp / fill / reflect), dynamic start / size / stride tensors, axes; gather, select and resize.
 
 ## 0.1.0-alpha.55 - 2026-10-30
 

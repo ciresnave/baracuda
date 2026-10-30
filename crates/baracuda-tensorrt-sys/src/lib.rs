@@ -904,6 +904,13 @@ pub mod builder {
             bias: *const c_void,
             bias_count: i64,
         ) -> trtILayer_t;
+        pub fn trtNetworkAddSlice(
+            network: trtINetworkDefinition_t,
+            input: trtITensor_t,
+            start: *const trtDims_t,
+            size: *const trtDims_t,
+            stride: *const trtDims_t,
+        ) -> trtILayer_t;
         pub fn trtNetworkAddPoolingNd(
             network: trtINetworkDefinition_t,
             input: trtITensor_t,
