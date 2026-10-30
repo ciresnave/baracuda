@@ -322,6 +322,18 @@ void* trtNetworkAddIdentity(void* network, void* in) noexcept {
     return Out(asNetwork(network)->addIdentity(*asTensor(in)));
 }
 
+void* trtNetworkAddConvolutionNd(void* network, void* in, std::int64_t nbOutputMaps,
+                                 const Dims* kernelSize, const void* kernel, std::int64_t kernelCount,
+                                 const void* bias, std::int64_t biasCount) noexcept {
+    Weights k{DataType::kFLOAT, kernel, kernelCount};
+    Weights b{DataType::kFLOAT, bias, biasCount};
+    return Out(asNetwork(network)->addConvolutionNd(*asTensor(in), nbOutputMaps, *kernelSize, k, b));
+}
+
+void* trtNetworkAddPoolingNd(void* network, void* in, std::int32_t type, const Dims* windowSize) noexcept {
+    return Out(asNetwork(network)->addPoolingNd(*asTensor(in), static_cast<PoolingType>(type), *windowSize));
+}
+
 // ---- ILayer / ITensor ---------------------------------------------------
 
 void* trtLayerGetOutput(void* layer, std::int32_t index) noexcept { return asLayer(layer)->getOutput(index); }
@@ -468,6 +480,25 @@ void trtConcatenationSetAxis(void* layer, std::int32_t axis) noexcept {
 
 void trtSoftMaxSetAxes(void* layer, std::uint32_t axes) noexcept {
     static_cast<ISoftMaxLayer*>(asLayer(layer))->setAxes(axes);
+}
+
+void trtConvolutionSetStrideNd(void* layer, const Dims* d) noexcept {
+    static_cast<IConvolutionLayer*>(asLayer(layer))->setStrideNd(*d);
+}
+void trtConvolutionSetPaddingNd(void* layer, const Dims* d) noexcept {
+    static_cast<IConvolutionLayer*>(asLayer(layer))->setPaddingNd(*d);
+}
+void trtConvolutionSetDilationNd(void* layer, const Dims* d) noexcept {
+    static_cast<IConvolutionLayer*>(asLayer(layer))->setDilationNd(*d);
+}
+void trtConvolutionSetNbGroups(void* layer, std::int64_t n) noexcept {
+    static_cast<IConvolutionLayer*>(asLayer(layer))->setNbGroups(n);
+}
+void trtPoolingSetStrideNd(void* layer, const Dims* d) noexcept {
+    static_cast<IPoolingLayer*>(asLayer(layer))->setStrideNd(*d);
+}
+void trtPoolingSetPaddingNd(void* layer, const Dims* d) noexcept {
+    static_cast<IPoolingLayer*>(asLayer(layer))->setPaddingNd(*d);
 }
 
 }  // extern "C"

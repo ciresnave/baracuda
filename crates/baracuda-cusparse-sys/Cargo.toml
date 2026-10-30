@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-cusparse-sys"
-version = "0.1.0-alpha.52"
+version = "0.1.0-alpha.53"
 description = "Raw FFI bindings and dynamic loader for NVIDIA cuSPARSE."
 edition.workspace = true
 license.workspace = true

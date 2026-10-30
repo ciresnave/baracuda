@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.53 - 2026-10-30
+
+### Added
+
+- `baracuda-tensorrt-builder`: convolution and pooling layers (ROADMAP SA-33, remaining layer types, first slice). `Network::{add_convolution, add_pooling}`, `PoolingType`, and `Layer::{set_conv_stride, set_conv_padding, set_conv_dilation, set_conv_num_groups, set_pool_stride, set_pool_padding}`; `baracuda-tensorrt-sys` shim gains the matching `trtNetworkAdd{Convolution,Pooling}Nd` and setter entry points. Kernel and bias weights are `f32`, held by the network until it drops. Device-verified on sm_89 (RTX 4070), TensorRT 10.16.1.11: `cargo gpu-test -p baracuda-tensorrt-builder --features shim,device-tests --test builder_smoke`, 11 passed, 0 failed (3 new): a 2x2 convolution with bias equals the CPU result; a 3x3 ones-kernel with padding 1 gives the CPU box sums (the padding setter is live, else the output would be 1x1); max pooling 2x2 and average pooling 2x2 stride 1 equal the CPU results. Not covered: deconvolution, 3-d pooling shapes beyond what `Dims` carries, int8/fp16 weights, other layer kinds (slice, gather, select, resize, ...).
+
 ## 0.1.0-alpha.52 - 2026-10-30
 
 Docs only. No code, no device run.

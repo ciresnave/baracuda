@@ -884,6 +884,22 @@ pub mod builder {
             network: trtINetworkDefinition_t,
             input: trtITensor_t,
         ) -> trtILayer_t;
+        pub fn trtNetworkAddConvolutionNd(
+            network: trtINetworkDefinition_t,
+            input: trtITensor_t,
+            nb_output_maps: i64,
+            kernel_size: *const trtDims_t,
+            kernel: *const c_void,
+            kernel_count: i64,
+            bias: *const c_void,
+            bias_count: i64,
+        ) -> trtILayer_t;
+        pub fn trtNetworkAddPoolingNd(
+            network: trtINetworkDefinition_t,
+            input: trtITensor_t,
+            pooling_type: i32,
+            window_size: *const trtDims_t,
+        ) -> trtILayer_t;
 
         // ILayer / ITensor
         pub fn trtLayerGetOutput(layer: trtILayer_t, index: i32) -> trtITensor_t;
@@ -902,6 +918,12 @@ pub mod builder {
         pub fn trtShuffleSetSecondTranspose(layer: trtILayer_t, order: *const i32);
         pub fn trtSoftMaxSetAxes(layer: trtILayer_t, axes: u32);
         pub fn trtConcatenationSetAxis(layer: trtILayer_t, axis: i32);
+        pub fn trtConvolutionSetStrideNd(layer: trtILayer_t, dims: *const trtDims_t);
+        pub fn trtConvolutionSetPaddingNd(layer: trtILayer_t, dims: *const trtDims_t);
+        pub fn trtConvolutionSetDilationNd(layer: trtILayer_t, dims: *const trtDims_t);
+        pub fn trtConvolutionSetNbGroups(layer: trtILayer_t, groups: i64);
+        pub fn trtPoolingSetStrideNd(layer: trtILayer_t, dims: *const trtDims_t);
+        pub fn trtPoolingSetPaddingNd(layer: trtILayer_t, dims: *const trtDims_t);
 
         // network inputs / outputs by index
         pub fn trtNetworkGetInput(network: trtINetworkDefinition_t, index: i32) -> trtITensor_t;
