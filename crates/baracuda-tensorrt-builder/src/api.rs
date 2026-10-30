@@ -750,6 +750,20 @@ impl Network<'_> {
         self.layer(raw, "addDeconvolutionNd")
     }
 
+    /// Gather along `axis` of `data` the entries named by `indices` (an `Int32` or
+    /// `Int64` tensor): the output replaces `data`'s `axis` dimension with the
+    /// shape of `indices`. Default gather mode; no elementwise batch dimensions.
+    pub fn add_gather<'a>(
+        &'a self,
+        data: &Tensor<'a>,
+        indices: &Tensor<'a>,
+        axis: i32,
+    ) -> Result<Layer<'a>> {
+        // SAFETY: `self.raw`, `data.raw` and `indices.raw` are live handles of this network.
+        let raw = unsafe { ffi::trtNetworkAddGather(self.raw, data.raw, indices.raw, axis) };
+        self.layer(raw, "addGather")
+    }
+
     /// A static slice: `size` elements per axis starting at `start`, stepping by
     /// `stride` (all three have the input's rank). Out-of-range reads are an
     /// error at build time (the default `SampleMode::kSTRICT_BOUNDS`).

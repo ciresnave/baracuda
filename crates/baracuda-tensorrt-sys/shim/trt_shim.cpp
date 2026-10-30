@@ -347,6 +347,10 @@ void* trtNetworkAddSlice(void* network, void* in, const Dims* start, const Dims*
     return Out(asNetwork(network)->addSlice(*asTensor(in), *start, *size, *stride));
 }
 
+void* trtNetworkAddGather(void* network, void* data, void* indices, std::int32_t axis) noexcept {
+    return Out(asNetwork(network)->addGather(*asTensor(data), *asTensor(indices), axis));
+}
+
 // ---- ILayer / ITensor ---------------------------------------------------
 
 void* trtLayerGetOutput(void* layer, std::int32_t index) noexcept { return asLayer(layer)->getOutput(index); }
