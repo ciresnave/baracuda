@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-nccl-sys"
-version = "0.1.0-alpha.53"
+version = "0.1.0-alpha.55"
 description = "Raw FFI bindings and dynamic loader for NVIDIA NCCL (multi-GPU collective communication)."
 edition.workspace = true
 license.workspace = true
