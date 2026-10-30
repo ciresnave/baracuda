@@ -224,5 +224,7 @@ but ships no LICENSE file at any commit (G-K-1 in `PROVENANCE.md`); `guoqingbao/
     (Tier-3 deferral). Full kept-vs-removed manifest in
     [`vendor/flash-attention/VENDOR.md`](vendor/flash-attention/VENDOR.md).
 - **Gated behind**: the `fa2` cargo feature on `baracuda-kernels-sys`
-  and `baracuda-kernels` — off by default because the FA2 CUTLASS-heavy
-  templates add ~9 min to the nvcc build on a 16-thread machine.
+  and `baracuda-kernels`. The FA2 CUTLASS-heavy templates add ~9 min to
+  the nvcc build on a 16-thread machine. Defaults as of 2026-10-29:
+  `baracuda-kernels` is `default = ["sm80", "fa2"]` (`Cargo.toml:23`, FA2
+  on), `baracuda-kernels-sys` is `default = ["sm80"]` (FA2 off).

@@ -233,12 +233,12 @@ kerneldtype_sealed::Sealed + Copy + 'static { const KIND: ElementKind; }` (L131)
   should be the *last* breaking batch before the freeze.
 - **R3** Replace `pub use unpopped_vocab::*;` with an explicit re-export list (or stop
   re-exporting and have consumers depend on `unpopped-vocab` directly), so Unpopped additions stop
-  moving baracuda's surface. **Cross-lane:** consumers (Fuel) may rely on the glob — ask before.
+  moving baracuda's surface. **Cross-lane:** consumers (Fuel) may rely on the glob — ask before. **Status: DONE** (landed at 0.1.0-alpha.11; `crates/baracuda-kernels-types/src/lib.rs:48-54` now re-exports an explicit list, re-checked 2026-10-29).
 - **R4** **RULED 2026-10-14 (board 198):** adopt §4.2 for the C ABI; from 1.0 it does not break within a
   major (verbatim ruling and implications in §4.2). Built at alpha.164: `baracuda_kernels_abi_version()` as an independent ABI integer (not the crate
   version), the checked-in `abi/abi-manifest.tsv` and the CI guard `scripts/check-abi-manifest.py`. Still to build:
   the C-ABI deprecation note convention.
-- **R5** Remove the 8 deprecated items in the first breaking bump after adoption.
+- **R5** Remove the 8 deprecated items in the first breaking bump after adoption. **Status: DONE** (landed at 0.1.0-alpha.11; 0 `#[deprecated]` attributes remain under `crates/`, re-checked 2026-10-29).
 - **R6** Per-family review of the 9 905 `stable` items by plan family before beta.0; this inventory
   is the denominator, not the verdict.
 
@@ -290,7 +290,7 @@ new `pub` item, a new un-`non_exhaustive` descriptor, or a changed `doc(hidden)`
 visible freeze delta instead of an accident. The tool is read-only and takes ~1 s over 1 218 files;
 it was deliberately not a CI job until the policy (R4) was adopted, because a gate with no adopted
 rule only produces noise. R4 is adopted (§4.2), so a C-ABI diff gate is now a candidate follow-up; it is
-not built here.
+not built here. **Update 2026-10-29: it has since been built** as the "C-ABI manifest guard" CI step (`.github/workflows/ci.yml`, `scripts/check-abi-manifest.py --base`).
 
 **Gate re-run at `272d9d18` (alpha.131):** totals identical (20 076 items), but one delta surfaced and was a bug, not a
 decision: `baracuda_kernels::ROPE_DEFAULT_BASE` had become `doc(hidden)` because #185 left an orphaned `#[doc(hidden)]`
