@@ -21,6 +21,11 @@ at alpha.82.
 ### Changed
 
 - **Breaking (Unpopped dependency jump 0.32.1 -> 0.34.3).** `unpopped`, `unpopped-vocab`, `unpopped-cpu-c` and `unpopped-slang` move to 0.34.3 (the workspace pins, `baracuda-cuda-emit` dev-dependencies and `tools/kiss-ref-diff`), and `baracuda-cuda-seam` moves to `fuel-kernel-seam` / `fuel-kernel-seam-types` 0.31.0 (the first release on `unpopped-vocab ^0.34.3`, so the graph holds one vocab copy). Unpopped 0.34.0 added `ScalarExpr::Exec`, `Stmt::Barrier`, `Place::Alloc` and `KernelFn::{launch, allocs}`, and made `Frontend` `#[non_exhaustive]`: `baracuda-cuda-parse`'s `CUDA` const is now built with `Frontend::new(..)` (field values unchanged), and `baracuda-cuda-emit` treats an `Exec` leaf like `Local` (never packs, never rewritten, a typed `Decline::UnsupportedOp` with `DeclinedOp::Kernel` from the emitter; the plan gate refuses it first through the public API). No `Stmt::Barrier` / `Place::Alloc` match in our crates needed an arm. `new_node_declines` gains an `Exec` leg. Host-only: `cargo test -p baracuda-cuda-parse -p baracuda-cuda-emit -p baracuda-cuda-seam` and `tools/kiss-ref-diff` `cargo check` / `cargo test` pass; NOT run on device. Row 4 (execution scopes, launch shapes, allocations) is not spelled by the CUDA emitter; that is a feature and stays held under the 2026-10-28 seam hold.
+## 0.1.0-alpha.54 - 2026-10-30
+
+### Added
+
+- `baracuda-tensorrt-builder`: deconvolution (transposed convolution) layer (ROADMAP SA-33, remaining layer types, second slice). `Network::add_deconvolution` and `Layer::{set_deconv_stride, set_deconv_padding, set_deconv_dilation, set_deconv_num_groups}`; the `baracuda-tensorrt-sys` shim gains `trtNetworkAddDeconvolutionNd` and the setters. `f32` weights laid out `[C, num_output_maps / groups, kernel...]`. Device-verified on sm_89 (RTX 4070), TensorRT 10.16.1.11: `cargo gpu-test -p baracuda-tensorrt-builder --features shim,device-tests --test builder_smoke`, 13 passed, 0 failed (2 new): a 2x2 ones-kernel at stride 2 replicates each input over a 2x2 block (the stride setter is live, else the output would be 3x3); a 2x2 kernel with bias at stride 1 equals the CPU scatter-add. The dilation and group setters are not exercised by a test. Not covered: slice, gather, select, resize and the other layer kinds.
 
 ## 0.1.0-alpha.53 - 2026-10-30
 
