@@ -351,6 +351,10 @@ void* trtNetworkAddGather(void* network, void* data, void* indices, std::int32_t
     return Out(asNetwork(network)->addGather(*asTensor(data), *asTensor(indices), axis));
 }
 
+void* trtNetworkAddSelect(void* network, void* cond, void* then_in, void* else_in) noexcept {
+    return Out(asNetwork(network)->addSelect(*asTensor(cond), *asTensor(then_in), *asTensor(else_in)));
+}
+
 // ---- ILayer / ITensor ---------------------------------------------------
 
 void* trtLayerGetOutput(void* layer, std::int32_t index) noexcept { return asLayer(layer)->getOutput(index); }

@@ -764,6 +764,21 @@ impl Network<'_> {
         self.layer(raw, "addGather")
     }
 
+    /// Elementwise choice: where `condition` (a `Bool` tensor) is true take
+    /// `then_input`, otherwise `else_input`. The three broadcast to one shape.
+    pub fn add_select<'a>(
+        &'a self,
+        condition: &Tensor<'a>,
+        then_input: &Tensor<'a>,
+        else_input: &Tensor<'a>,
+    ) -> Result<Layer<'a>> {
+        // SAFETY: `self.raw` and the three tensor handles are live handles of this network.
+        let raw = unsafe {
+            ffi::trtNetworkAddSelect(self.raw, condition.raw, then_input.raw, else_input.raw)
+        };
+        self.layer(raw, "addSelect")
+    }
+
     /// A static slice: `size` elements per axis starting at `start`, stepping by
     /// `stride` (all three have the input's rank). Out-of-range reads are an
     /// error at build time (the default `SampleMode::kSTRICT_BOUNDS`).

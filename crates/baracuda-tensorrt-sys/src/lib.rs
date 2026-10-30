@@ -910,6 +910,12 @@ pub mod builder {
             indices: trtITensor_t,
             axis: i32,
         ) -> trtILayer_t;
+        pub fn trtNetworkAddSelect(
+            network: trtINetworkDefinition_t,
+            condition: trtITensor_t,
+            then_input: trtITensor_t,
+            else_input: trtITensor_t,
+        ) -> trtILayer_t;
         pub fn trtNetworkAddSlice(
             network: trtINetworkDefinition_t,
             input: trtITensor_t,
