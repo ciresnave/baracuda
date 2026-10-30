@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.62 - 2026-10-30
+
+### Added
+
+- `baracuda-kernels`: `tests/conv2d_picker_measure.rs` (SA-25, Conv2d half): times the opt-in forward picker against the pinned `IMPLICIT_GEMM` on five shapes, f32 NCHW, batch 8, mean of 20 stream-synchronised runs after one warm-up. Measured on TUF-LAPTOP, NVIDIA GeForce RTX 4070 Laptop GPU (sm_89), driver 617.42, cuDNN 9.23 / CUDA 13.3, one run: 3x3 s1 64ch 56x56: pinned 0.415 ms, picker algo 6 (WINOGRAD) 0.210 ms, 1.98x; 3x3 s1 128ch 28x28: 0.404 vs algo 1 0.233, 1.74x; 3x3 s1 256ch 14x14: 0.439 vs algo 1 0.255, 1.72x; 1x1 s1 256->64 56x56: 0.203 vs algo 1 1.223, 0.17x (picker 6x SLOWER); 7x7 s2 3->64 224x224: 0.436 vs algo 1 0.306, 1.42x. Outputs agree within 5.2e-4 relative to the output scale. Reading: the picker wins on 3x3 and 7x7 but loses badly on 1x1, so it is NOT made the default; the picker takes cuDNN's heuristic ranking (`GetConvolutionForwardAlgorithm_v7`), which is not a timing. Single device, single run, f32 only; f16 / bf16, backward and other GPUs are unmeasured. The test asserts no speed.
+
 ## 0.1.0-alpha.61 - 2026-10-30
 
 ### Changed
