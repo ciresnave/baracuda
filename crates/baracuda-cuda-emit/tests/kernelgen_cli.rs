@@ -7,8 +7,8 @@ use std::process::Command;
 
 fn run_in_empty_dir(tag: &str, args: &[&str]) -> (std::process::Output, usize) {
     let _ = std::any::type_name::<baracuda_cuda_emit::Cuda>();
-    let dir: PathBuf =
-        std::env::temp_dir().join(format!("kernelgen-cli-{}-{tag}", std::process::id()));
+    let dir: PathBuf = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join(format!("kernelgen-cli-{}-{tag}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let out = Command::new(env!("CARGO_BIN_EXE_kernelgen"))

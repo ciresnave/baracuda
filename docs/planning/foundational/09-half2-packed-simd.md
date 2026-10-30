@@ -484,7 +484,8 @@ specifically for:
 
 ## 9. Definition of done
 
-- [ ] `emit_vectorized_packed` + `packed_kind` + two-tier spellers land in
+- [x] (shipped: `packed_kind` / `emit_vectorized_packed_multi` in `crates/baracuda-cuda-emit/src/cuda.rs`;
+      the remaining boxes below were NOT re-verified on 2026-10-29) `emit_vectorized_packed` + `packed_kind` + two-tier spellers land in
       `cuda.rs`; f16/bf16 V8/V4/V2 contiguous elementwise cells emit packed source,
       and the `Schedule::Vectorized` dispatch prefers packed over scalar fallback.
 - [ ] All new/updated kernelgen unit tests green (`cargo test -p

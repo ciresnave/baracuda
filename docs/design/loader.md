@@ -97,5 +97,5 @@ baracuda_core::stream_mode::init(StreamMode::Legacy);    // before first symbol 
 ```
 
 **Must be called before any CUDA symbol is resolved**, otherwise the
-loader caches the wrong variant. Re-init with a different mode
-panics.
+loader caches the wrong variant. Re-init does not panic: `init` returns
+`Err(<mode already installed>)` (`crates/baracuda-core/src/stream_mode.rs`).

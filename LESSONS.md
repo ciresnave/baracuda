@@ -1064,11 +1064,13 @@ not chased)."
 
 ### 8.3 MoE-on-GGUF CPU reference math mismatch
 
-**Status.** The vendored llama.cpp MoE kernel's `topk_weight` +
-accumulation semantics don't match the obvious CPU reference. Smoke
-path retained (kernel launches, no crash, plausible output), assertion
-disabled, proper reference rederivation deferred — tagged
-`moe-cpu-reference-mismatch` TODO.
+**Status: FIXED (re-checked 2026-10-29).** The assertion is live in
+`crates/baracuda-kernels/tests/moe_gguf_smoke.rs` (the `moe_scalar_gguf`
+check at :209, 1.5% relative tolerance). Historical status at the time of
+the lesson: the vendored llama.cpp MoE kernel's `topk_weight` +
+accumulation semantics didn't match the obvious CPU reference, the
+assertion was disabled and the rederivation deferred (tagged
+`moe-cpu-reference-mismatch`).
 
 **Apply.** When vendoring code whose math is non-trivial, do not
 hand-roll the CPU reference under time pressure. Use the original

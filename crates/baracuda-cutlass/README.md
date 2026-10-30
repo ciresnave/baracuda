@@ -69,7 +69,7 @@ kernels) and below framework integration crates like Fuel's `fuel-cublaslt`.
 
 `IntGemmPlan<T: IntElement, BT: BiasElement = f32>` is a sibling type to
 `GemmPlan`. The matrix element `T` picks the kernel family
-(`S8` / `U8` today; `s4` / `u4` / 1-bit deferred to follow-ups). For
+(`S8` / `U8` here; `s4` / `u4` / 1-bit live in `baracuda-kernels` as `Int4GemmPlan` / `BinGemmPlan`). For
 `Bias*` epilogues, `BT` picks the bias broadcast element type — `f32`
 (default; matches the float-bias convention used elsewhere) or `i32`
 (matches TensorRT's int8 inference convention). Both routes use
@@ -91,8 +91,9 @@ live in [`baracuda-kernels`] — selecting `Rrr` on
 bias). Callers building new code should import from `baracuda-kernels`
 — it's a strict superset of this crate's int-GEMM surface.
 
-Remaining int / quantized dtypes (`s4`/`u4`/`b1`) are planned
-follow-ups in `baracuda-kernels` and not yet shipped.
+The int4 / 1-bit dtypes (`s4`/`u4`/`b1`) are not in this crate: they ship in
+`baracuda-kernels` as `Int4GemmPlan` (`src/gemm/int4_gemm.rs`) and
+`BinGemmPlan` (`src/gemm/bin_gemm.rs`).
 
 [`baracuda-kernels`]: https://docs.rs/baracuda-kernels
 
