@@ -117,17 +117,16 @@ the file-top docstring. Pairs with the host-side `baracuda-nvshmem` crate.
 
 ## Planned helpers (parallel-buildable)
 
-Each row maps to a session prompt under [`docs/sessions/`](../sessions/).
-The prompts are self-contained — a new session can pick one up and run.
+All six are built. The per-helper session prompts that once lived under `docs/sessions/` are no longer in the tree.
 
 | Helper | Session prompt | Status |
 |---|---|---|
-| `baracuda_dtype_promote.cuh` | [`kernel-helper-dtype-promote.md`](../sessions/kernel-helper-dtype-promote.md) | ✅ done (Phase 67a) |
-| `baracuda_coord_unravel.cuh` | [`kernel-helper-coord-unravel.md`](../sessions/kernel-helper-coord-unravel.md) | ✅ done (Phase 67b) |
-| `baracuda_block_atomic.cuh` | [`kernel-helper-block-atomic.md`](../sessions/kernel-helper-block-atomic.md) | ✅ done (Phase 67c) |
-| `baracuda_smem_scan.cuh` | [`kernel-helper-smem-scan.md`](../sessions/kernel-helper-smem-scan.md) | ✅ done (Phase 67d) |
-| `baracuda_smem_tile.cuh` | [`kernel-helper-smem-tile.md`](../sessions/kernel-helper-smem-tile.md) | ✅ done (Phase 67e) |
-| `baracuda_hmath.cuh` | [`kernel-helper-hmath.md`](../sessions/kernel-helper-hmath.md) | ✅ done (Phase 67f) |
+| `baracuda_dtype_promote.cuh` | `kernel-helper-dtype-promote` (retired prompt) | ✅ done (Phase 67a) |
+| `baracuda_coord_unravel.cuh` | `kernel-helper-coord-unravel` (retired prompt) | ✅ done (Phase 67b) |
+| `baracuda_block_atomic.cuh` | `kernel-helper-block-atomic` (retired prompt) | ✅ done (Phase 67c) |
+| `baracuda_smem_scan.cuh` | `kernel-helper-smem-scan` (retired prompt) | ✅ done (Phase 67d) |
+| `baracuda_smem_tile.cuh` | `kernel-helper-smem-tile` (retired prompt) | ✅ done (Phase 67e) |
+| `baracuda_hmath.cuh` | `kernel-helper-hmath` (retired prompt) | ✅ done (Phase 67f) |
 
 ## Adding a new helper — checklist for sessions
 

@@ -16,6 +16,14 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.49 - 2026-10-30
+
+Docs only. No code, no device run.
+
+### Changed
+
+- Doc staleness sweep, SA-38 (d), third batch: `PROVENANCE.md` no longer lists fixes as pending that sections 3a-3c apply; `docs/internals/kernel-helpers.md` no longer links the absent `docs/sessions/` prompts.
+
 ## 0.1.0-alpha.48 - 2026-10-29
 
 Docs only. No code, no device run.
