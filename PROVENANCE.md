@@ -52,7 +52,8 @@ headers name llama.cpp ggml-cuda and guoqingbao/attention.rs as the origins.
 ## 3. Gap register
 
 Legend: **FIXED** = corrected in this PR (documentation only). **PM** = touches a vendored file, a
-licence text or a source header, so it needs a PM decision (§4).
+licence text or a source header, so it needs a PM decision (§4). Statuses in the tables are as of
+the 2026-10-14 audit: every **PM** row except the upstream-only licence gaps was applied in §3a-§3c.
 
 ### Licence / notice text missing or not verbatim
 
@@ -110,10 +111,10 @@ PM-approved (`TASK` 13:06Z). New files and replaced files are **upstream bytes**
 | G-TE-1 | `ATTRIBUTION.md` embedded text replaced with TE `LICENSE` (`9e5a847c`, bea1b426) |
 | G-BNB-1 | bitsandbytes `NOTICE.md` carried |
 | G-FI-1 | `LICENSE-FP16` (Maratyszcza/FP16) added; AMD's 2025 line has no separate upstream text (SPDX line only) |
-| G-CUTF-1 | `LICENSES/cutf-LICENSE` added (headers: next PR) |
-| G-L2-1 | `LICENSE-CUDA-L2.txt` tracked next to the probes (headers: next PR) |
+| G-CUTF-1 | `LICENSES/cutf-LICENSE` added (headers: added in §3b) |
+| G-L2-1 | `LICENSE-CUDA-L2.txt` tracked next to the probes (headers: added in §3b) |
 
-Still open from §3: G-H-1/2, G-APEX-2, G-SORT-1, G-CUTF-1 headers, G-PIN-1, G-FQ-1, G-FORGE-1/2 (next PRs), and attention.rs / cudaforge licence files that do not exist upstream.
+Applied in later PRs: G-H-1/2, G-APEX-2, G-SORT-1, G-CUTF-1 headers, G-FORGE-1/2 (§3b); G-PIN-1, G-FQ-1 (§3c). Still open: attention.rs / cudaforge licence files that do not exist upstream (§3b, §3c).
 
 ## 3b. Header-comment bucket applied (PR alpha.103, 2026-10-14)
 
@@ -150,7 +151,7 @@ Recorded in each directory's `VENDOR.md` / `README.md`. **Date-bounded, not vend
 
 G-PIN-1 and G-FQ-1 are closed by this. Remaining open: attention.rs / cudaforge ship no LICENSE (upstream-only; asked 2026-10-24, https://github.com/guoqingbao/attention.rs/issues/117 and https://github.com/guoqingbao/cudaforge/issues/13).
 
-## 4. Proposed fixes needing PM (no vendoring changes made)
+## 4. Fixes proposed at audit time (applied in §3a-§3c, except the upstream-only licence gaps)
 
 1. **Add licence texts** (new files only, no edits to vendored sources): candle `LICENSE-MIT` +
    `LICENSE-APACHE` (HF) next to the 12 candle-sourced FA2 files and in `vendor/fuel-q8_1`; ggml MIT
@@ -169,8 +170,7 @@ G-PIN-1 and G-FQ-1 are closed by this. Remaining open: attention.rs / cudaforge 
 5. **Forge NOTICE**: restate which files are modified and by how much; add origin headers.
    (G-FORGE-2)
 
-Derived files that were absent from `LICENSE-thirdparty.md`, listed here until a PM-approved header
-or licence change lands: `kernels/gguf/{mmvq_batched,mmvq_multim,quantize_q8_1}.cu`,
+Derived files that were absent from `LICENSE-thirdparty.md` at audit time (headers and licence texts landed in §3a/§3b): `kernels/gguf/{mmvq_batched,mmvq_multim,quantize_q8_1}.cu`,
 `kernels/include/baracuda_mmvq_{batched,multim}.cuh`, `kernels/sort/sort.cu`,
 `kernels/include/baracuda_sort.cuh` (llama.cpp via Fuel/candle, MIT);
 `kernels/include/baracuda_{cp_async,fp_bits}.cuh` (Ootomo cutf, MIT);
