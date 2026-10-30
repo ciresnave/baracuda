@@ -385,3 +385,54 @@ fn pooling_max_and_average_match_cpu() {
     );
     assert_close(&avg, &[2.0, 3.0, 5.0, 6.0], 1e-5);
 }
+
+#[test]
+fn deconvolution_stride_two_replicates_blocks() {
+    let logger = require_optional!(logger(), "C-ABI shim (Logger::new)");
+    let x = [1.0f32, 2.0, 3.0, 4.0]; // [1,1,2,2]
+    let got = build_and_run(
+        logger,
+        |net| {
+            let tx = net.add_input("x", DataType::Float, &Dims::new(&[1, 1, 2, 2]))?;
+            let de = net.add_deconvolution(&tx, 1, &Dims::new(&[2, 2]), &[1.0; 4], None)?;
+            de.set_deconv_stride(&Dims::new(&[2, 2]));
+            let out = de.output(0)?; // [1,1,4,4]
+            out.set_name("out")?;
+            net.mark_output(&out)
+        },
+        &[("x", &x)],
+        "out",
+        16,
+    );
+    let want = [
+        1.0, 1.0, 2.0, 2.0, 1.0, 1.0, 2.0, 2.0, 3.0, 3.0, 4.0, 4.0, 3.0, 3.0, 4.0, 4.0,
+    ];
+    assert_close(&got, &want, 1e-5);
+}
+
+#[test]
+fn deconvolution_with_bias_matches_cpu() {
+    let logger = require_optional!(logger(), "C-ABI shim (Logger::new)");
+    let x = [1.0f32, 2.0, 3.0, 4.0];
+    let got = build_and_run(
+        logger,
+        |net| {
+            let tx = net.add_input("x", DataType::Float, &Dims::new(&[1, 1, 2, 2]))?;
+            let de = net.add_deconvolution(
+                &tx,
+                1,
+                &Dims::new(&[2, 2]),
+                &[1.0, 2.0, 3.0, 4.0],
+                Some(&[0.5]),
+            )?;
+            let out = de.output(0)?; // [1,1,3,3]
+            out.set_name("out")?;
+            net.mark_output(&out)
+        },
+        &[("x", &x)],
+        "out",
+        9,
+    );
+    let want = [1.5, 4.5, 4.5, 6.5, 20.5, 16.5, 9.5, 24.5, 16.5];
+    assert_close(&got, &want, 1e-4);
+}
