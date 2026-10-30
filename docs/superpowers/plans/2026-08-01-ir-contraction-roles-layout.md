@@ -2,6 +2,8 @@
 
 > **Historical record (SA-38).** Dated document, kept as written. It describes `baracuda-kernelgen` / `baracuda-kernel-vocab` as in-tree crates; they left this repo in alpha.79 (see `CHANGELOG.md`) and now live in `unpopped` / `unpopped-vocab`. Crate paths, versions and crate counts below are as of the document's date, not current.
 
+> **Status (SA-38 e): executed and merged** in PR #12 (evidence: `ROADMAP.md` Done list). The checkboxes below were never ticked and are not a progress record.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Let a `Permute`/`Broadcast`/rank-3 role-reorder on a contraction operand fold into the M/N/K address math (no materialized `contiguize` copy), unblocking transposed / mixed-layout / batched matmul and the SDPA QKᵀ path.
