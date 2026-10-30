@@ -16,6 +16,14 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.50 - 2026-10-30
+
+Docs only. No code, no device run.
+
+### Changed
+
+- Doc staleness sweep, SA-38 (a), live docs: `README.md` and `ARCHITECTURE.md` no longer describe `baracuda-kernelgen` as a workspace crate (it was retired into `unpopped`; the kernel-generation sections now name `baracuda-cuda-emit` / `-parse` / `-vocab` / `-seam` and `baracuda-seam`), and state the real version (0.1.0-alpha.49 was current when checked, not alpha.85) and crate count (75 crates, 73 publishable: `baracuda-kernels-bench` and `baracuda-bench-stats` carry `publish = false`). `OP-MATRIX.md`, `docs/compared-to-cudarc.md`, `docs/compared-to-cust.md` and `tools/kiss-ref-diff/README.md` get the same correction. Dated records under `docs/design/`, `docs/planning/` and `docs/fuel-*` are left as history.
+
 ## 0.1.0-alpha.49 - 2026-10-30
 
 Docs only. No code, no device run.

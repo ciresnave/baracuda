@@ -3,7 +3,7 @@
 Baseline generated for **baracuda-kernels** on **RTX 4070 (sm_89)**; the body
 has since been re-annotated with the **baracuda-kernelgen op-matrix audit**
 (rounds through **2026-07-03**). The workspace was at **0.1.0-alpha.28**
-(2026-10-25). The body reflects the alpha.77 line, with these items re-checked
+(2026-10-25; the workspace is now at 0.1.0-alpha.50). The body reflects the alpha.77 line, with these items re-checked
 against the code at `origin/main` on 2026-10-25 (ROADMAP SA-37): the
 `RepeatPlan` / `InterpolatePlan` dtypes, the `ArgsortPlan` row length, adaptive
 pool, and strided siblings. The other rows have **not** been re-audited for
@@ -43,8 +43,8 @@ The **per-cell** routing decision (generated vs. cuBLAS/CUTLASS/cuDNN/bespoke) i
 recorded machine-readably in the dispatch table (design
 [§7](docs/design/kernel-specialization.md)), keyed on the `StructureKey` token.
 The schema + decision logic live in `baracuda-kernels-types::dispatch`
-(`DispatchTable`, `winner_of`, `seed_winner`, `merge`); `baracuda-kernelgen`
-emits the committed `@generated` artifact (`emit_dispatch_table`). A cell whose
+(`DispatchTable`, `winner_of`, `seed_winner`, `merge`); the retired
+`baracuda-kernelgen` (now `unpopped`) emitted the committed `@generated` artifact (`emit_dispatch_table`). A cell whose
 winner is a vendor library is a *deliberate* miss — no generated `.cu`, no
 link-registry entry — distinct from a forgotten one. The table is seeded by
 hand-knowledge (large aligned half-GEMM → cuBLAS) and overwritten by

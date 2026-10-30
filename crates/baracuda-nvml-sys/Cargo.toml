@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-nvml-sys"
-version = "0.1.0-alpha.49"
+version = "0.1.0-alpha.50"
 description = "Raw FFI bindings and dynamic loader for the NVIDIA Management Library (NVML)."
 edition.workspace = true
 license.workspace = true
