@@ -111,8 +111,8 @@ PM-approved (`TASK` 13:06Z). New files and replaced files are **upstream bytes**
 | G-TE-1 | `ATTRIBUTION.md` embedded text replaced with TE `LICENSE` (`9e5a847c`, bea1b426) |
 | G-BNB-1 | bitsandbytes `NOTICE.md` carried |
 | G-FI-1 | `LICENSE-FP16` (Maratyszcza/FP16) added; AMD's 2025 line has no separate upstream text (SPDX line only) |
-| G-CUTF-1 | `LICENSES/cutf-LICENSE` added (headers: next PR) |
-| G-L2-1 | `LICENSE-CUDA-L2.txt` tracked next to the probes (headers: next PR) |
+| G-CUTF-1 | `LICENSES/cutf-LICENSE` added (headers: added in §3b) |
+| G-L2-1 | `LICENSE-CUDA-L2.txt` tracked next to the probes (headers: added in §3b) |
 
 Applied in later PRs: G-H-1/2, G-APEX-2, G-SORT-1, G-CUTF-1 headers, G-FORGE-1/2 (§3b); G-PIN-1, G-FQ-1 (§3c). Still open: attention.rs / cudaforge licence files that do not exist upstream (§3b, §3c).
 
@@ -151,7 +151,7 @@ Recorded in each directory's `VENDOR.md` / `README.md`. **Date-bounded, not vend
 
 G-PIN-1 and G-FQ-1 are closed by this. Remaining open: attention.rs / cudaforge ship no LICENSE (upstream-only; asked 2026-10-24, https://github.com/guoqingbao/attention.rs/issues/117 and https://github.com/guoqingbao/cudaforge/issues/13).
 
-## 4. Fixes proposed at audit time (all applied in §3a-§3c)
+## 4. Fixes proposed at audit time (applied in §3a-§3c, except the upstream-only licence gaps)
 
 1. **Add licence texts** (new files only, no edits to vendored sources): candle `LICENSE-MIT` +
    `LICENSE-APACHE` (HF) next to the 12 candle-sourced FA2 files and in `vendor/fuel-q8_1`; ggml MIT
