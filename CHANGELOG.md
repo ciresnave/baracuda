@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.61 - 2026-10-30
+
+### Changed
+
+- **BREAKING (version line):** `baracuda-cuda-emit` and `baracuda-cuda-parse` move 0.32.0 -> 0.34.11 so their MAJOR.MINOR follow the `unpopped` release they build against (the Versioning exception above); #288 had repointed them to `unpopped ^0.34.3` and left them on 0.32.0. `unpopped`, `unpopped-vocab` 0.34.3 -> 0.34.11 (workspace pins, `tools/kiss-ref-diff`), `unpopped-cpu-c`, `unpopped-slang` dev-deps 0.34.3 -> 0.34.11. `fuel-kernel-seam` / `-types` stay 0.31.0 (latest on crates.io). Host tests green for emit / parse / seam (332 + others, 0 failed); `cargo gpu-test -p baracuda-cuda-emit --features nvrtc,device-tests`: 443 passed, 0 failed, 0 declared skips (device-verified sm89). ROADMAP SA-48.
+
 ## 0.1.0-alpha.60 - 2026-10-30
 
 ### Added
