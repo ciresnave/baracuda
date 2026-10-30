@@ -253,7 +253,7 @@ baracuda-kernels = { version = "0.0.1-alpha.82", features = ["sm89", "cudnn"] }
 baracuda-driver  = "0.0.1-alpha.82"
 ```
 
-> `main` is at `0.1.0-alpha.51`; the example above stays at the last version
+> `main` is at `0.1.0-alpha.52`; the example above stays at the last version
 > actually published to crates.io until that publish happens (main version and
 > published version are allowed to differ briefly — see `CHANGELOG.md`).
 

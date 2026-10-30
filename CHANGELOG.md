@@ -16,6 +16,14 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.52 - 2026-10-30
+
+Docs only. No code, no device run.
+
+### Changed
+
+- SA-38 (e): the four executed plans in `docs/superpowers/plans/` (shape-oracle, oracle-kissref-consolidation, int8-reductions, ir-contraction-roles-layout) carry a status line saying they merged (PRs #3, #6/#8, #9, #12) and that their unticked checkboxes are not a progress record. `2026-08-08-silent-skip-migration.md` has no checkboxes and is untouched.
+
 ## 0.1.0-alpha.51 - 2026-10-30
 
 Docs only. No code, no device run.
