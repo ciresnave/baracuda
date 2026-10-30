@@ -339,11 +339,12 @@ fn has_cse_hoist(e: &unpopped::ScalarExpr, seen: &mut std::collections::HashSet<
         Unary(_, a) => vec![a],
         Select(a, b, c) | Fma(a, b, c) => vec![a, b, c],
         Cast(a, _) | Bitcast(a, _) => vec![a],
-        // Nodes the fuzz generator never builds (integer leaves, kernel locals, packed
+        // Nodes the fuzz generator never builds (integer leaves, kernel locals and exec ids, packed
         // values, qualifiers): no CSE hoist is modelled for them.
         unpopped::ScalarExpr::ConstInt(..)
         | unpopped::ScalarExpr::CoordInt(..)
-        | unpopped::ScalarExpr::Local(_) => return false,
+        | unpopped::ScalarExpr::Local(_)
+        | unpopped::ScalarExpr::Exec(_) => return false,
         unpopped::ScalarExpr::Pack(xs) => xs.iter().collect(),
         unpopped::ScalarExpr::Extract(a, _)
         | unpopped::ScalarExpr::BitcastPacked(a, _, _)

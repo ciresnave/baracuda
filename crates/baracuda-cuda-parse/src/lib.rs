@@ -69,11 +69,5 @@ const CUDA_RESIDUE: &[&str] = &[
 /// CUDA: `__global__` kernels, `out`/`in{K}` buffers. Moved verbatim from
 /// `unpopped::convert::CUDA` -- byte-identical field values, so every existing
 /// CUDA lift is unaffected by the move.
-pub const CUDA: Frontend = Frontend {
-    name: "cuda",
-    kernel_marker: "__global__",
-    residue: CUDA_RESIDUE,
-    out_name: "out",
-    in_prefix: "in",
-    parse: parse_cuda,
-};
+pub const CUDA: Frontend =
+    Frontend::new("cuda", "__global__", CUDA_RESIDUE, "out", "in", parse_cuda);

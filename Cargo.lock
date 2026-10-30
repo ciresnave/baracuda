@@ -121,7 +121,7 @@ dependencies = [
  "unpopped",
  "unpopped-cpu-c",
  "unpopped-slang",
- "unpopped-vocab",
+ "unpopped-vocab 0.34.3",
 ]
 
 [[package]]
@@ -131,7 +131,7 @@ dependencies = [
  "tree-sitter",
  "tree-sitter-cuda",
  "unpopped",
- "unpopped-vocab",
+ "unpopped-vocab 0.34.3",
 ]
 
 [[package]]
@@ -142,7 +142,7 @@ dependencies = [
  "fuel-kernel-seam",
  "fuel-kernel-seam-types",
  "unpopped",
- "unpopped-vocab",
+ "unpopped-vocab 0.34.3",
 ]
 
 [[package]]
@@ -160,7 +160,7 @@ version = "0.1.0-alpha.53"
 dependencies = [
  "serde",
  "serde_json",
- "unpopped-vocab",
+ "unpopped-vocab 0.34.3",
 ]
 
 [[package]]
@@ -554,7 +554,7 @@ dependencies = [
  "baracuda-types",
  "float8",
  "half",
- "unpopped-vocab",
+ "unpopped-vocab 0.34.3",
 ]
 
 [[package]]
@@ -867,7 +867,7 @@ dependencies = [
  "float8",
  "half",
  "num-complex",
- "unpopped-vocab",
+ "unpopped-vocab 0.34.3",
 ]
 
 [[package]]
@@ -1162,7 +1162,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "62cdc9ea4e1a758daccbb53e641c77414ba21e2b3401f7095d4ded0280162360"
 dependencies = [
  "fuel-kernel-seam-types",
- "unpopped-vocab",
+ "unpopped-vocab 0.32.1",
 ]
 
 [[package]]
@@ -1600,36 +1600,36 @@ checksum = "a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563"
 
 [[package]]
 name = "unpopped"
-version = "0.32.1"
+version = "0.34.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f86c6ee64149ee88364ee990e8d8d2a2a062c0d0cf878258cc57cd2dfe997481"
+checksum = "4e7a50622756a16a31eea9672d05dceff734b5d73f2224646f74ba3a9d003fa0"
 dependencies = [
  "libm",
  "serde",
  "serde_json",
  "tree-sitter",
  "tree-sitter-slang",
- "unpopped-vocab",
+ "unpopped-vocab 0.34.3",
 ]
 
 [[package]]
 name = "unpopped-cpu-c"
-version = "0.32.1"
+version = "0.34.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "27d05be0800660c07d33e650c2d2f7b0af81fe50a447c82b6cd5ca369a426979"
+checksum = "3e9b2b48e515f42879417b2725993df982a663742fffafb4faeb8b7751e42eec"
 dependencies = [
  "unpopped",
- "unpopped-vocab",
+ "unpopped-vocab 0.34.3",
 ]
 
 [[package]]
 name = "unpopped-slang"
-version = "0.32.1"
+version = "0.34.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "54952b8b0989fdeee729ed2c70b93e429eaa6199f6b929405bb0392e24958eb3"
+checksum = "76d8fab4971148c4932e7c302b7a4edfbe4049101cf4813890a1e98db741f1d6"
 dependencies = [
  "unpopped",
- "unpopped-vocab",
+ "unpopped-vocab 0.34.3",
 ]
 
 [[package]]
@@ -1637,6 +1637,16 @@ name = "unpopped-vocab"
 version = "0.32.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0cf5db1ef790d429c882f4027c714aadf8c6214405da67638a10504a73cbd2e4"
+dependencies = [
+ "float8",
+ "half",
+]
+
+[[package]]
+name = "unpopped-vocab"
+version = "0.34.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d48c27ab5347fc951b6f0cf53754cf3e8b7d0988215661c2558097286abf69e7"
 dependencies = [
  "float8",
  "half",

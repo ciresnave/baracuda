@@ -52,6 +52,11 @@ fn integer_and_packed_nodes_are_typed_declines_and_a_plain_body_still_emits() {
         declined(ScalarExpr::ConstInt(7, ElementKind::I32)),
         LowerError::InadmissiblePlan { .. } | LowerError::UnsupportedOp { .. }
     ));
+    // Unpopped 0.34: an execution-id leaf is opaque like `Local`.
+    assert!(matches!(
+        declined(ScalarExpr::Exec(unpopped::exec::ExecId::LaneId)),
+        LowerError::InadmissiblePlan { .. } | LowerError::UnsupportedOp { .. }
+    ));
     assert!(matches!(
         declined(ScalarExpr::Extract(
             Box::new(ScalarExpr::Pack(vec![
