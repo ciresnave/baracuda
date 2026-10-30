@@ -502,3 +502,28 @@ fn gather_rows_and_columns_match_cpu() {
     let cols = gather_4x3(logger, &[2, 0], 1, 8);
     assert_close(&cols, &[2.0, 0.0, 5.0, 3.0, 8.0, 6.0, 11.0, 9.0], 1e-6);
 }
+
+#[test]
+fn select_on_greater_is_elementwise_max() {
+    let logger = require_optional!(logger(), "C-ABI shim (Logger::new)");
+    let a = [1.0f32, 5.0, 3.0, 8.0];
+    let b = [4.0f32, 2.0, 3.5, 7.0];
+    let got = build_and_run(
+        logger,
+        |net| {
+            let d = Dims::new(&[4]);
+            let ta = net.add_input("a", DataType::Float, &d)?;
+            let tb = net.add_input("b", DataType::Float, &d)?;
+            let gt = net
+                .add_element_wise(&ta, &tb, ElementWiseOp::Greater)?
+                .output(0)?;
+            let out = net.add_select(&gt, &ta, &tb)?.output(0)?;
+            out.set_name("out")?;
+            net.mark_output(&out)
+        },
+        &[("a", &a), ("b", &b)],
+        "out",
+        4,
+    );
+    assert_close(&got, &[4.0, 5.0, 3.5, 8.0], 0.0);
+}

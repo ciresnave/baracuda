@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.59 - 2026-10-30
+
+### Added
+
+- `baracuda-tensorrt-builder`: select layer (ROADMAP SA-33, remaining layer types, fifth slice). `Network::add_select(condition, then_input, else_input)`; the `baracuda-tensorrt-sys` shim gains `trtNetworkAddSelect`. Device-verified on sm_89 (RTX 4070), TensorRT 10.16.1.11: `cargo gpu-test -p baracuda-tensorrt-builder --features shim,device-tests --test builder_smoke`, 16 passed, 0 failed (1 new): `select(a > b, a, b)` equals the CPU elementwise max. Not covered: broadcasting operands; resize.
+
 ## 0.1.0-alpha.58 - 2026-10-30
 
 ### Added
