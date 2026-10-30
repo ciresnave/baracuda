@@ -15,7 +15,7 @@ use baracuda_driver::{Context, Device, DeviceBuffer, Stream, require_optional};
 use baracuda_tensorrt::{DataType, Dims, Logger, Runtime, Severity};
 use baracuda_tensorrt_builder::{
     Activation, Builder, BuilderConfig, BuilderFlag, ElementWiseOp, MatrixOp, MemoryPool, Network,
-    NetworkFlags, ReduceOp, UnaryOp,
+    NetworkFlags, PoolingType, ReduceOp, UnaryOp,
 };
 
 fn logger() -> Option<Arc<Logger>> {
@@ -300,4 +300,88 @@ fn a_network_without_outputs_fails_to_build() {
         builder.build_serialized(&bad, &config).is_err(),
         "a network with no outputs must not build"
     );
+}
+
+#[test]
+fn convolution_with_bias_matches_cpu() {
+    let logger = require_optional!(logger(), "C-ABI shim (Logger::new)");
+    let x: Vec<f32> = (0..9).map(|i| i as f32).collect(); // [1,1,3,3]
+    let got = build_and_run(
+        logger,
+        |net| {
+            let tx = net.add_input("x", DataType::Float, &Dims::new(&[1, 1, 3, 3]))?;
+            let conv = net.add_convolution(
+                &tx,
+                1,
+                &Dims::new(&[2, 2]),
+                &[1.0, 2.0, 3.0, 4.0],
+                Some(&[0.5]),
+            )?;
+            let out = conv.output(0)?;
+            out.set_name("out")?;
+            net.mark_output(&out)
+        },
+        &[("x", &x)],
+        "out",
+        4,
+    );
+    assert_close(&got, &[27.5, 37.5, 57.5, 67.5], 1e-4);
+}
+
+#[test]
+fn convolution_padding_gives_box_sums() {
+    let logger = require_optional!(logger(), "C-ABI shim (Logger::new)");
+    let x: Vec<f32> = (0..9).map(|i| i as f32).collect();
+    let got = build_and_run(
+        logger,
+        |net| {
+            let tx = net.add_input("x", DataType::Float, &Dims::new(&[1, 1, 3, 3]))?;
+            let conv = net.add_convolution(&tx, 1, &Dims::new(&[3, 3]), &[1.0; 9], None)?;
+            conv.set_conv_padding(&Dims::new(&[1, 1]));
+            let out = conv.output(0)?;
+            out.set_name("out")?;
+            net.mark_output(&out)
+        },
+        &[("x", &x)],
+        "out",
+        9,
+    );
+    let want = [8.0, 15.0, 12.0, 21.0, 36.0, 27.0, 20.0, 33.0, 24.0];
+    assert_close(&got, &want, 1e-4);
+}
+
+#[test]
+fn pooling_max_and_average_match_cpu() {
+    let logger = require_optional!(logger(), "C-ABI shim (Logger::new)");
+    let x: Vec<f32> = (0..9).map(|i| i as f32).collect();
+    let max = build_and_run(
+        Arc::clone(&logger),
+        |net| {
+            let tx = net.add_input("x", DataType::Float, &Dims::new(&[1, 1, 3, 3]))?;
+            let out = net
+                .add_pooling(&tx, PoolingType::Max, &Dims::new(&[2, 2]))?
+                .output(0)?; // [1,1,2,2]
+            out.set_name("out")?;
+            net.mark_output(&out)
+        },
+        &[("x", &x)],
+        "out",
+        4,
+    );
+    assert_close(&max, &[4.0, 5.0, 7.0, 8.0], 1e-5);
+    let avg = build_and_run(
+        logger,
+        |net| {
+            let tx = net.add_input("x", DataType::Float, &Dims::new(&[1, 1, 3, 3]))?;
+            let pool = net.add_pooling(&tx, PoolingType::Average, &Dims::new(&[2, 2]))?;
+            pool.set_pool_stride(&Dims::new(&[1, 1]));
+            let out = pool.output(0)?;
+            out.set_name("out")?;
+            net.mark_output(&out)
+        },
+        &[("x", &x)],
+        "out",
+        4,
+    );
+    assert_close(&avg, &[2.0, 3.0, 5.0, 6.0], 1e-5);
 }

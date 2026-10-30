@@ -164,6 +164,18 @@ trt_enum! {
 }
 
 trt_enum! {
+    /// `nvinfer1::PoolingType`.
+    PoolingType {
+        /// Maximum over the window.
+        Max = 0,
+        /// Average over the window.
+        Average = 1,
+        /// Blend of max and average pooling.
+        MaxAverageBlend = 2,
+    }
+}
+
+trt_enum! {
     /// `nvinfer1::MemoryPoolType`.
     MemoryPool {
         /// Scratch memory a layer may use while it runs.
@@ -667,6 +679,65 @@ impl Network<'_> {
         self.layer(raw, "addIdentity")
     }
 
+    /// An N-d convolution over `input` (`[N, C, spatial...]`). `kernel` holds
+    /// the `f32` weights laid out `[num_output_maps, C / groups, kernel_size...]`;
+    /// `bias` is one value per output map, or `None`. Configure stride,
+    /// padding, dilation and groups with the `Layer::set_conv_*` setters.
+    pub fn add_convolution<'a>(
+        &'a self,
+        input: &Tensor<'a>,
+        num_output_maps: i64,
+        kernel_size: &Dims,
+        kernel: &[f32],
+        bias: Option<&[f32]>,
+    ) -> Result<Layer<'a>> {
+        let (kernel_ptr, kernel_count) = self.hold_f32(kernel);
+        let (bias_ptr, bias_count) = match bias {
+            Some(b) => self.hold_f32(b),
+            None => (std::ptr::null(), 0),
+        };
+        let size = kernel_size.to_raw();
+        let raw =
+            // SAFETY: the weight pointers point into boxed buffers held in `self.weights` until the network drops (or are null with count 0); `size` is a local that outlives the call.
+            unsafe {
+                ffi::trtNetworkAddConvolutionNd(
+                    self.raw,
+                    input.raw,
+                    num_output_maps,
+                    &size,
+                    kernel_ptr,
+                    kernel_count,
+                    bias_ptr,
+                    bias_count,
+                )
+            };
+        self.layer(raw, "addConvolutionNd")
+    }
+
+    /// An N-d pooling layer with the given window; stride defaults to 1 (set it
+    /// with [`Layer::set_pool_stride`]).
+    pub fn add_pooling<'a>(
+        &'a self,
+        input: &Tensor<'a>,
+        kind: PoolingType,
+        window_size: &Dims,
+    ) -> Result<Layer<'a>> {
+        let size = window_size.to_raw();
+        let raw =
+            // SAFETY: `self.raw` and `input.raw` are live handles of this network; `size` is a local that outlives the call.
+            unsafe { ffi::trtNetworkAddPoolingNd(self.raw, input.raw, kind as i32, &size) };
+        self.layer(raw, "addPoolingNd")
+    }
+
+    /// Keep `values` alive for the network's lifetime; return pointer and count.
+    fn hold_f32(&self, values: &[f32]) -> (*const std::ffi::c_void, i64) {
+        let bytes: Box<[u8]> = values.iter().flat_map(|v| v.to_ne_bytes()).collect();
+        let ptr = bytes.as_ptr().cast();
+        // The heap block does not move when the box moves into the Vec.
+        self.weights.borrow_mut().push(bytes);
+        (ptr, values.len() as i64)
+    }
+
     /// Raw `INetworkDefinition*`.
     pub fn as_raw(&self) -> sys::trtINetworkDefinition_t {
         self.raw
@@ -777,6 +848,47 @@ impl<'n> Layer<'n> {
     pub fn set_concat_axis(&self, axis: i32) {
         // SAFETY: the handle is live (owned by `self`); each pointer argument is a NUL-terminated `CString` or a local that outlives the call.
         unsafe { ffi::trtConcatenationSetAxis(self.raw, axis) };
+    }
+
+    /// For a convolution layer: the stride, one entry per spatial axis.
+    pub fn set_conv_stride(&self, dims: &Dims) {
+        let dims = dims.to_raw();
+        // SAFETY: the handle is live (owned by `self`); `dims` is a local that outlives the call.
+        unsafe { ffi::trtConvolutionSetStrideNd(self.raw, &dims) };
+    }
+
+    /// For a convolution layer: symmetric padding, one entry per spatial axis.
+    pub fn set_conv_padding(&self, dims: &Dims) {
+        let dims = dims.to_raw();
+        // SAFETY: the handle is live (owned by `self`); `dims` is a local that outlives the call.
+        unsafe { ffi::trtConvolutionSetPaddingNd(self.raw, &dims) };
+    }
+
+    /// For a convolution layer: the dilation, one entry per spatial axis.
+    pub fn set_conv_dilation(&self, dims: &Dims) {
+        let dims = dims.to_raw();
+        // SAFETY: the handle is live (owned by `self`); `dims` is a local that outlives the call.
+        unsafe { ffi::trtConvolutionSetDilationNd(self.raw, &dims) };
+    }
+
+    /// For a convolution layer: the number of groups.
+    pub fn set_conv_num_groups(&self, groups: i64) {
+        // SAFETY: the handle is live (owned by `self`).
+        unsafe { ffi::trtConvolutionSetNbGroups(self.raw, groups) };
+    }
+
+    /// For a pooling layer: the stride, one entry per spatial axis.
+    pub fn set_pool_stride(&self, dims: &Dims) {
+        let dims = dims.to_raw();
+        // SAFETY: the handle is live (owned by `self`); `dims` is a local that outlives the call.
+        unsafe { ffi::trtPoolingSetStrideNd(self.raw, &dims) };
+    }
+
+    /// For a pooling layer: symmetric padding, one entry per spatial axis.
+    pub fn set_pool_padding(&self, dims: &Dims) {
+        let dims = dims.to_raw();
+        // SAFETY: the handle is live (owned by `self`); `dims` is a local that outlives the call.
+        unsafe { ffi::trtPoolingSetPaddingNd(self.raw, &dims) };
     }
 
     /// For a shuffle layer: reshape to `dims` (`-1` infers one axis).
