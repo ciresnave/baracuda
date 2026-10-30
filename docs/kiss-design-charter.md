@@ -1,5 +1,7 @@
 # KISS Design Charter (working draft v0.1)
 
+> **Historical record (SA-38).** Dated document, kept as written. It describes `baracuda-kernelgen` / `baracuda-kernel-vocab` as in-tree crates; they left this repo in alpha.79 (see `CHANGELOG.md`) and now live in `unpopped` / `unpopped-vocab`. Crate paths, versions and crate counts below are as of the document's date, not current.
+
 **Destination:** `github.com/ThinkersJournal/KISS` (drafted here; to be moved).
 **Status:** working draft — the umbrella skeleton every KISS sub-standard doc conforms to.
 **Provenance:** synthesized from a 7-lens design-considerations pass (prior-art, conformance/testability, versioning, architecture/scope, governance/IP, adversarial, consumer/emitter), 2026-07-11.

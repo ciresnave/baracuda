@@ -1,5 +1,7 @@
 # Unpopped extraction plan — carve the kernel generator out of Baracuda
 
+> **Historical record (SA-38).** Dated document, kept as written. It describes `baracuda-kernelgen` / `baracuda-kernel-vocab` as in-tree crates; they left this repo in alpha.79 (see `CHANGELOG.md`) and now live in `unpopped` / `unpopped-vocab`. Crate paths, versions and crate counts below are as of the document's date, not current.
+
 **Status:** **EXECUTED.** The carve-out happened and Baracuda consumes the result from
 crates.io: `crates/baracuda-kernelgen/` and `crates/baracuda-kernel-vocab/` no longer exist
 in this repository, and the workspace pins `unpopped` / `unpopped-vocab` as external

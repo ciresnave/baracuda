@@ -1,5 +1,7 @@
 # KISS Convergence Agenda — Baracuda POV
 
+> **Historical record (SA-38).** Dated document, kept as written. It describes `baracuda-kernelgen` / `baracuda-kernel-vocab` as in-tree crates; they left this repo in alpha.79 (see `CHANGELOG.md`) and now live in `unpopped` / `unpopped-vocab`. Crate paths, versions and crate counts below are as of the document's date, not current.
+
 **From:** Baracuda (kernel provider — CUDA library + `baracuda-kernelgen`) · **To:** KISS (ThinkersJournal editors-of-record), Fuel (reference consumer) · **Date:** 2026-07-20 · **Channel:** propose-first (umbrella §7.2)
 **Purpose:** a single Baracuda-POV convergence view, offered for KISS to reconcile against its own tracking (RECONCILIATION D-list + open RFC/defect issues) into **one shared list** all three sides work from. Grounded in Baracuda source at HEAD (`feat/kiss-convergence`, `62dc3952`).
 

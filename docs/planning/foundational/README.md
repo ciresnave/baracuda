@@ -1,5 +1,7 @@
 # Foundational roadmap — kernelgen ORDER-3 + the self-prioritizing loop
 
+> **Historical record (SA-38).** Dated document, kept as written. It describes `baracuda-kernelgen` / `baracuda-kernel-vocab` as in-tree crates; they left this repo in alpha.79 (see `CHANGELOG.md`) and now live in `unpopped` / `unpopped-vocab`. Crate paths, versions and crate counts below are as of the document's date, not current.
+
 This directory holds **self-contained implementation briefs** for the first ~10 large, foundational
 items on the `baracuda-kernelgen` / kernel-seam roadmap. Each brief is written so a **fresh Claude
 Code session with no prior context** can execute it: objective, status/blockers, dependencies,

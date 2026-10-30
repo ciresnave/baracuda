@@ -1,5 +1,7 @@
 # KISS-Ops Recipe Grammar — Baracuda's consolidated extract (INPUT to a KISS-owned spec)
 
+> **Historical record (SA-38).** Dated document, kept as written. It describes `baracuda-kernelgen` / `baracuda-kernel-vocab` as in-tree crates; they left this repo in alpha.79 (see `CHANGELOG.md`) and now live in `unpopped` / `unpopped-vocab`. Crate paths, versions and crate counts below are as of the document's date, not current.
+
 > **⚠ NOT the authority.** The recipe grammar is NOT Baracuda's to own — it is the shared **KISS-Ops Semantics op-DAG**, already (a) co-designed and agreed in `docs/fuel-reply-recipe-grammar-2026-07-15.md` (Fuel; "three things are one thing"; the 6 Qs), and (b) partially specified in KISS — Contract §2.3 Semantics, Ops §6.13 decompositions, Ops §6.19 OpAttrs, §6.4-0009/0010 flat-DAG — plus the 3B/Appendix F wire pinning (mlgheozs). **The authority is KISS**, and Baracuda has proposed KISS consolidate the scattered pieces into one project-agnostic recipe-grammar spec that Baracuda, Fuel, kiss-ref, and any KISS user build against. **This doc is Baracuda's consolidated EXTRACT — an input to that KISS consolidation (the concrete node vocabulary + per-node DetClass, evaluator-facing) — not a standalone standard.** Reconcile toward the KISS/Fuel sources on any divergence.
 
 **Version:** recipe-grammar **v1** (proposed as the "recipe-grammar version" leg of the kiss-ref consumption triple: `(KISS-Ops spec version, recipe-grammar version, kiss-ref semver)`, once the grammar lands in KISS).

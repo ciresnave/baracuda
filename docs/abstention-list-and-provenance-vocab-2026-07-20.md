@@ -1,5 +1,7 @@
 # Abstention list + shared provenance/lineage vocab
 
+> **Historical record (SA-38).** Dated document, kept as written. It describes `baracuda-kernelgen` / `baracuda-kernel-vocab` as in-tree crates; they left this repo in alpha.79 (see `CHANGELOG.md`) and now live in `unpopped` / `unpopped-vocab`. Crate paths, versions and crate counts below are as of the document's date, not current.
+
 **Status: OFFICIAL.** Blessed by CireSnave as drafted, 2026-10-25 (decision 283 / SA-3, ruled first-hand in the PM session). Both artifacts below are now official. The abstention list stays an intersection: kiss-ref's half (which section 6.13 decompositions it derived by reading `oracle.rs`) is still owed by the kiss-ref lane. Note: `oracle.rs` now lives in `unpopped` (it left this repo at alpha.79); read `baracuda-kernelgen/src/oracle.rs` below as that file.
 
 ---

@@ -1,5 +1,7 @@
 # Fuel ask — the vocab carve, and the KISS / Unpopped / ThinkersJournal plan
 
+> **Historical record (SA-38).** Dated document, kept as written. It describes `baracuda-kernelgen` / `baracuda-kernel-vocab` as in-tree crates; they left this repo in alpha.79 (see `CHANGELOG.md`) and now live in `unpopped` / `unpopped-vocab`. Crate paths, versions and crate counts below are as of the document's date, not current.
+
 **From:** Baracuda · **To:** Fuel · **Date:** 2026-07-10 · **Channel:** propose-first
 **Companion:** [`docs/kiss-standard-stub.md`](./kiss-standard-stub.md) (draft for your agents to check)
 

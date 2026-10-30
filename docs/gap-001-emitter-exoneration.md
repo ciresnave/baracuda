@@ -1,5 +1,7 @@
 # GAP-001 — `baracuda-cuda-emit` emitter exoneration (version bisect)
 
+> **Historical record (SA-38).** Dated document, kept as written. It describes `baracuda-kernelgen` / `baracuda-kernel-vocab` as in-tree crates; they left this repo in alpha.79 (see `CHANGELOG.md`) and now live in `unpopped` / `unpopped-vocab`. Crate paths, versions and crate counts below are as of the document's date, not current.
+
 **Date:** 2026-08-19
 **Owner:** Baracuda (emitter of record for the CUDA kernels under test)
 **Why this file exists:** Fuel's `Cargo.toml` pinned `baracuda-kernelgen = "=0.0.1-alpha.77"` for eleven days with a comment naming `alpha.78` as an "all-zero-output regression," bisected `.76 PASS / .77 PASS / .78 FAIL`. That comment is being rewritten. A retraction that survives only in the artifact being retracted is not a record — so the emitter-owner attestation is preserved here, independently, where it outlives the pin comment.

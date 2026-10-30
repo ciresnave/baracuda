@@ -1,5 +1,7 @@
 # kernelgen IR — layout/shape frontier: design-session kickoff brief
 
+> **Historical record (SA-38).** Dated document, kept as written. It describes `baracuda-kernelgen` / `baracuda-kernel-vocab` as in-tree crates; they left this repo in alpha.79 (see `CHANGELOG.md`) and now live in `unpopped` / `unpopped-vocab`. Crate paths, versions and crate counts below are as of the document's date, not current.
+
 **Purpose.** Zero-context grounding for the design session on **layout/shape nodes** —
 the IR ramp's most-foundational pending piece. Read this first, then brainstorm the
 design collaboratively with Eric. Verified against code on 2026-07-31; where this brief

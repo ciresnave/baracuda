@@ -1,5 +1,7 @@
 # Fuel ask — extend the FKC pattern to a flat indexed DAG with shared computed nodes (CSE)
 
+> **Historical record (SA-38).** Dated document, kept as written. It describes `baracuda-kernelgen` / `baracuda-kernel-vocab` as in-tree crates; they left this repo in alpha.79 (see `CHANGELOG.md`) and now live in `unpopped` / `unpopped-vocab`. Crate paths, versions and crate counts below are as of the document's date, not current.
+
 **From:** Baracuda · **To:** Fuel · **Date:** 2026-07-14 · **Channel:** propose-first
 **Companion:** KISS-Grammar §6.4-0011 (flat indexed node table + maximal common-subexpression dedup).
 

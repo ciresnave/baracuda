@@ -1,5 +1,7 @@
 # Recipe-convergence follow-ups (2026-07-18) — sub-agent work briefs
 
+> **Historical record (SA-38).** Dated document, kept as written. It describes `baracuda-kernelgen` / `baracuda-kernel-vocab` as in-tree crates; they left this repo in alpha.79 (see `CHANGELOG.md`) and now live in `unpopped` / `unpopped-vocab`. Crate paths, versions and crate counts below are as of the document's date, not current.
+
 Each section below is a **self-contained brief** for one follow-up. A fresh agent
 should be able to execute a brief with only this doc + the repo. Do them
 independently (no shared state); each ends green on its own.

@@ -1,5 +1,7 @@
 # FDX-successor — Baracuda's co-design position (prep)
 
+> **Historical record (SA-38).** Dated document, kept as written. It describes `baracuda-kernelgen` / `baracuda-kernel-vocab` as in-tree crates; they left this repo in alpha.79 (see `CHANGELOG.md`) and now live in `unpopped` / `unpopped-vocab`. Crate paths, versions and crate counts below are as of the document's date, not current.
+
 **Status:** prep for the queued three-way (KISS + Fuel + Baracuda) FDX-successor design thread (RECONCILIATION **D7**). Not yet sent — Baracuda's opening position, ready when the thread opens.
 
 ## Frame
