@@ -16,6 +16,18 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.48 - 2026-10-29
+
+Docs only. No code, no device run.
+
+### Added
+
+- `SECURITY.md` with the portfolio "Supported versions" text (the latest release line gets security fixes; an older line a backport only when it is small; no support period promised).
+
+### Changed
+
+- Doc staleness sweep, SA-38 (d), second batch: `docs/planning/api-freeze/README.md` (R3 / R5 done, the C-ABI gate is built), `docs/backlog-audit-2026-08-27.md` (items 81 / 82 fixed, the CtcLoss conflict annotated), `crates/baracuda-kernels-sys/LICENSE-thirdparty.md` (FA2 defaults), `OP-MATRIX.md` (dangling plan link), `crates/baracuda-kernels/README.md` and `crates/baracuda-kernels-sys/README.md` (`sm90a` is a placeholder, not "stubs").
+
 ## 0.1.0-alpha.47 - 2026-10-29
 
 Docs and test housekeeping. No library code, no device run.

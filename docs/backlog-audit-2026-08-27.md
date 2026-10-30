@@ -41,6 +41,7 @@ strided siblings). Recurring deferral reasons: *Tier-2 cadence / trailblazer-onl
    γ-accumulation — OP-MATRIX says it is an **open** correctness bug (smoke-tested only);
    ROADMAP says it was **fixed 2026-05-16**. These disagree and need a real check; not
    resolved here (a correctness claim should not be guessed at).
+   **Update 2026-10-29:** item 79 below is struck through as fixed (and line 10 records it); treat the OP-MATRIX "open bug" wording as the stale side. This update re-read those records, not the CtcLoss kernel itself.
 
 ---
 
@@ -165,8 +166,8 @@ contention; test-infra, not correctness).
 
 ## J. Shape / Layout / Pad / Repeat
 
-81. `PadPlan` bf16 for Reflect/Replicate/Circular (f16∪f32∪f64 only today). 82.
-`RepeatPlan` bf16 (`{f32,f16,f64}` only).
+81. ~~`PadPlan` bf16 for Reflect/Replicate/Circular (f16∪f32∪f64 only today).~~ **FIXED** (`shape_layout/pad.rs:10` wires `{f32, f16, bf16, f64}`; re-checked 2026-10-29). 82.
+~~`RepeatPlan` bf16 (`{f32,f16,f64}` only).~~ **FIXED** (`shape_layout/repeat.rs:96` accepts `Bf16`).
 
 ## K. Pooling
 

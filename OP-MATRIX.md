@@ -24,7 +24,7 @@ rustdoc.
 - ✓ — implemented
 - ✗ — not implemented
 - partial — some dtypes / shapes covered; see Notes
-- deferred — on the roadmap, see [comprehensive plan](~/.claude/plans/baracuda-kernels-comprehensive.md)
+- deferred — on the roadmap (the former "comprehensive plan" file lived outside this repo and is not available; see `ROADMAP.md`)
 - N/A — backward not meaningful for this op (e.g. integer inference, indexing,
   set-valued ops, RNG)
 - **Bespoke** — `.cu` kernel in `baracuda-kernels-sys`

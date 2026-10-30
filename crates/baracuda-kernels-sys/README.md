@@ -71,7 +71,7 @@ fails with a typed error pointing at the search paths it tried.
 | --- | --- | --- |
 | `sm80` | yes | Ampere baseline — runs forward-compatibly on Ada and Hopper. |
 | `sm89` | no | Ada Lovelace specializations (adds FP8 kernels, sm_89 Flash Attention). |
-| `sm90a` | no | Hopper-specialized kernels (stubs today). |
+| `sm90a` | no | Placeholder for Hopper-specialized kernels: none ship yet (no tracked file under the repo matches `sm90`, checked 2026-10-29). |
 | `cudnn` | no | Compile + link the cuDNN-backed launchers (conv / pool / CTC-cuDNN). |
 
 ## Status codes

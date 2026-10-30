@@ -157,7 +157,7 @@ behind the triple.
 | --- | --- | --- |
 | `sm80` | yes | Build the Ampere-baseline kernel set. Runs forward-compatibly on Ada and Hopper. |
 | `sm89` | no | Build the Ada Lovelace specializations: FP8 GEMM, `FlashSdpaSm89Plan`. |
-| `sm90a` | no | Build the Hopper-specialized kernels (stubs today). |
+| `sm90a` | no | Placeholder for Hopper-specialized kernels: none ship yet (no tracked file under the repo matches `sm90`, checked 2026-10-29). |
 | `cudnn` | no | Link cuDNN and enable `Conv2dPlan`, `MaxPool2dPlan`, `AvgPool2dPlan`, `CtcLossCudnnPlan`. |
 
 `cudnn` is off by default because cuDNN is a separate NVIDIA download
