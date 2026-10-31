@@ -125,3 +125,12 @@ cp src/csrc/kernels/{mhc_layer,fused_rmsnorm_matmul,rmsnorm,sinkhorn_knopp,strea
     <baracuda>/vendor/mhc/src/
 cp LICENSE <baracuda>/vendor/mhc/
 ```
+
+## Known defect in the vendored Sinkhorn-Knopp backward (found 2026-10-31)
+
+`src/sinkhorn_knopp.cuh` `sinkhorn_knopp_backward` (both the checkpointed and the generic kernel) applies
+`d = d - y * sum(d * y)` per normalisation step and omits the `1/sum` factor. The adjoint of `y = x / sum(x)` is
+`dx = (dy - sum(dy * y)) / sum(x)`, so the upstream result is wrong (about `n` times too large for
+`K = exp(H)` near uniform). The vendored files stay byte-identical; baracuda's launcher
+(`kernels/attention/mhc_launcher.cu`, `mhc_sinkhorn_backward_exact_kernel`) uses its own adjoint, verified
+against central differences (`tests/hyper_connection_smoke.rs`). Not yet reported upstream.
