@@ -3,7 +3,7 @@
 Baseline generated for **baracuda-kernels** on **RTX 4070 (sm_89)**; the body
 has since been re-annotated with the **baracuda-kernelgen op-matrix audit**
 (rounds through **2026-07-03**). The workspace was at **0.1.0-alpha.28**
-(2026-10-25; the workspace is now at 0.1.0-alpha.67). The body reflects the alpha.77 line, with these items re-checked
+(2026-10-25; the workspace is now at 0.1.0-alpha.68). The body reflects the alpha.77 line, with these items re-checked
 against the code at `origin/main` on 2026-10-25 (ROADMAP SA-37): the
 `RepeatPlan` / `InterpolatePlan` dtypes, the `ArgsortPlan` row length, adaptive
 pool, and strided siblings. The other rows have **not** been re-audited for
