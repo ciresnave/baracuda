@@ -460,9 +460,9 @@ impl<T: Element> HyperConnectionPlan<T> {
             ));
         }
         self.check_backward_args(&args)?;
-        let (b, n, c) = (self.desc.batch, self.desc.n_streams, self.desc.hidden_dim);
         #[cfg(feature = "mhc")]
         {
+            let (b, n, c) = (self.desc.batch, self.desc.n_streams, self.desc.hidden_dim);
             // SAFETY: every pointer is a live device allocation of the checked shape and length; the handle is owned by `self`.
             let status = unsafe {
                 baracuda_kernels_sys::baracuda_kernels_mhc_layer_static_bf16_backward(
