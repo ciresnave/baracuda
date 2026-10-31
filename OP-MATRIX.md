@@ -3,11 +3,12 @@
 Baseline generated for **baracuda-kernels** on **RTX 4070 (sm_89)**; the body
 has since been re-annotated with the **baracuda-kernelgen op-matrix audit**
 (rounds through **2026-07-03**). The workspace was at **0.1.0-alpha.28**
-(2026-10-25; the workspace is now at 0.1.0-alpha.64). The body reflects the alpha.77 line, with these items re-checked
+(2026-10-25; the workspace is now at 0.1.0-alpha.65). The body reflects the alpha.77 line, with these items re-checked
 against the code at `origin/main` on 2026-10-25 (ROADMAP SA-37): the
 `RepeatPlan` / `InterpolatePlan` dtypes, the `ArgsortPlan` row length, adaptive
 pool, and strided siblings. The other rows have **not** been re-audited for
-alpha.78 onward. `baracuda-kernelgen` has since left this repo (it lives in
+alpha.78 onward, except that the Plans with no row at all are listed
+in the last section (SA-37 coverage pass, alpha.65). `baracuda-kernelgen` has since left this repo (it lives in
 `unpopped` / `unpopped-vocab`), so read its "Kernelgen audit" notes below as
 historical.
 See the per-op "Kernelgen audit" notes below for the generated-vs-bespoke
@@ -481,3 +482,37 @@ in subsequent phases:
 - ✓ EmbeddingBag Max mode — Phase 25.
 - ✓ BatchedOrmqrWyPlan complex variants — Phase 26.
 - ✓ f16 / bf16 activations for GgufMmvqPlan — Phase 18.
+
+## Plans added by the SA-37 coverage pass (alpha.65)
+
+37 `pub struct *Plan` types in `crates/baracuda-kernels/src` had no row above (found by listing the `Plan` structs at `origin/main` and looking for each name or its stem in this file; 293 Plan types, 37 with no mention). Each row below is taken from the type's own doc comment; the backend, dtype and shape columns above were NOT re-derived for them, no kernel was re-run for this pass, and `Notes` is a paraphrase of the doc comment, not a measurement. Treat the doc comment as the authority.
+
+| Plan | Source (under `crates/baracuda-kernels/src/`) | Per its doc comment |
+|---|---|---|
+| `BatchPagedDecodeFp8Plan` | `attention/batch_paged_decode_fp8.rs` | FP8 KV-cache paged decode; Q/O `f16`/`bf16`, KV fp8 |
+| `BatchRaggedPrefillPlan` | `attention/batch_ragged_prefill.rs` | Batched ragged-KV prefill; `f16`/`bf16`; needs the `flashinfer` feature |
+| `CascadeAttentionPlan` | `attention/cascade_attn.rs` | Cascade-attention LSE merge (FlashInfer `MergeStateInPlace`); `f16`/`bf16` (f32 accumulate); needs `flashinfer` |
+| `CascadeMergeStatesPlan` | `attention/cascade_attn.rs` | Many-way cascade LSE merge (FlashInfer `MergeStates`); f32 accumulate; needs `flashinfer` |
+| `CausalConv1dPlan / CausalConv1dBackwardPlan` | `causal_conv1d.rs` | Causal conv1d forward and backward |
+| `Col2Im1dPlan` | `conv/col2im1d.rs` | 1-D col2im (inverse of `Im2Col1dPlan`); `f32`/`f64`/`f16`/`bf16`; caller pre-zeroes the output (atomicAdd accumulate) |
+| `EmbeddingBagMaxPlan / EmbeddingBagMaxBackwardPlan` | `embedding/embedding_bag_max*.rs` | `embedding_bag` Max mode; FW weight/output `f32`/`f64`/`f16`/`bf16`, BW `f32`/`f64` only, BW non-deterministic (atomicAdd), caller pre-zeroes `dweight` |
+| `FlashDecodingPlan` | `attention/flash_decoding.rs` | Split-K attention decode for `seq_q = 1` (Dao 2023) |
+| `FlashSdpaVarlenPlan / FlashSdpaVarlenBackwardPlan` | `attention/flash_sdpa_varlen.rs` | Flash attention varlen via the FA2 varlen path; `f16`/`bf16` only (Phase 59b) |
+| `FusedLinearCrossEntropyPlan / FusedLinearCrossEntropyBackwardPlan` | `loss/fused_linear_cross_entropy.rs` | Fused linear + cross-entropy; owns a lazy cuBLAS handle (`!Send`/`!Sync`); BW scales saved gradients by `dy` |
+| `GemmSparse24Plan` | `gemm/sparse24.rs` | 2:4 structured-sparsity GEMM; `f32`/`f16`/`bf16`; Tier 1 inflates to dense then multiplies (workspace `M*K*sizeof(T)`) |
+| `GemvDensePlan` | `gemm/gemv_dense.rs` | Capture-safe dense m=1 GEMV (bespoke); see `DenseGemmPlan` |
+| `HyperConnectionPlan` | `attention/hyper_connection.rs` | mHC Hyper-Connection forward, static-H, bf16 weights, Tier 1 (see SA-31 for Tier 2/3) |
+| `Im2ColPlan / Im2Col1dPlan` | `conv/im2col.rs, conv/im2col1d.rs` | 2-D / 1-D im2col, forward only; `f32`/`f64`/`f16`/`bf16`; bit-exact copy, no workspace |
+| `IndexAddPlan` | `indexing/index_add.rs` | `index_add` via atomicAdd (duplicate-index safe); `f32`/`f64`/`f16`/`bf16` |
+| `Int4AwqGemmPlan` | `gemm/int4_awq.rs` | AWQ int4 W4A16 GEMM; fp16 only (HF `*-AWQ` checkpoints) |
+| `Int4MarlinGemmPlan` | `gemm/int4_marlin.rs` | Marlin int4 W4A16 GEMM; fp16 only; decode batch M in [1, 64] |
+| `Nf4DequantizePlan / Nf4MmvqPlan / Nf4MmvqMultiMPlan` | `quantize/nf4.rs` | NF4: bulk dequantize (debug/export), fused dequant + GEMV (M=1), multi-M GEMV (M in {1,2,4,8}) |
+| `PagedKvAppendPlan` | `attention/paged_kv_append.rs` | Paged KV-cache append, decode time, one token per request |
+| `PerRowSamplingPlan / SpeculativeSamplingPlan` | `random/perrow_spec_sampling.rs` | Per-row sort-free sampling; speculative-decode verification (FlashInfer `ChainSpeculativeSampling`) |
+| `RingAttentionPlan` | `attention/ring_attention.rs` | Ring attention forward across `P > 1` GPUs via NCCL; works at `world_size == 1` as the validation path |
+| `SdpaBlockSparsePlan` | `attention/sdpa_block_sparse.rs` | Block-sparse SDPA forward; `f32`/`f16`/`bf16`/`f64` (f16/bf16 accumulate f32); no workspace |
+| `SelectiveScanPlan / SelectiveScanBackwardPlan` | `attention/selective_scan.rs` | Mamba-1 selective scan forward and backward |
+| `SmoothQuantLinearPlan` | `quantize/smoothquant.rs` | SmoothQuant W8A8 linear; Rust composition over the bespoke `quantized_linear_w8a8` kernel |
+| `SsdChunkScanPlan / SsdChunkScanBackwardPlan` | `attention/ssd_chunk_scan.rs` | Mamba-2 SSD chunk scan forward and backward |
+| `TokenPenaltyPlan` | `random/token_penalty.rs` | Token penalties (native baracuda, always available) |
+| `TopKTopPSamplingPlan` | `random/topk_topp_sampling.rs` | Sort-free top-K / top-P / min-P sampling (FlashInfer `Top*FromProb`); needs `flashinfer` |
