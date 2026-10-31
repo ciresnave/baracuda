@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-nvshmem-sys"
-version = "0.1.0-alpha.74"
+version = "0.1.0-alpha.75"
 description = "Raw FFI bindings and dynamic loader for NVIDIA NVSHMEM host library (OpenSHMEM symmetric-heap one-sided comms on GPUs)."
 edition.workspace = true
 license.workspace = true
