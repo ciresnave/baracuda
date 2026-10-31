@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.77 - 2026-10-31
+
+### Fixed
+
+- **KISS-OPS-6.13-0010/-0011 (window geometry):** pool and im2col plans computed the output extent with Rust's truncating `/`, so a negative numerator smaller than the stride gave extent 1 where KISS says 0 (`h_in=3, window=4, stride=4`). New `window_axis::out_extent` uses `floor((n+2p-D)/s)+1` with `D=d(k-1)+1`, 0 if no window fits. `Im2ColPlan` and `Im2Col1dPlan` (and `col2im1d`) now decline any axis where an output window has no in-bounds tap, including KISS's control `n=1,k=2,d=2,s=1,p=1`. Host-only verified (9 lib unit tests, NOT run on device); for valid shapes the extent is unchanged. Not touched: the same truncating formula in conv, conv-transpose and lp_pool.
+
 ## 0.1.0-alpha.76 - 2026-10-31
 
 ### Changed
