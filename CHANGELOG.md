@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.72 - 2026-10-31
+
+### Changed
+
+- **BREAKING (SA-35):** `Error::CutlassInternal(i32)` is now `Error::KernelInternal(i32)` (the status-code ABI is shared by every bespoke kernel, not only CUTLASS ones); its message reads `kernel internal error (status code N)`. `Error` and `Result` are now defined in `baracuda-kernels-types` (new dependency `thiserror`), and `baracuda_cutlass::{Error, Result}` and `baracuda_kernels::Error` re-export them, so the old import paths and the type identity are unchanged: only code that names the variant `CutlassInternal` or matches the old message text breaks. Fuel, openclownfish and Vulkane mention the variant in 0 files (`git grep` at their `origin/main`; the same grep finds 110 in baracuda). Two commits: the pure rename (114 files), then the move. Ran locally: `DOCS_RS=1 cargo clippy --workspace --all-targets --locked -- -D warnings` clean; a scratch crate (outside the repo, path deps on `baracuda-cutlass` / `baracuda-kernels` / `baracuda-kernels-types`) that imports `baracuda_cutlass::{Error, Result}` and `baracuda_kernels::Error`, matches `Error::KernelInternal`, and passes each as `baracuda_kernels_types::Error` compiles with `cargo check`. NOT run: nvcc builds and device tests (CI covers the compile).
+
 ## 0.1.0-alpha.71 - 2026-10-31
 
 ### Changed
