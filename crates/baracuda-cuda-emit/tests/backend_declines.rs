@@ -14,8 +14,8 @@ use unpopped::backend::LowerError;
 use unpopped::ir::BinaryOp;
 use unpopped::{OpDef, UnaryOp, input, try_generate};
 use unpopped_cpu_c::CpuC;
-use unpopped_slang::Slang;
 use unpopped_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
+use vulkane_slang_emit::Slang;
 
 /// CpuC lowers `f16` / `bf16` (a CPU codec since unpopped-cpu-c 0.15.0: the halves
 /// are carried in `unsigned short` and converted through integer helpers, where
@@ -91,7 +91,7 @@ fn cpuc_emits_halves_and_f32_and_declines_vectorized_schedule() {
 ///
 /// Durability note for whoever touches this next: this asserts the 0.3.0 **typed**
 /// decline (both that it is `Err(LowerError::UnsupportedOp)` AND that the `detail`
-/// names the refused op). If it fails after an `unpopped-slang` upgrade, first check
+/// names the refused op). If it fails after an `vulkane-slang-emit` upgrade, first check
 /// whether the decline stopped being typed — a `panic!` boundary or a bare `String`
 /// reason would be a REGRESSION here (it was already typed), the inverse of the
 /// pre-0.3.0 note: a green→red now means the decline got WORSE, not better. (This
@@ -137,7 +137,7 @@ fn slang_declines_copysign_nextafter_and_emits_pow() {
             ),
             other => panic!(
                 "Slang should typed-decline {op_kind:?} as LowerError::UnsupportedOp \
-                 (unpopped-slang 0.3.0 typed-decline seam), got {other:?}"
+                 (vulkane-slang-emit typed-decline seam), got {other:?}"
             ),
         }
     }

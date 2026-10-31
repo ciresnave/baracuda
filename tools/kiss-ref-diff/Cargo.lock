@@ -4,11 +4,11 @@ version = 4
 
 [[package]]
 name = "baracuda-build"
-version = "0.1.0-alpha.70"
+version = "0.1.0-alpha.71"
 
 [[package]]
 name = "baracuda-core"
-version = "0.1.0-alpha.70"
+version = "0.1.0-alpha.71"
 dependencies = [
  "baracuda-types",
  "libloading",
@@ -17,7 +17,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cuda-emit"
-version = "0.35.3"
+version = "0.36.0"
 dependencies = [
  "unpopped",
  "unpopped-vocab",
@@ -25,7 +25,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cuda-sys"
-version = "0.1.0-alpha.70"
+version = "0.1.0-alpha.71"
 dependencies = [
  "baracuda-build",
  "baracuda-core",
@@ -34,7 +34,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-driver"
-version = "0.1.0-alpha.70"
+version = "0.1.0-alpha.71"
 dependencies = [
  "baracuda-core",
  "baracuda-cuda-sys",
@@ -44,7 +44,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-nvrtc"
-version = "0.1.0-alpha.70"
+version = "0.1.0-alpha.71"
 dependencies = [
  "baracuda-core",
  "baracuda-nvrtc-sys",
@@ -54,7 +54,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-nvrtc-sys"
-version = "0.1.0-alpha.70"
+version = "0.1.0-alpha.71"
 dependencies = [
  "baracuda-build",
  "baracuda-core",
@@ -63,7 +63,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-types"
-version = "0.1.0-alpha.70"
+version = "0.1.0-alpha.71"
 dependencies = [
  "unpopped-vocab",
 ]
@@ -277,9 +277,9 @@ checksum = "a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563"
 
 [[package]]
 name = "unpopped"
-version = "0.35.3"
+version = "0.36.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a27dc2edef2d41f45eb5e6aecef5be27e835eb6b4ab5d966ed36f3a43ad7ca9"
+checksum = "bb8cf667e442361a7de35752a9ae3165687f767dfe49536c1ac473a295568309"
 dependencies = [
  "libm",
  "serde",
@@ -289,9 +289,9 @@ dependencies = [
 
 [[package]]
 name = "unpopped-vocab"
-version = "0.35.3"
+version = "0.36.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "541e96c84f98e11b267af785e7bddf6e80e36fcfec8cdb36cb6cf726f7f7c393"
+checksum = "02856349f3c917217085641b013a7ce758e0628e06b56f0c27f2a5c6c345e8f8"
 dependencies = [
  "float8",
  "half",

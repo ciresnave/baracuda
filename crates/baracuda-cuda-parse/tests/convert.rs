@@ -16,10 +16,11 @@
 //! **Not a correctness proof for CUDA parsing in general** -- see the crate's
 //! module doc. These are CUDA-idiom golden vectors.
 
-use unpopped::convert::{SLANG, lift_elementwise, lift_reduction, lift_scan};
+use unpopped::convert::{lift_elementwise, lift_reduction, lift_scan};
 use unpopped::ir::{Access, BinaryOp, ReduceOp, ScalarExpr, UnaryOp};
 use unpopped::lift::{LiftError, Lifted};
 use unpopped_vocab::ElementKind;
+use vulkane_slang_parse::SLANG;
 
 use baracuda_cuda_parse::{CUDA, parse_cuda};
 

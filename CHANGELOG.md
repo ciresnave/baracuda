@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.71 - 2026-10-31
+
+### Changed
+
+- **BREAKING (version line):** `unpopped`, `unpopped-vocab`, `unpopped-cpu-c` 0.35.3 -> 0.36.0 (root pins, `baracuda-cuda-emit` dev-dep, `tools/kiss-ref-diff` incl. its lock); `baracuda-cuda-emit` and `baracuda-cuda-parse` follow to 0.36.0 (the Versioning exception above); `fuel-kernel-seam` / `fuel-kernel-seam-types` 0.32.0 -> 0.33.0 (both on `unpopped-vocab` 0.36, so the graph holds one vocab copy: `cargo tree -d` lists no `unpopped*`, `fuel-*` or `vulkane-*` package). `unpopped-slang` ended at 0.35.3: the test-only dev-dep becomes `vulkane-slang-emit` 0.18.0 (`vulkane_slang_emit::Slang`), and `SLANG` left `unpopped::convert`, so `baracuda-cuda-emit` and `baracuda-cuda-parse` gain `vulkane-slang-parse` 0.18.0 as a dev-dep for `tests/convert.rs` (it needs Rust 1.90; dev-dep only, MSRV job unaffected). unpopped 0.37.0 is also published but `vulkane-slang-emit` 0.18.0 and `fuel-kernel-seam` 0.33.0 require `^0.36`, so 0.37 waits for their republish. Host tests: `cargo test --locked -p baracuda-cuda-emit -p baracuda-cuda-parse -p baracuda-cuda-seam --features baracuda-cuda-emit/convert` green (emit 332 lib + 90 integration, parse 14, seam 20). NOT run on device.
+
 ## 0.1.0-alpha.70 - 2026-10-31
 
 ### Added

@@ -11,10 +11,11 @@ use baracuda_cuda_emit::Cuda;
 // pair (`lift_elementwise_slang` → `lift_elementwise(&SLANG, …)`, `lift_reduction_cuda`
 // → `lift_reduction(&CUDA, …)`); the language is now the `Frontend` const, not the name.
 use baracuda_cuda_parse::CUDA;
-use unpopped::convert::{SLANG, lift_elementwise, lift_reduction};
+use unpopped::convert::{lift_elementwise, lift_reduction};
 use unpopped::generate;
 use unpopped_cpu_c::CpuC;
 use unpopped_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
+use vulkane_slang_parse::SLANG;
 
 const F32: &[ElementKind] = &[ElementKind::F32];
 
