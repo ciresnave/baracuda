@@ -20,7 +20,7 @@ at alpha.82.
 
 ### Changed
 
-- `unpopped`, `unpopped-vocab`, `unpopped-cpu-c` 0.38.1 -> 0.38.4 (root pins, `baracuda-cuda-emit` dev-dep, `tools/kiss-ref-diff` incl. its lock). `baracuda-cuda-emit` and `baracuda-cuda-parse` 0.38.1 -> 0.38.2: MAJOR.MINOR still follow the `unpopped` line they build against (0.38), PATCH is baracuda's own counter (Versioning exception above). `fuel-kernel-seam` / `-types` stay at 0.34.0 (their `unpopped-vocab ^0.38.1` accepts 0.38.4); `vulkane-slang-*` stay at 0.19.0. The graph holds one copy of each (checked in both lockfiles). No library source changed; the int Div/Shl/Shr totality rules of unpopped 0.38.3 are NOT implemented in the emitter (held until the Frontend/Backend seam settles, PM 2026-10-31).
+- `unpopped`, `unpopped-vocab`, `unpopped-cpu-c` 0.38.1 -> 0.38.4 (root pins, `baracuda-cuda-emit` dev-dep, `tools/kiss-ref-diff` incl. its lock). `baracuda-cuda-emit` and `baracuda-cuda-parse` 0.38.1 -> 0.38.4: both are the crates on the Versioning exception above (their number answers "which `unpopped` does this work with"), and by the practice recorded in their `Cargo.toml` comments and every prior bump (0.34.11, 0.35.3, 0.36.0, 0.38.1) the PATCH is set equal to the Unpopped patch they build against. `fuel-kernel-seam` / `-types` stay at 0.34.0 (their `unpopped-vocab ^0.38.1` accepts 0.38.4); `vulkane-slang-*` stay at 0.19.0. The graph holds one copy of each (checked in both lockfiles). No library source changed; the int Div/Shl/Shr totality rules of unpopped 0.38.3 are NOT implemented in the emitter (held until the Frontend/Backend seam settles, PM 2026-10-31).
 
 ## 0.1.0-alpha.75 - 2026-10-31
 

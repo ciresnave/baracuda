@@ -113,7 +113,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cuda-emit"
-version = "0.38.2"
+version = "0.38.4"
 dependencies = [
  "baracuda-cuda-parse",
  "baracuda-driver",
@@ -127,7 +127,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cuda-parse"
-version = "0.38.2"
+version = "0.38.4"
 dependencies = [
  "tree-sitter",
  "tree-sitter-cuda",
