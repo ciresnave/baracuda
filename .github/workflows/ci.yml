@@ -75,6 +75,10 @@ jobs:
       - name: feature-coverage guard
         shell: bash
         run: bash scripts/check-feature-coverage.sh
+      # NUL guard: an editing-tool-mangled backslash-zero becomes a real NUL that still compiles.
+      - name: no-NUL-bytes guard
+        shell: bash
+        run: python3 scripts/check-no-nul-bytes.py
       # Benchmark-provenance guard: BENCHMARKS.md states its hardware TWICE, and
       # `tools/build_benchmarks_table.py` rewrites only what lies BETWEEN its
       # markers — so the top-level `**Hardware**:` header is structurally
@@ -530,4 +534,4 @@ jobs:
     name: Portfolio checks (advisory)
     permissions:
       contents: read
-    uses: ciresnave/coderipper/.github/workflows/portfolio.yml@e40c8557f27a797879973b9a011bd6583f5d88ca # 0.9.20
+    uses: ciresnave/coderipper/.github/workflows/portfolio.yml@ee9c3950c510fae136d316fed3bd9ecda343cede # coderipper main 0.9.25 (installs 0.9.24)
