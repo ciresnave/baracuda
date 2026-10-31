@@ -15,8 +15,7 @@ NUL = b"\x00"
 
 
 def tracked_files() -> list[str]:
-    cmd = ["git", "ls-files", "-z"]
-    out = subprocess.run(cmd, capture_output=True, check=True).stdout  # nosec B603 B607 - fixed argv, `git` from PATH on purpose
+    out = subprocess.run(["git", "ls-files", "-z"], capture_output=True, check=True).stdout  # nosec B603 B607 - fixed argv, `git` from PATH on purpose
     return [f.decode() for f in out.split(NUL) if f]
 
 
