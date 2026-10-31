@@ -123,38 +123,7 @@ impl<T: Element> Im2ColPlan<T> {
                 "baracuda-kernels::Im2ColPlan: dtype must be f32 / f64 / f16 / bf16",
             ));
         }
-        if desc.batch <= 0 || desc.channels <= 0 || desc.h_in <= 0 || desc.w_in <= 0 {
-            return Err(Error::InvalidProblem(
-                "baracuda-kernels::Im2ColPlan: input shape extents must be > 0",
-            ));
-        }
-        if desc.kh <= 0 || desc.kw <= 0 {
-            return Err(Error::InvalidProblem(
-                "baracuda-kernels::Im2ColPlan: kernel extents must be > 0",
-            ));
-        }
-        if desc.stride_h <= 0 || desc.stride_w <= 0 {
-            return Err(Error::InvalidProblem(
-                "baracuda-kernels::Im2ColPlan: stride must be > 0",
-            ));
-        }
-        if desc.dilation_h <= 0 || desc.dilation_w <= 0 {
-            return Err(Error::InvalidProblem(
-                "baracuda-kernels::Im2ColPlan: dilation must be > 0",
-            ));
-        }
-        if desc.pad_h < 0 || desc.pad_w < 0 {
-            return Err(Error::InvalidProblem(
-                "baracuda-kernels::Im2ColPlan: padding must be >= 0",
-            ));
-        }
-        let (h_out, w_out) = compute_im2col_2d_dims(desc);
-        if h_out <= 0 || w_out <= 0 {
-            return Err(Error::InvalidProblem(
-                "baracuda-kernels::Im2ColPlan: computed output dims <= 0 — \
-                 padding / stride / dilation combination produces an empty output",
-            ));
-        }
+        let (h_out, w_out) = validate_geometry(desc)?;
         let sku = build_im2col_sku::<T>(ConvKind::Im2Col2d);
         Ok(Self {
             desc: *desc,
@@ -324,14 +293,70 @@ impl<T: Element> Im2ColPlan<T> {
     }
 }
 
+/// Geometry validation shared by [`Im2ColPlan::select`] and the host tests: positive
+/// extents, no empty output, and (KISS-OPS-6.13-0011) a real in-bounds tap in every output
+/// window on both axes. The attribute-only bound `2 * pad <= dilated extent` is not enough
+/// once `dilation > 1`: `h_in = 1, kh = 2, dilation_h = 2, pad_h = 1` has one window whose taps
+/// lie at -1 and 1.
+fn validate_geometry(desc: &Im2ColDescriptor) -> Result<(i32, i32)> {
+    validate_attrs(desc)?;
+    let (h_out, w_out) = compute_im2col_2d_dims(desc);
+    if h_out <= 0 || w_out <= 0 {
+        return Err(Error::InvalidProblem(
+            "baracuda-kernels::Im2ColPlan: computed output dims <= 0 — \
+             padding / stride / dilation combination produces an empty output",
+        ));
+    }
+    let tap =
+        |n, pad, k, stride, dil| crate::window_axis::every_window_has_tap(n, pad, k, stride, dil);
+    let h_ok = tap(
+        desc.h_in,
+        desc.pad_h,
+        desc.kh,
+        desc.stride_h,
+        desc.dilation_h,
+    );
+    let w_ok = tap(
+        desc.w_in,
+        desc.pad_w,
+        desc.kw,
+        desc.stride_w,
+        desc.dilation_w,
+    );
+    if !(h_ok && w_ok) {
+        return Err(Error::InvalidProblem(
+            "baracuda-kernels::Im2ColPlan: an output window has no in-bounds tap \
+             (KISS-OPS-6.13-0011) — padding / dilation / extent combination",
+        ));
+    }
+    Ok((h_out, w_out))
+}
+
+/// Sign / positivity checks on the descriptor fields (no geometry).
+fn validate_attrs(desc: &Im2ColDescriptor) -> Result<()> {
+    let msg = if desc.batch <= 0 || desc.channels <= 0 || desc.h_in <= 0 || desc.w_in <= 0 {
+        "baracuda-kernels::Im2ColPlan: input shape extents must be > 0"
+    } else if desc.kh <= 0 || desc.kw <= 0 {
+        "baracuda-kernels::Im2ColPlan: kernel extents must be > 0"
+    } else if desc.stride_h <= 0 || desc.stride_w <= 0 {
+        "baracuda-kernels::Im2ColPlan: stride must be > 0"
+    } else if desc.dilation_h <= 0 || desc.dilation_w <= 0 {
+        "baracuda-kernels::Im2ColPlan: dilation must be > 0"
+    } else if desc.pad_h < 0 || desc.pad_w < 0 {
+        "baracuda-kernels::Im2ColPlan: padding must be >= 0"
+    } else {
+        return Ok(());
+    };
+    Err(Error::InvalidProblem(msg))
+}
+
 /// Standard `(H_out, W_out)` formula — matches the PyTorch / cuDNN
 /// convention used by [`super::Conv2dPlan`].
 #[inline]
 pub(super) fn compute_im2col_2d_dims(d: &Im2ColDescriptor) -> (i32, i32) {
-    let h_eff = d.dilation_h * (d.kh - 1) + 1;
-    let w_eff = d.dilation_w * (d.kw - 1) + 1;
-    let h_out = (d.h_in + 2 * d.pad_h - h_eff) / d.stride_h + 1;
-    let w_out = (d.w_in + 2 * d.pad_w - w_eff) / d.stride_w + 1;
+    // Floor semantics, `0` when no window fits (KISS-OPS-6.13-0010).
+    let h_out = crate::window_axis::out_extent(d.h_in, d.pad_h, d.kh, d.stride_h, d.dilation_h);
+    let w_out = crate::window_axis::out_extent(d.w_in, d.pad_w, d.kw, d.stride_w, d.dilation_w);
     (h_out, w_out)
 }
 
@@ -382,5 +407,51 @@ pub(crate) fn map_im2col_status(code: i32) -> Result<()> {
         )),
         4 => Err(Error::WorkspaceTooSmall { needed: 0, got: 0 }),
         n => Err(Error::KernelInternal(n)),
+    }
+}
+
+#[cfg(test)]
+mod window_tests {
+    use super::*;
+
+    fn desc(h_in: i32, kh: i32, dil: i32, pad: i32) -> Im2ColDescriptor {
+        Im2ColDescriptor {
+            batch: 1,
+            channels: 1,
+            h_in,
+            w_in: 8,
+            kh,
+            kw: 1,
+            stride_h: 1,
+            stride_w: 1,
+            pad_h: pad,
+            pad_w: 0,
+            dilation_h: dil,
+            dilation_w: 1,
+            element: ElementKind::F32,
+        }
+    }
+
+    #[test]
+    fn declines_a_window_with_no_real_tap() {
+        // KISS-OPS-6.13-0011 counterexample: one window, taps at -1 and 1 over h_in = 1.
+        let bad = desc(1, 2, 2, 1);
+        assert_eq!(
+            compute_im2col_2d_dims(&bad).0,
+            1,
+            "the extent alone is not the problem"
+        );
+        assert!(validate_geometry(&bad).is_err());
+        // Control: over h_in = 4 every window has a tap, and the geometry validates.
+        assert_eq!(validate_geometry(&desc(4, 2, 2, 1)).unwrap().0, 4);
+    }
+
+    #[test]
+    fn declines_an_axis_where_no_window_fits() {
+        // h_in = 3, kh = 5, stride 1, no pad: no window fits. (The truncating form also got
+        // this one right; the shape it got wrong had a negative numerator smaller than the
+        // stride, covered in `window_axis` and the 1-D test.)
+        assert_eq!(compute_im2col_2d_dims(&desc(3, 5, 1, 0)).0, 0);
+        assert!(validate_geometry(&desc(3, 5, 1, 0)).is_err());
     }
 }
