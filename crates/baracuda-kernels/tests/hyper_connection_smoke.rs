@@ -136,14 +136,7 @@ fn hyper_connection_f32_static_h_basic() {
     let h_post = gen_h_post();
     let h_res = gen_h_res();
 
-    let desc = HyperConnectionDescriptor {
-        batch: B,
-        hidden_dim: C,
-        n_streams: N,
-        sinkhorn_iters: SINKHORN_ITERS,
-        eps: EPS,
-        element: ElementKind::F32,
-    };
+    let desc = descriptor();
     let plan = HyperConnectionPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("plan select");
 
@@ -191,14 +184,7 @@ fn hyper_connection_f32_static_h_h_post_changes_output() {
     let h_post_scaled: Vec<f32> = h_post_base.iter().map(|&v| v + 1.0).collect();
     let h_res = gen_h_res();
 
-    let desc = HyperConnectionDescriptor {
-        batch: B,
-        hidden_dim: C,
-        n_streams: N,
-        sinkhorn_iters: SINKHORN_ITERS,
-        eps: EPS,
-        element: ElementKind::F32,
-    };
+    let desc = descriptor();
     let plan = HyperConnectionPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("plan select");
 
@@ -317,14 +303,7 @@ fn hyper_connection_f32_static_h_matches_f64_reference() {
         h_post: widen(&gen_h_post()),
         h_res: widen(&gen_h_res()),
     };
-    let desc = HyperConnectionDescriptor {
-        batch: B,
-        hidden_dim: C,
-        n_streams: N,
-        sinkhorn_iters: SINKHORN_ITERS,
-        eps: EPS,
-        element: ElementKind::F32,
-    };
+    let desc = descriptor();
     let plan = HyperConnectionPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("plan select");
     let got = run_once(
@@ -384,6 +363,17 @@ impl HcRef {
     }
 }
 
+fn descriptor() -> HyperConnectionDescriptor {
+    HyperConnectionDescriptor {
+        batch: B,
+        hidden_dim: C,
+        n_streams: N,
+        sinkhorn_iters: SINKHORN_ITERS,
+        eps: EPS,
+        element: ElementKind::F32,
+    }
+}
+
 fn gen_d_out() -> Vec<f32> {
     (0..(B * N * C) as usize)
         .map(|i| ((i as f32) * 0.021 + 0.3).cos() * 0.5)
@@ -392,14 +382,7 @@ fn gen_d_out() -> Vec<f32> {
 
 /// Runs forward then backward on a training plan; returns the five gradients in `GROUPS` order.
 fn run_backward_once(ctx: &Context, stream: &Stream, r: &HcRef) -> Vec<Vec<f32>> {
-    let desc = HyperConnectionDescriptor {
-        batch: B,
-        hidden_dim: C,
-        n_streams: N,
-        sinkhorn_iters: SINKHORN_ITERS,
-        eps: EPS,
-        element: ElementKind::F32,
-    };
+    let desc = descriptor();
     let plan =
         HyperConnectionPlan::<f32>::select_training(stream, &desc, PlanPreference::default())
             .expect("select_training");
@@ -489,14 +472,7 @@ fn hyper_connection_f32_static_h_backward_matches_finite_differences() {
 #[test]
 fn hyper_connection_backward_needs_a_training_plan() {
     let (ctx, stream) = setup();
-    let desc = HyperConnectionDescriptor {
-        batch: B,
-        hidden_dim: C,
-        n_streams: N,
-        sinkhorn_iters: SINKHORN_ITERS,
-        eps: EPS,
-        element: ElementKind::F32,
-    };
+    let desc = descriptor();
     let plan = HyperConnectionPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("plan select");
     let d_out = DeviceBuffer::from_slice(&ctx, &gen_d_out()).expect("up");

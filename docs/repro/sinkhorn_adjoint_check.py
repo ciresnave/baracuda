@@ -31,13 +31,23 @@ def forward(K, iters):
     return M
 
 
+def row_step(tile):
+    r = [1 / sum(tile[i]) for i in range(N)]
+    return [[tile[i][j] * r[i] for j in range(N)] for i in range(N)], r
+
+
+def col_step(tile):
+    c = [1 / sum(tile[i][j] for i in range(N)) for j in range(N)]
+    return [[tile[i][j] * c[j] for j in range(N)] for i in range(N)], c
+
+
 def checkpoints(K, iters):
     tile = [r[:] for r in K]; chk = []; rin = []; cin = []
     for _ in range(iters):
-        r = [1 / sum(tile[i]) for i in range(N)]
-        tile = [[tile[i][j] * r[i] for j in range(N)] for i in range(N)]; chk.append([x[:] for x in tile]); rin.append(r)
-        c = [1 / sum(tile[i][j] for i in range(N)) for j in range(N)]
-        tile = [[tile[i][j] * c[j] for j in range(N)] for i in range(N)]; cin.append(c)
+        tile, r = row_step(tile)
+        chk.append([x[:] for x in tile]); rin.append(r)
+        tile, c = col_step(tile)
+        cin.append(c)
     return chk, rin, cin
 
 

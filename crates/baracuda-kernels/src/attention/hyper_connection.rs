@@ -184,6 +184,11 @@ impl<T: Element> HyperConnectionPlan<T> {
                  (f16 / bf16 deferred to Tier 3)",
             ));
         }
+        Self::validate_shape(desc)?;
+        Self::validate_solver(desc, training)
+    }
+
+    fn validate_shape(desc: &HyperConnectionDescriptor) -> Result<()> {
         if desc.batch <= 0 || desc.hidden_dim <= 0 || desc.n_streams <= 0 {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::HyperConnectionPlan: batch / hidden_dim / n_streams must be positive",
@@ -201,6 +206,10 @@ impl<T: Element> HyperConnectionPlan<T> {
                  one channel per stream for the aggregate kernel)",
             ));
         }
+        Ok(())
+    }
+
+    fn validate_solver(desc: &HyperConnectionDescriptor, training: bool) -> Result<()> {
         if training && desc.sinkhorn_iters > 20 {
             return Err(Error::Unsupported(
                 "baracuda-kernels::HyperConnectionPlan: training plans support sinkhorn_iters <= 20",
@@ -219,14 +228,7 @@ impl<T: Element> HyperConnectionPlan<T> {
         Ok(())
     }
 
-    fn select_impl(
-        _stream: &Stream,
-        desc: &HyperConnectionDescriptor,
-        _pref: PlanPreference,
-        training: bool,
-    ) -> Result<Self> {
-        Self::validate_descriptor(desc, training)?;
-
+    fn build_sku() -> KernelSku {
         let precision_guarantee = PrecisionGuarantee {
             math_precision: MathPrecision::F32,
             accumulator: ElementKind::F32,
@@ -237,7 +239,7 @@ impl<T: Element> HyperConnectionPlan<T> {
             bit_stable_on_same_hardware: true,
             deterministic: true,
         };
-        let sku = KernelSku {
+        KernelSku {
             category: OpCategory::Attention,
             op: AttentionKind::HyperConnection as u16,
             element: T::KIND,
@@ -247,7 +249,18 @@ impl<T: Element> HyperConnectionPlan<T> {
             arch: ArchSku::Sm80,
             backend: BackendKind::Bespoke,
             precision_guarantee,
-        };
+        }
+    }
+
+    fn select_impl(
+        _stream: &Stream,
+        desc: &HyperConnectionDescriptor,
+        _pref: PlanPreference,
+        training: bool,
+    ) -> Result<Self> {
+        Self::validate_descriptor(desc, training)?;
+
+        let sku = Self::build_sku();
 
         #[cfg(feature = "mhc")]
         {
@@ -424,13 +437,8 @@ impl<T: Element> HyperConnectionPlan<T> {
 
 impl<T: Element> HyperConnectionPlan<T> {
     fn check_backward_args(&self, args: &HyperConnectionBackwardArgs<'_, T>) -> Result<()> {
+        Self::check_backward_fits(args)?;
         let (b, n, c) = (self.desc.batch, self.desc.n_streams, self.desc.hidden_dim);
-        crate::view_check::check_fits(&args.d_out)?;
-        crate::view_check::check_fits(&args.d_x_expanded)?;
-        crate::view_check::check_fits(&args.d_rmsnorm_weight)?;
-        crate::view_check::check_fits(&args.d_h_pre)?;
-        crate::view_check::check_fits(&args.d_h_post)?;
-        crate::view_check::check_fits(&args.d_h_res)?;
         let shapes_ok = args.d_out.shape() == [b, n, c]
             && args.d_x_expanded.shape() == [b, n, c]
             && args.d_rmsnorm_weight.shape() == [c]
@@ -443,6 +451,15 @@ impl<T: Element> HyperConnectionPlan<T> {
             ));
         }
         Ok(())
+    }
+
+    fn check_backward_fits(args: &HyperConnectionBackwardArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.d_out)?;
+        crate::view_check::check_fits(&args.d_x_expanded)?;
+        crate::view_check::check_fits(&args.d_rmsnorm_weight)?;
+        crate::view_check::check_fits(&args.d_h_pre)?;
+        crate::view_check::check_fits(&args.d_h_post)?;
+        crate::view_check::check_fits(&args.d_h_res)
     }
 
     /// Static-H backward (Tier 2). The plan must come from
