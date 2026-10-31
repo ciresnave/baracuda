@@ -16,6 +16,14 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.66 - 2026-10-31
+
+Metadata and docs only. No code, no device run.
+
+### Added
+
+- `README.md` and `readme =` for `baracuda-cuda-emit`, `baracuda-cuda-parse`, `baracuda-cuda-seam`, `baracuda-cuda-vocab`, `baracuda-seam`; `keywords` and `categories` for the first four (ROADMAP SA-50, from releaseant's R5 dry-run quality warnings).
+
 ## 0.1.0-alpha.65 - 2026-10-31
 
 Docs only. No code, no device run.
