@@ -449,25 +449,3 @@ fn ring_attention_f16_single_rank_causal() {
         );
     }
 }
-
-// Multi-rank scaffold — requires 2+ GPUs and is deferred. The body
-// builds the right shapes and exercises the descriptor / args API
-// but does not actually launch a multi-rank communicator. Multi-rank
-// validation lands in a future hardware-enabled session.
-#[test]
-fn ring_attention_multi_rank_scaffold() {
-    // This test exists for API discoverability. The actual multi-rank
-    // run would:
-    //  1. Spawn world_size processes (or threads with separate ctxs).
-    //  2. Generate a UniqueId on rank 0; broadcast to others.
-    //  3. Each process: Communicator::new_with_id(id, world_size, rank).
-    //  4. Each rank: stage its Q-slice + K-chunk + V-chunk into device
-    //     buffers, allocate kv_scratch + accumulator scratch.
-    //  5. Each rank: call RingAttentionPlan::run with its comm.
-    //  6. Gather y across ranks and compare against a reference
-    //     `FlashSdpaPlan` run on the FULL global K/V on rank 0.
-    //
-    // The plan itself is identical to the single-rank smoke test;
-    // only the test harness changes. Tracking as `requires 2+ GPUs`
-    // and gating until the hardware is available.
-}

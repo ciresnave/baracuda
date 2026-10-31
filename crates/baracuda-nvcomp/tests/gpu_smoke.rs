@@ -1,9 +1,10 @@
 //! nvCOMP presence probe.
 
+use baracuda_driver::require_optional;
+
 #[test]
 fn nvcomp_probe() {
-    match baracuda_nvcomp::probe() {
-        Ok(()) => eprintln!("nvCOMP loaded"),
-        Err(e) => eprintln!("nvCOMP not available on this host: {e:?}"),
-    }
+    // Absent library: a declared skip (visible to `cargo gpu-test`), not a silent pass.
+    require_optional!(baracuda_nvcomp::probe(), "nvCOMP");
+    eprintln!("nvCOMP loaded");
 }

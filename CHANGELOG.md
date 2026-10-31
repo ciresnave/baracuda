@@ -16,6 +16,14 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.69 - 2026-10-31
+
+Tests only. No library code.
+
+### Changed
+
+- ROADMAP SA-17 audit pass: the cufile / cutensor / cvcuda / nvcomp / cupti / nvjitlink probe tests now declare a skip when the library is absent (`require_optional!`) instead of passing on both outcomes; `cupti` and `nvjitlink` gain `baracuda-driver` (feature `test-support`) as a dev-dependency. Removed two tests that asserted nothing: `column_parallel_rejects_indivisible_out_features` and `ring_attention_multi_rank_scaffold`.
+
 ## 0.1.0-alpha.68 - 2026-10-31
 
 Docs only. No code, no device run.
