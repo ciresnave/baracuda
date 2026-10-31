@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.67 - 2026-10-31
+
+### Changed
+
+- **BREAKING (version line):** `unpopped`, `unpopped-vocab`, `unpopped-cpu-c`, `unpopped-slang` 0.34.11 -> 0.35.3 (root pins, `baracuda-cuda-emit` dev-deps, `tools/kiss-ref-diff` incl. its lock); `baracuda-cuda-emit` and `baracuda-cuda-parse` follow to 0.35.3 (the Versioning exception above); `fuel-kernel-seam` / `fuel-kernel-seam-types` 0.31.0 -> 0.32.0 (the first on `unpopped-vocab` 0.35, so the graph holds one vocab copy: `cargo tree -d` shows only `unpopped-vocab 0.35.3`). `baracuda-cuda-parse`: `tree-sitter` 0.26 -> 0.27 (public: `Frontend::parse` returns `tree_sitter::Tree`; 0.27.1 needs Rust 1.90, `baracuda-cuda-parse` does not inherit the workspace 1.88 MSRV). MSRV unchanged at 1.88: the MSRV job's command, run locally under `cargo +1.88.0 build --locked` for the six crates it builds, passes. Host tests green for emit / parse / seam; `cargo gpu-test -p baracuda-cuda-emit --features nvrtc,device-tests`: 443 passed, 0 failed, 0 declared skips (device-verified sm89); clippy `-D warnings` clean.
+
 ## 0.1.0-alpha.66 - 2026-10-31
 
 Metadata and docs only. No code, no device run.
