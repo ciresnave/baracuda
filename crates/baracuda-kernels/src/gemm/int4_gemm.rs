@@ -1220,6 +1220,6 @@ fn map_status(code: i32) -> Result<()> {
              (likely K or N odd — int4 packing requires both even)",
         )),
         4 => Err(Error::WorkspaceTooSmall { needed: 0, got: 0 }),
-        n => Err(Error::CutlassInternal(n)),
+        n => Err(Error::KernelInternal(n)),
     }
 }

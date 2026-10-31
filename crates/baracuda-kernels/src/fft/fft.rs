@@ -210,7 +210,7 @@ impl<T: Element> FftPlan<T> {
             )
         };
         if status != 0 {
-            return Err(Error::CutlassInternal(cufft_to_status(status)));
+            return Err(Error::KernelInternal(cufft_to_status(status)));
         }
         self.handle.set(handle);
         Ok(handle)
@@ -221,7 +221,7 @@ impl<T: Element> FftPlan<T> {
         let stream_ptr = stream.as_raw();
         let status = unsafe { cufftSetStream(handle, stream_ptr) };
         if status != 0 {
-            return Err(Error::CutlassInternal(cufft_to_status(status)));
+            return Err(Error::KernelInternal(cufft_to_status(status)));
         }
         Ok(())
     }
@@ -287,7 +287,7 @@ impl FftPlan<Complex64> {
         let odata = args.y.data().as_raw().0 as *mut cufftComplex;
         let status = unsafe { cufftExecC2C(handle, idata, odata, direction) };
         if status != 0 {
-            return Err(Error::CutlassInternal(cufft_to_status(status)));
+            return Err(Error::KernelInternal(cufft_to_status(status)));
         }
 
         if self.desc.inverse {
@@ -337,7 +337,7 @@ impl FftPlan<Complex128> {
         let odata = args.y.data().as_raw().0 as *mut cufftDoubleComplex;
         let status = unsafe { cufftExecZ2Z(handle, idata, odata, direction) };
         if status != 0 {
-            return Err(Error::CutlassInternal(cufft_to_status(status)));
+            return Err(Error::KernelInternal(cufft_to_status(status)));
         }
 
         if self.desc.inverse {
@@ -377,7 +377,7 @@ impl<T: Element> Drop for FftPlan<T> {
 
 /// Map a cuFFT result code into the safe-plan status integer. cuFFT
 /// success is `0`; any non-zero is surfaced as a negative
-/// `CutlassInternal(-code)` so the origin remains visible.
+/// `KernelInternal(-code)` so the origin remains visible.
 pub(crate) fn cufft_to_status(cufft_code: i32) -> i32 {
     if cufft_code == 0 { 0 } else { -cufft_code }
 }
@@ -395,6 +395,6 @@ pub(crate) fn map_status(code: i32) -> Result<()> {
             "baracuda-kernels-sys reported unsupported configuration",
         )),
         4 => Err(Error::WorkspaceTooSmall { needed: 0, got: 0 }),
-        n => Err(Error::CutlassInternal(n)),
+        n => Err(Error::KernelInternal(n)),
     }
 }

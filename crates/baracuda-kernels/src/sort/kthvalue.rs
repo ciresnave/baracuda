@@ -219,7 +219,7 @@ impl<T: Element> KthvaluePlan<T> {
         topk_plan.run(stream, Workspace::None, topk_args)?;
         stream
             .synchronize()
-            .map_err(|_| Error::CutlassInternal(-1))?;
+            .map_err(|_| Error::KernelInternal(-1))?;
 
         // Bring the bottom-(k+1) tiles host-side as raw bytes, pick
         // the k-th cell per row, and ship the two compacted [batch]
@@ -245,7 +245,7 @@ impl<T: Element> KthvaluePlan<T> {
         }
         stream
             .synchronize()
-            .map_err(|_| Error::CutlassInternal(-1))?;
+            .map_err(|_| Error::KernelInternal(-1))?;
 
         let out_val_bytes = (self.desc.batch as usize) * core::mem::size_of::<T>();
         let out_idx_bytes = (self.desc.batch as usize) * core::mem::size_of::<i32>();
@@ -281,7 +281,7 @@ impl<T: Element> KthvaluePlan<T> {
         // Keep the host buffers alive until the H2D completes.
         stream
             .synchronize()
-            .map_err(|_| Error::CutlassInternal(-1))?;
+            .map_err(|_| Error::KernelInternal(-1))?;
         drop(out_vals);
         drop(out_idx);
         drop(host_vals);
@@ -312,7 +312,7 @@ unsafe fn copy_h2d_async(
     }
     let status = unsafe { cuMemcpyHtoDAsync_v2(dst as u64, src, bytes, stream.as_raw()) };
     if status != 0 {
-        return Err(Error::CutlassInternal(-status));
+        return Err(Error::KernelInternal(-status));
     }
     Ok(())
 }
@@ -333,7 +333,7 @@ unsafe fn copy_d2h_async(dst: *mut c_void, src: u64, bytes: usize, stream: &Stre
     }
     let status = unsafe { cuMemcpyDtoHAsync_v2(dst, src, bytes, stream.as_raw()) };
     if status != 0 {
-        return Err(Error::CutlassInternal(-status));
+        return Err(Error::KernelInternal(-status));
     }
     Ok(())
 }

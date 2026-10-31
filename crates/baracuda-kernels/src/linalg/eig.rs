@@ -290,7 +290,7 @@ impl<T: Element> EigPlan<T> {
             )
         };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         self.workspace_bytes_device.set(ws_device);
         self.workspace_bytes_host.set(ws_host);
@@ -305,7 +305,7 @@ impl<T: Element> EigPlan<T> {
         let mut handle: cusolverDnHandle_t = core::ptr::null_mut();
         let status = unsafe { cusolverDnCreate(&mut handle as *mut _) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         self.handle.set(handle);
         Ok(handle)
@@ -319,7 +319,7 @@ impl<T: Element> EigPlan<T> {
         let mut params: cusolverDnParams_t = core::ptr::null_mut();
         let status = unsafe { cusolverDnCreateParams(&mut params as *mut _) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         self.params.set(params);
         Ok(params)
@@ -328,7 +328,7 @@ impl<T: Element> EigPlan<T> {
     fn bind_stream(&self, h: cusolverDnHandle_t, stream: &Stream) -> Result<()> {
         let status = unsafe { cusolverDnSetStream(h, stream.as_raw()) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         Ok(())
     }
@@ -478,7 +478,7 @@ impl<T: Element> EigPlan<T> {
             )
         };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         Ok(())
     }

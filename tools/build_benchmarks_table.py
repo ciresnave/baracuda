@@ -18,7 +18,7 @@ that are easy to miss; both were hit regenerating this file on 2026-09-05:
     `C:/Program Files/NVIDIA/CUDNN/v9.23/bin/13.3/x64` (pick the subdir matching
     the CUDA toolkit, not the other one sitting beside it).
 
-  * `--bench flash_attention` panics on main (`CutlassInternal(1001)` at its
+  * `--bench flash_attention` panics on main (`KernelInternal(1001)` at its
     warmup, flash_attention.rs:124) and `cargo bench` ABORTS THE WHOLE RUN on the
     first failing target — so the suite stops partway and the rollup silently
     describes whatever ran before the abort. It emits no CSV rows, so skipping it

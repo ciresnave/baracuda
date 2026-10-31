@@ -186,7 +186,7 @@ impl<T: Element> AvgPool2dPlan<T> {
         let mut handle: cudnnHandle_t = core::ptr::null_mut();
         let status = unsafe { cudnnCreate(&mut handle as *mut _) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         self.handle.set(handle);
         Ok(handle)
@@ -195,7 +195,7 @@ impl<T: Element> AvgPool2dPlan<T> {
     fn bind_stream(&self, h: cudnnHandle_t, stream: &Stream) -> Result<()> {
         let status = unsafe { cudnnSetStream(h, stream.as_raw()) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         Ok(())
     }

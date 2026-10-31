@@ -252,7 +252,7 @@ impl<T: Element> FftNdPlan<T> {
             )
         };
         if status != 0 {
-            return Err(Error::CutlassInternal(cufft_to_status(status)));
+            return Err(Error::KernelInternal(cufft_to_status(status)));
         }
         self.handle.set(handle);
         Ok(handle)
@@ -262,7 +262,7 @@ impl<T: Element> FftNdPlan<T> {
         let stream_ptr = stream.as_raw();
         let status = unsafe { cufftSetStream(handle, stream_ptr) };
         if status != 0 {
-            return Err(Error::CutlassInternal(cufft_to_status(status)));
+            return Err(Error::KernelInternal(cufft_to_status(status)));
         }
         Ok(())
     }
@@ -311,7 +311,7 @@ impl FftNdPlan<Complex64> {
         let odata = args.y.as_raw().0 as *mut cufftComplex;
         let status = unsafe { cufftExecC2C(handle, idata, odata, direction) };
         if status != 0 {
-            return Err(Error::CutlassInternal(cufft_to_status(status)));
+            return Err(Error::KernelInternal(cufft_to_status(status)));
         }
 
         if self.desc.inverse {
@@ -359,7 +359,7 @@ impl FftNdPlan<Complex128> {
         let odata = args.y.as_raw().0 as *mut cufftDoubleComplex;
         let status = unsafe { cufftExecZ2Z(handle, idata, odata, direction) };
         if status != 0 {
-            return Err(Error::CutlassInternal(cufft_to_status(status)));
+            return Err(Error::KernelInternal(cufft_to_status(status)));
         }
 
         if self.desc.inverse {

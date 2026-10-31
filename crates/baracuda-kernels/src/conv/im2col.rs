@@ -381,6 +381,6 @@ pub(crate) fn map_im2col_status(code: i32) -> Result<()> {
             "baracuda-kernels-sys::im2col reported unsupported configuration",
         )),
         4 => Err(Error::WorkspaceTooSmall { needed: 0, got: 0 }),
-        n => Err(Error::CutlassInternal(n)),
+        n => Err(Error::KernelInternal(n)),
     }
 }

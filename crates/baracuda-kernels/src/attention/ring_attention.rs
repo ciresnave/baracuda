@@ -105,7 +105,7 @@
 //!   global-memory roundtrip per step.
 //! - The plan calls `Communicator::group_start` / `send` / `recv` /
 //!   `group_end` internally for the K/V rotation. On error the plan
-//!   surfaces a `Error::CutlassInternal(7000)` wrapper code; the raw
+//!   surfaces a `Error::KernelInternal(7000)` wrapper code; the raw
 //!   `ncclResult_t` is logged but not threaded into baracuda-cutlass's
 //!   typed error set.
 //!
@@ -697,12 +697,12 @@ fn rotate_kv<T: Element>(
 
     let group_start = n
         .nccl_group_start()
-        .map_err(|_| Error::CutlassInternal(7000))?;
+        .map_err(|_| Error::KernelInternal(7000))?;
     let group_end = n
         .nccl_group_end()
-        .map_err(|_| Error::CutlassInternal(7001))?;
-    let send_fn = n.nccl_send().map_err(|_| Error::CutlassInternal(7002))?;
-    let recv_fn = n.nccl_recv().map_err(|_| Error::CutlassInternal(7003))?;
+        .map_err(|_| Error::KernelInternal(7001))?;
+    let send_fn = n.nccl_send().map_err(|_| Error::KernelInternal(7002))?;
+    let recv_fn = n.nccl_recv().map_err(|_| Error::KernelInternal(7003))?;
 
     let comm_handle = comm.as_raw();
     let stream_raw = stream.as_raw() as _;
@@ -710,7 +710,7 @@ fn rotate_kv<T: Element>(
     // group_start
     let s = unsafe { group_start() };
     if !s.is_success() {
-        return Err(Error::CutlassInternal(7100 + s.0));
+        return Err(Error::KernelInternal(7100 + s.0));
     }
     let s = unsafe {
         send_fn(
@@ -725,7 +725,7 @@ fn rotate_kv<T: Element>(
     if !s.is_success() {
         // Try to close the group anyway so NCCL state stays consistent.
         let _ = unsafe { group_end() };
-        return Err(Error::CutlassInternal(7200 + s.0));
+        return Err(Error::KernelInternal(7200 + s.0));
     }
     let s = unsafe {
         recv_fn(
@@ -739,11 +739,11 @@ fn rotate_kv<T: Element>(
     };
     if !s.is_success() {
         let _ = unsafe { group_end() };
-        return Err(Error::CutlassInternal(7300 + s.0));
+        return Err(Error::KernelInternal(7300 + s.0));
     }
     let s = unsafe { group_end() };
     if !s.is_success() {
-        return Err(Error::CutlassInternal(7400 + s.0));
+        return Err(Error::KernelInternal(7400 + s.0));
     }
     Ok(())
 }

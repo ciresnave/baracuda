@@ -218,7 +218,7 @@ impl<T: Element> QrPlan<T> {
             _ => unreachable!(),
         };
         if status_geqrf != 0 {
-            return Err(Error::CutlassInternal(-status_geqrf));
+            return Err(Error::KernelInternal(-status_geqrf));
         }
         let status_ormqr = match T::KIND {
             ElementKind::F32 => unsafe {
@@ -256,7 +256,7 @@ impl<T: Element> QrPlan<T> {
             _ => unreachable!(),
         };
         if status_ormqr != 0 {
-            return Err(Error::CutlassInternal(-status_ormqr));
+            return Err(Error::KernelInternal(-status_ormqr));
         }
         let lwork_max = lwork_geqrf.max(lwork_ormqr) as usize;
         let elem_size = core::mem::size_of::<T>();
@@ -274,7 +274,7 @@ impl<T: Element> QrPlan<T> {
         let mut handle: cusolverDnHandle_t = core::ptr::null_mut();
         let status = unsafe { cusolverDnCreate(&mut handle as *mut _) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         self.handle.set(handle);
         Ok(handle)
@@ -283,7 +283,7 @@ impl<T: Element> QrPlan<T> {
     fn bind_stream(&self, h: cusolverDnHandle_t, stream: &Stream) -> Result<()> {
         let status = unsafe { cusolverDnSetStream(h, stream.as_raw()) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         Ok(())
     }
@@ -378,7 +378,7 @@ macro_rules! impl_qr_run {
                 let status =
                     unsafe { $geqrf(h, m, n, a_ptr, m, tau_ptr, tail_ptr, lwork, info_ptr) };
                 if status != 0 {
-                    return Err(Error::CutlassInternal(-status));
+                    return Err(Error::KernelInternal(-status));
                 }
 
                 // 2. D2H the post-`geqrf` `a` into a host vector, zero
@@ -448,7 +448,7 @@ macro_rules! impl_qr_run {
                     )
                 };
                 if status != 0 {
-                    return Err(Error::CutlassInternal(-status));
+                    return Err(Error::KernelInternal(-status));
                 }
                 Ok(())
             }
@@ -490,7 +490,7 @@ unsafe fn copy_d2h(
     }
     let status = unsafe { cuMemcpyDtoHAsync_v2(dst, src as u64, bytes, stream.as_raw()) };
     if status != 0 {
-        return Err(Error::CutlassInternal(-status));
+        return Err(Error::KernelInternal(-status));
     }
     Ok(())
 }
@@ -512,7 +512,7 @@ unsafe fn copy_h2d_typed(
     }
     let status = unsafe { cuMemcpyHtoDAsync_v2(dst as u64, src, bytes, stream.as_raw()) };
     if status != 0 {
-        return Err(Error::CutlassInternal(-status));
+        return Err(Error::KernelInternal(-status));
     }
     Ok(())
 }

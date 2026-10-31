@@ -4256,7 +4256,7 @@ impl<T: CutlassElement> GemmPlan<T> {
             };
             return match status {
                 baracuda_cublas_sys::cublasStatus_t::SUCCESS => Ok(()),
-                _ => Err(Error::CutlassInternal(status.0)),
+                _ => Err(Error::KernelInternal(status.0)),
             };
         }
 
@@ -4318,7 +4318,7 @@ impl<T: CutlassElement> GemmPlan<T> {
                 cublasComputeType_t::Compute32F,
                 CUBLAS_GEMM_ALGO,
             )
-            .map_err(|_| Error::CutlassInternal(-1))
+            .map_err(|_| Error::KernelInternal(-1))
         }
     }
 
@@ -4470,7 +4470,7 @@ impl<T: CutlassElement> GemmPlan<T> {
                 .map_err(|e| {
                     use baracuda_ozimmu::Error as OzErr;
                     match e {
-                        OzErr::DgemmFailed(s) => Error::CutlassInternal(s),
+                        OzErr::DgemmFailed(s) => Error::KernelInternal(s),
                         _ => Error::Unsupported("ozIMMU dgemm rejected the request (see logs)"),
                     }
                 })
@@ -5282,7 +5282,7 @@ impl<T: CutlassElement> GroupedGemmPlan<T> {
             ArchSku::Sm89 => 0,
         };
         if threadblock_count <= 0 {
-            return Err(Error::CutlassInternal(threadblock_count));
+            return Err(Error::KernelInternal(threadblock_count));
         }
 
         let scratch_bytes = match self.sku.arch {

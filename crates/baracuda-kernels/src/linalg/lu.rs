@@ -192,7 +192,7 @@ impl<T: Element> LuPlan<T> {
             _ => unreachable!("select() gates on F32 / F64"),
         };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         let bytes = (lwork as usize) * core::mem::size_of::<T>();
         self.workspace_bytes.set(bytes);
@@ -207,7 +207,7 @@ impl<T: Element> LuPlan<T> {
         let mut handle: cusolverDnHandle_t = core::ptr::null_mut();
         let status = unsafe { cusolverDnCreate(&mut handle as *mut _) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         self.handle.set(handle);
         Ok(handle)
@@ -216,7 +216,7 @@ impl<T: Element> LuPlan<T> {
     fn bind_stream(&self, h: cusolverDnHandle_t, stream: &Stream) -> Result<()> {
         let status = unsafe { cusolverDnSetStream(h, stream.as_raw()) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         Ok(())
     }
@@ -281,7 +281,7 @@ impl LuPlan<f32> {
         let status =
             unsafe { cusolverDnSgetrf(h, m, n, a_ptr, m, ws_ptr as *mut f32, pivot_ptr, info_ptr) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         Ok(())
     }
@@ -318,7 +318,7 @@ impl LuPlan<f64> {
         let status =
             unsafe { cusolverDnDgetrf(h, m, n, a_ptr, m, ws_ptr as *mut f64, pivot_ptr, info_ptr) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         Ok(())
     }

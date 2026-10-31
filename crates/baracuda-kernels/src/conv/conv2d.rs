@@ -500,7 +500,7 @@ impl<T: Element> Conv2dPlan<T> {
             )
         };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         self.workspace_bytes_fw.set(bytes);
         Ok(bytes)
@@ -525,7 +525,7 @@ impl<T: Element> Conv2dPlan<T> {
             )
         };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         self.workspace_bytes_bw_data.set(bytes);
         Ok(bytes)
@@ -550,7 +550,7 @@ impl<T: Element> Conv2dPlan<T> {
             )
         };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         self.workspace_bytes_bw_filter.set(bytes);
         Ok(bytes)
@@ -622,7 +622,7 @@ impl<T: Element> Conv2dPlan<T> {
             }
         };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         Ok(())
     }
@@ -688,7 +688,7 @@ impl<T: Element> Conv2dPlan<T> {
             }
         };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         Ok(())
     }
@@ -754,7 +754,7 @@ impl<T: Element> Conv2dPlan<T> {
             }
         };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         Ok(())
     }
@@ -771,7 +771,7 @@ impl<T: Element> Conv2dPlan<T> {
         let mut handle: cudnnHandle_t = core::ptr::null_mut();
         let status = unsafe { cudnnCreate(&mut handle as *mut _) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         self.handle.set(handle);
         Ok(handle)
@@ -780,7 +780,7 @@ impl<T: Element> Conv2dPlan<T> {
     fn bind_stream(&self, h: cudnnHandle_t, stream: &Stream) -> Result<()> {
         let status = unsafe { cudnnSetStream(h, stream.as_raw()) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         Ok(())
     }
@@ -804,7 +804,7 @@ impl<T: Element> Conv2dPlan<T> {
         let mut xd: cudnnTensorDescriptor_t = core::ptr::null_mut();
         let status = unsafe { cudnnCreateTensorDescriptor(&mut xd as *mut _) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         let status = unsafe {
             cudnnSetTensor4dDescriptor(
@@ -821,7 +821,7 @@ impl<T: Element> Conv2dPlan<T> {
             unsafe {
                 let _ = cudnnDestroyTensorDescriptor(xd);
             }
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         self.x_desc.set(xd);
 
@@ -829,7 +829,7 @@ impl<T: Element> Conv2dPlan<T> {
         let mut yd: cudnnTensorDescriptor_t = core::ptr::null_mut();
         let status = unsafe { cudnnCreateTensorDescriptor(&mut yd as *mut _) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         let status = unsafe {
             cudnnSetTensor4dDescriptor(
@@ -846,7 +846,7 @@ impl<T: Element> Conv2dPlan<T> {
             unsafe {
                 let _ = cudnnDestroyTensorDescriptor(yd);
             }
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         self.y_desc.set(yd);
 
@@ -854,7 +854,7 @@ impl<T: Element> Conv2dPlan<T> {
         let mut wd: cudnnFilterDescriptor_t = core::ptr::null_mut();
         let status = unsafe { cudnnCreateFilterDescriptor(&mut wd as *mut _) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         // NB: cudnnSetFilter4dDescriptor argument order is (desc, dtype,
         // format, k, c, h, w) — dtype precedes format, opposite of
@@ -877,7 +877,7 @@ impl<T: Element> Conv2dPlan<T> {
             unsafe {
                 let _ = cudnnDestroyFilterDescriptor(wd);
             }
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         self.w_desc.set(wd);
 
@@ -885,7 +885,7 @@ impl<T: Element> Conv2dPlan<T> {
         let mut cd: cudnnConvolutionDescriptor_t = core::ptr::null_mut();
         let status = unsafe { cudnnCreateConvolutionDescriptor(&mut cd as *mut _) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         let status = unsafe {
             cudnnSetConvolution2dDescriptor(
@@ -904,7 +904,7 @@ impl<T: Element> Conv2dPlan<T> {
             unsafe {
                 let _ = cudnnDestroyConvolutionDescriptor(cd);
             }
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         // Set the group count (must follow Set*ConvolutionDescriptor —
         // that call resets the group count to 1). For groups == 1 we
@@ -914,7 +914,7 @@ impl<T: Element> Conv2dPlan<T> {
             unsafe {
                 let _ = cudnnDestroyConvolutionDescriptor(cd);
             }
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         self.conv_desc.set(cd);
 

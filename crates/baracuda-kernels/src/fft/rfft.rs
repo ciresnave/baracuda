@@ -191,7 +191,7 @@ impl<T: Element> RfftPlan<T> {
             )
         };
         if status != 0 {
-            return Err(Error::CutlassInternal(cufft_to_status(status)));
+            return Err(Error::KernelInternal(cufft_to_status(status)));
         }
         self.handle.set(handle);
         Ok(handle)
@@ -201,7 +201,7 @@ impl<T: Element> RfftPlan<T> {
         let stream_ptr = stream.as_raw();
         let status = unsafe { cufftSetStream(handle, stream_ptr) };
         if status != 0 {
-            return Err(Error::CutlassInternal(cufft_to_status(status)));
+            return Err(Error::KernelInternal(cufft_to_status(status)));
         }
         Ok(())
     }
@@ -256,7 +256,7 @@ impl RfftPlan<f32> {
         let odata = args.y.data().as_raw().0 as *mut cufftComplex;
         let status = unsafe { cufftExecR2C(handle, idata, odata) };
         if status != 0 {
-            return Err(Error::CutlassInternal(cufft_to_status(status)));
+            return Err(Error::KernelInternal(cufft_to_status(status)));
         }
         Ok(())
     }
@@ -311,7 +311,7 @@ impl RfftPlan<f64> {
         let odata = args.y.data().as_raw().0 as *mut cufftDoubleComplex;
         let status = unsafe { cufftExecD2Z(handle, idata, odata) };
         if status != 0 {
-            return Err(Error::CutlassInternal(cufft_to_status(status)));
+            return Err(Error::KernelInternal(cufft_to_status(status)));
         }
         Ok(())
     }
@@ -488,7 +488,7 @@ impl<T: Element> IrfftPlan<T> {
             )
         };
         if status != 0 {
-            return Err(Error::CutlassInternal(cufft_to_status(status)));
+            return Err(Error::KernelInternal(cufft_to_status(status)));
         }
         self.handle.set(handle);
         Ok(handle)
@@ -498,7 +498,7 @@ impl<T: Element> IrfftPlan<T> {
         let stream_ptr = stream.as_raw();
         let status = unsafe { cufftSetStream(handle, stream_ptr) };
         if status != 0 {
-            return Err(Error::CutlassInternal(cufft_to_status(status)));
+            return Err(Error::KernelInternal(cufft_to_status(status)));
         }
         Ok(())
     }
@@ -554,7 +554,7 @@ impl IrfftPlan<f32> {
         let odata = args.y.data().as_raw().0 as *mut f32;
         let status = unsafe { cufftExecC2R(handle, idata, odata) };
         if status != 0 {
-            return Err(Error::CutlassInternal(cufft_to_status(status)));
+            return Err(Error::KernelInternal(cufft_to_status(status)));
         }
 
         // Apply 1/n normalization.
@@ -623,7 +623,7 @@ impl IrfftPlan<f64> {
         let odata = args.y.data().as_raw().0 as *mut f64;
         let status = unsafe { cufftExecZ2D(handle, idata, odata) };
         if status != 0 {
-            return Err(Error::CutlassInternal(cufft_to_status(status)));
+            return Err(Error::KernelInternal(cufft_to_status(status)));
         }
 
         let scale = 1.0_f64 / (n as f64);

@@ -325,7 +325,7 @@ impl<T: Element> MaxPool2dPlan<T> {
         let mut handle: cudnnHandle_t = core::ptr::null_mut();
         let status = unsafe { cudnnCreate(&mut handle as *mut _) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         self.handle.set(handle);
         Ok(handle)
@@ -334,7 +334,7 @@ impl<T: Element> MaxPool2dPlan<T> {
     fn bind_stream(&self, h: cudnnHandle_t, stream: &Stream) -> Result<()> {
         let status = unsafe { cudnnSetStream(h, stream.as_raw()) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         Ok(())
     }
@@ -547,7 +547,7 @@ pub(crate) fn ensure_pool_descriptors<T: Element>(
     let mut xd: cudnnTensorDescriptor_t = core::ptr::null_mut();
     let status = unsafe { cudnnCreateTensorDescriptor(&mut xd as *mut _) };
     if status != 0 {
-        return Err(Error::CutlassInternal(-status));
+        return Err(Error::KernelInternal(-status));
     }
     let status = unsafe {
         cudnnSetTensor4dDescriptor(
@@ -564,7 +564,7 @@ pub(crate) fn ensure_pool_descriptors<T: Element>(
         unsafe {
             let _ = cudnnDestroyTensorDescriptor(xd);
         }
-        return Err(Error::CutlassInternal(-status));
+        return Err(Error::KernelInternal(-status));
     }
     x_desc.set(xd);
 
@@ -572,7 +572,7 @@ pub(crate) fn ensure_pool_descriptors<T: Element>(
     let mut yd: cudnnTensorDescriptor_t = core::ptr::null_mut();
     let status = unsafe { cudnnCreateTensorDescriptor(&mut yd as *mut _) };
     if status != 0 {
-        return Err(Error::CutlassInternal(-status));
+        return Err(Error::KernelInternal(-status));
     }
     let status = unsafe {
         cudnnSetTensor4dDescriptor(
@@ -589,7 +589,7 @@ pub(crate) fn ensure_pool_descriptors<T: Element>(
         unsafe {
             let _ = cudnnDestroyTensorDescriptor(yd);
         }
-        return Err(Error::CutlassInternal(-status));
+        return Err(Error::KernelInternal(-status));
     }
     y_desc.set(yd);
 
@@ -597,7 +597,7 @@ pub(crate) fn ensure_pool_descriptors<T: Element>(
     let mut pd: cudnnPoolingDescriptor_t = core::ptr::null_mut();
     let status = unsafe { cudnnCreatePoolingDescriptor(&mut pd as *mut _) };
     if status != 0 {
-        return Err(Error::CutlassInternal(-status));
+        return Err(Error::KernelInternal(-status));
     }
     let status = unsafe {
         cudnnSetPooling2dDescriptor(
@@ -616,7 +616,7 @@ pub(crate) fn ensure_pool_descriptors<T: Element>(
         unsafe {
             let _ = cudnnDestroyPoolingDescriptor(pd);
         }
-        return Err(Error::CutlassInternal(-status));
+        return Err(Error::KernelInternal(-status));
     }
     pool_desc.set(pd);
     Ok(())
@@ -699,7 +699,7 @@ pub(crate) fn run_fw_inner<T: Element>(
         }
     };
     if status != 0 {
-        return Err(Error::CutlassInternal(-status));
+        return Err(Error::KernelInternal(-status));
     }
     Ok(())
 }
@@ -755,7 +755,7 @@ pub(crate) fn run_bw_inner<T: Element>(
         }
     };
     if status != 0 {
-        return Err(Error::CutlassInternal(-status));
+        return Err(Error::KernelInternal(-status));
     }
     Ok(())
 }

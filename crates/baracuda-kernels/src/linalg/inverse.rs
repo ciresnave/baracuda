@@ -206,7 +206,7 @@ impl<T: Element> InversePlan<T> {
             _ => unreachable!("select() gates on F32 / F64"),
         };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         let bytes = (lwork as usize) * core::mem::size_of::<T>();
         self.workspace_bytes.set(bytes);
@@ -221,7 +221,7 @@ impl<T: Element> InversePlan<T> {
         let mut handle: cusolverDnHandle_t = core::ptr::null_mut();
         let status = unsafe { cusolverDnCreate(&mut handle as *mut _) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         self.handle.set(handle);
         Ok(handle)
@@ -230,7 +230,7 @@ impl<T: Element> InversePlan<T> {
     fn bind_stream(&self, h: cusolverDnHandle_t, stream: &Stream) -> Result<()> {
         let status = unsafe { cusolverDnSetStream(h, stream.as_raw()) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         Ok(())
     }
@@ -297,7 +297,7 @@ macro_rules! impl_inverse_run {
                 let status =
                     unsafe { $getrf(h, m, m, a_ptr, m, ws_ptr as *mut $T, pivot_ptr, info_ptr) };
                 if status != 0 {
-                    return Err(Error::CutlassInternal(-status));
+                    return Err(Error::KernelInternal(-status));
                 }
 
                 // 2. Stage an identity matrix into `inv`. Host-side
@@ -336,7 +336,7 @@ macro_rules! impl_inverse_run {
                     )
                 };
                 if status != 0 {
-                    return Err(Error::CutlassInternal(-status));
+                    return Err(Error::KernelInternal(-status));
                 }
                 Ok(())
             }
@@ -378,7 +378,7 @@ unsafe fn copy_h2d(
     }
     let status = unsafe { cuMemcpyHtoDAsync_v2(dst as u64, src, bytes, stream.as_raw()) };
     if status != 0 {
-        return Err(Error::CutlassInternal(-status));
+        return Err(Error::KernelInternal(-status));
     }
     // Sync so the host identity buffer can be freed when this function
     // returns. The getrs call that follows expects the device buffer to

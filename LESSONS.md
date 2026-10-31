@@ -1037,7 +1037,7 @@ to hit "incomplete type" errors when reaching for it.
 ### 8.1 Bespoke CTC under parallel test execution
 
 **Symptom.** Bespoke CTC tests intermittently fail with
-`CutlassInternal(5)` when the test runner schedules them concurrently
+`KernelInternal(5)` when the test runner schedules them concurrently
 with other tests. Pass on rerun.
 
 **Likely cause.** Workspace / stream isolation issue, or cuDNN handle

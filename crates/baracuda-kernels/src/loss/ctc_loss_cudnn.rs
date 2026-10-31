@@ -273,7 +273,7 @@ impl<T: Element> CtcLossCudnnPlan<T> {
             )
         };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         self.workspace_bytes.set(bytes);
         self.workspace_queried.set(true);
@@ -326,7 +326,7 @@ impl<T: Element> CtcLossCudnnPlan<T> {
             )
         };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         Ok(())
     }
@@ -358,13 +358,13 @@ impl<T: Element> CtcLossCudnnPlan<T> {
             last_status = status;
             std::thread::sleep(std::time::Duration::from_millis(50 * (attempt as u64 + 1)));
         }
-        Err(Error::CutlassInternal(-last_status))
+        Err(Error::KernelInternal(-last_status))
     }
 
     fn bind_stream(&self, h: cudnnHandle_t, stream: &Stream) -> Result<()> {
         let status = unsafe { cudnnSetStream(h, stream.as_raw()) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         Ok(())
     }
@@ -398,7 +398,7 @@ impl<T: Element> CtcLossCudnnPlan<T> {
         let mut pd: cudnnTensorDescriptor_t = core::ptr::null_mut();
         let status = unsafe { cudnnCreateTensorDescriptor(&mut pd as *mut _) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         let status =
             unsafe { cudnnSetTensorNdDescriptor(pd, dt, 3, dims.as_ptr(), strides.as_ptr()) };
@@ -406,7 +406,7 @@ impl<T: Element> CtcLossCudnnPlan<T> {
             unsafe {
                 let _ = cudnnDestroyTensorDescriptor(pd);
             }
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         self.probs_desc.set(pd);
 
@@ -415,7 +415,7 @@ impl<T: Element> CtcLossCudnnPlan<T> {
         let mut gd: cudnnTensorDescriptor_t = core::ptr::null_mut();
         let status = unsafe { cudnnCreateTensorDescriptor(&mut gd as *mut _) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         let status =
             unsafe { cudnnSetTensorNdDescriptor(gd, dt, 3, dims.as_ptr(), strides.as_ptr()) };
@@ -423,7 +423,7 @@ impl<T: Element> CtcLossCudnnPlan<T> {
             unsafe {
                 let _ = cudnnDestroyTensorDescriptor(gd);
             }
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         self.grads_desc.set(gd);
 
@@ -431,7 +431,7 @@ impl<T: Element> CtcLossCudnnPlan<T> {
         let mut cd: cudnnCTCLossDescriptor_t = core::ptr::null_mut();
         let status = unsafe { cudnnCreateCTCLossDescriptor(&mut cd as *mut _) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         let status = unsafe {
             cudnnSetCTCLossDescriptorEx(
@@ -445,7 +445,7 @@ impl<T: Element> CtcLossCudnnPlan<T> {
             unsafe {
                 let _ = cudnnDestroyCTCLossDescriptor(cd);
             }
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         self.ctc_desc.set(cd);
 

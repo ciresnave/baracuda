@@ -407,7 +407,7 @@ impl<T: Element> GemvDensePlan<T> {
             2 => Err(Error::InvalidProblem(
                 "baracuda-kernels-sys dense GEMV kernel reported an invalid problem",
             )),
-            n => Err(Error::CutlassInternal(n)),
+            n => Err(Error::KernelInternal(n)),
         }
     }
 }

@@ -61,8 +61,8 @@ pub enum Error {
 
     /// CUTLASS reported an internal error during launch (typically a
     /// kernel-launch failure surfaced through `cudaGetLastError`).
-    #[error("baracuda-cutlass: CUTLASS internal error (status code {0})")]
-    CutlassInternal(i32),
+    #[error("baracuda-cutlass: kernel internal error (status code {0})")]
+    KernelInternal(i32),
 
     /// Underlying baracuda-driver error (context, stream, etc.).
     #[error("baracuda-cutlass: driver error: {0}")]
@@ -79,7 +79,7 @@ pub enum Error {
 /// [`Error::WorkspaceTooSmall`] *with the actual byte counts*. If a
 /// kernel ever returns status 4 here it indicates a CUTLASS internal
 /// inconsistency between `get_workspace_size` and the runtime requirement
-/// — surfaced as [`Error::CutlassInternal`] to make the bug visible.
+/// — surfaced as [`Error::KernelInternal`] to make the bug visible.
 pub(crate) fn status_to_result(code: i32) -> Result<()> {
     match code {
         0 => Ok(()),
@@ -88,6 +88,6 @@ pub(crate) fn status_to_result(code: i32) -> Result<()> {
         3 => Err(Error::Unsupported(
             "CUTLASS reported unsupported configuration",
         )),
-        n => Err(Error::CutlassInternal(n)),
+        n => Err(Error::KernelInternal(n)),
     }
 }

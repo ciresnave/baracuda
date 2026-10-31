@@ -423,6 +423,6 @@ fn map_status(code: i32) -> Result<()> {
              (likely S4 / U4 source innermost stride not in {1, -1, 2})",
         )),
         4 => Err(Error::WorkspaceTooSmall { needed: 0, got: 0 }),
-        n => Err(Error::CutlassInternal(n)),
+        n => Err(Error::KernelInternal(n)),
     }
 }

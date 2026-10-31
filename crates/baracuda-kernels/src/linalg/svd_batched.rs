@@ -202,7 +202,7 @@ impl<T: Element> BatchedSvdPlan<T> {
         let mut handle: cusolverDnHandle_t = core::ptr::null_mut();
         let status = unsafe { cusolverDnCreate(&mut handle as *mut _) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         self.handle.set(handle);
         Ok(handle)
@@ -216,7 +216,7 @@ impl<T: Element> BatchedSvdPlan<T> {
         let mut params: gesvdjInfo_t = core::ptr::null_mut();
         let status = unsafe { cusolverDnCreateGesvdjInfo(&mut params as *mut _) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         self.params.set(params);
         Ok(params)
@@ -225,7 +225,7 @@ impl<T: Element> BatchedSvdPlan<T> {
     fn bind_stream(&self, h: cusolverDnHandle_t, stream: &Stream) -> Result<()> {
         let status = unsafe { cusolverDnSetStream(h, stream.as_raw()) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         Ok(())
     }
@@ -278,7 +278,7 @@ impl<T: Element> BatchedSvdPlan<T> {
             _ => unreachable!("select() gates on F32 / F64"),
         };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         let bytes = (lwork as usize) * core::mem::size_of::<T>();
         self.workspace_bytes.set(bytes);
@@ -384,7 +384,7 @@ macro_rules! impl_batched_svd_run {
                     )
                 };
                 if status != 0 {
-                    return Err(Error::CutlassInternal(-status));
+                    return Err(Error::KernelInternal(-status));
                 }
                 Ok(())
             }
