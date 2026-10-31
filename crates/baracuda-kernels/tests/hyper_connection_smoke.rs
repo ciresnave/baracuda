@@ -22,8 +22,8 @@
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    ElementKind, HyperConnectionArgs, HyperConnectionDescriptor, HyperConnectionPlan,
-    PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
+    ElementKind, HyperConnectionArgs, HyperConnectionBackwardArgs, HyperConnectionDescriptor,
+    HyperConnectionPlan, PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::bf16;
 
@@ -136,14 +136,7 @@ fn hyper_connection_f32_static_h_basic() {
     let h_post = gen_h_post();
     let h_res = gen_h_res();
 
-    let desc = HyperConnectionDescriptor {
-        batch: B,
-        hidden_dim: C,
-        n_streams: N,
-        sinkhorn_iters: SINKHORN_ITERS,
-        eps: EPS,
-        element: ElementKind::F32,
-    };
+    let desc = descriptor();
     let plan = HyperConnectionPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("plan select");
 
@@ -191,14 +184,7 @@ fn hyper_connection_f32_static_h_h_post_changes_output() {
     let h_post_scaled: Vec<f32> = h_post_base.iter().map(|&v| v + 1.0).collect();
     let h_res = gen_h_res();
 
-    let desc = HyperConnectionDescriptor {
-        batch: B,
-        hidden_dim: C,
-        n_streams: N,
-        sinkhorn_iters: SINKHORN_ITERS,
-        eps: EPS,
-        element: ElementKind::F32,
-    };
+    let desc = descriptor();
     let plan = HyperConnectionPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("plan select");
 
@@ -235,5 +221,280 @@ fn hyper_connection_f32_static_h_h_post_changes_output() {
         max_diff > 1e-3,
         "doubling H_post had no visible effect (max_diff={max_diff}); \
          the post-mixing code path may not be wired correctly"
+    );
+}
+
+/// f64 reference of the static-H forward: `M = Sinkhorn(exp(h_res))` (row then column
+/// normalisation, `iters` times), `y_agg = sum_i sigmoid(h_pre[i]) x[:, i]`,
+/// `y_norm = y_agg / sqrt(mean(y_agg^2) + eps) * gamma`,
+/// `out[b, i] = sum_j M[i, j] x[b, j] + 2 * sigmoid(h_post[i]) * y_norm[b]`.
+struct HcRef {
+    x: Vec<f64>,
+    gamma: Vec<f64>,
+    h_pre: Vec<f64>,
+    h_post: Vec<f64>,
+    h_res: Vec<f64>,
+}
+
+fn sigmoid(v: f64) -> f64 {
+    1.0 / (1.0 + (-v).exp())
+}
+
+fn sinkhorn_ref(h_res: &[f64], n: usize, iters: i32, eps: f64) -> Vec<f64> {
+    let mut m: Vec<f64> = h_res.iter().map(|v| v.exp()).collect();
+    for _ in 0..iters {
+        for r in 0..n {
+            let s: f64 = (0..n).map(|c| m[r * n + c]).sum();
+            if s > eps {
+                (0..n).for_each(|c| m[r * n + c] /= s);
+            }
+        }
+        for c in 0..n {
+            let s: f64 = (0..n).map(|r| m[r * n + c]).sum();
+            if s > eps {
+                (0..n).for_each(|r| m[r * n + c] /= s);
+            }
+        }
+    }
+    m
+}
+
+impl HcRef {
+    fn forward(&self) -> Vec<f64> {
+        let (b_n, n, c_n) = (B as usize, N as usize, C as usize);
+        let m = sinkhorn_ref(&self.h_res, n, SINKHORN_ITERS, f64::from(EPS));
+        let mut out = vec![0.0; b_n * n * c_n];
+        for b in 0..b_n {
+            let agg: Vec<f64> = (0..c_n)
+                .map(|c| {
+                    (0..n)
+                        .map(|i| sigmoid(self.h_pre[i]) * self.x[(b * n + i) * c_n + c])
+                        .sum()
+                })
+                .collect();
+            let ms = agg.iter().map(|v| v * v).sum::<f64>() / c_n as f64;
+            let inv = 1.0 / (ms + f64::from(EPS)).sqrt();
+            for i in 0..n {
+                for c in 0..c_n {
+                    let mix: f64 = (0..n)
+                        .map(|j| m[i * n + j] * self.x[(b * n + j) * c_n + c])
+                        .sum();
+                    let post = 2.0 * sigmoid(self.h_post[i]) * agg[c] * inv * self.gamma[c];
+                    out[(b * n + i) * c_n + c] = mix + post;
+                }
+            }
+        }
+        out
+    }
+}
+
+fn widen(v: &[f32]) -> Vec<f64> {
+    v.iter().map(|&x| f64::from(x)).collect()
+}
+
+#[test]
+fn hyper_connection_f32_static_h_matches_f64_reference() {
+    let (ctx, stream) = setup();
+    let gamma_bf = gen_gamma_bf16();
+    let r = HcRef {
+        x: widen(&gen_x()),
+        gamma: gamma_bf.iter().map(|g| f64::from(g.to_f32())).collect(),
+        h_pre: widen(&gen_h_pre()),
+        h_post: widen(&gen_h_post()),
+        h_res: widen(&gen_h_res()),
+    };
+    let desc = descriptor();
+    let plan = HyperConnectionPlan::<f32>::select(&stream, &desc, PlanPreference::default())
+        .expect("plan select");
+    let got = run_once(
+        &ctx,
+        &stream,
+        &plan,
+        &gen_x(),
+        &gamma_bf,
+        &gen_h_pre(),
+        &gen_h_post(),
+        &gen_h_res(),
+    );
+    let want = r.forward();
+    for (i, (g, w)) in got.iter().zip(&want).enumerate() {
+        assert!(
+            (f64::from(*g) - w).abs() < 2e-4 * w.abs().max(1.0),
+            "forward mismatch @ {i}: got {g}, want {w}"
+        );
+    }
+}
+
+// ---- Tier 2: backward, checked against central differences of the f64 reference ----
+
+/// Parameter groups of `HcRef`, in the order the gradients are compared.
+const GROUPS: [&str; 5] = ["x", "gamma", "h_pre", "h_post", "h_res"];
+
+impl HcRef {
+    fn group_mut(&mut self, g: usize) -> &mut Vec<f64> {
+        match g {
+            0 => &mut self.x,
+            1 => &mut self.gamma,
+            2 => &mut self.h_pre,
+            3 => &mut self.h_post,
+            _ => &mut self.h_res,
+        }
+    }
+
+    /// `L = sum(d_out * forward())`.
+    fn loss(&self, d_out: &[f64]) -> f64 {
+        self.forward().iter().zip(d_out).map(|(o, d)| o * d).sum()
+    }
+
+    /// Central-difference gradient of `loss` for every element of group `g`.
+    fn numeric_grad(&mut self, g: usize, d_out: &[f64]) -> Vec<f64> {
+        let h = 1e-6;
+        (0..self.group_mut(g).len())
+            .map(|i| {
+                let orig = self.group_mut(g)[i];
+                self.group_mut(g)[i] = orig + h;
+                let up = self.loss(d_out);
+                self.group_mut(g)[i] = orig - h;
+                let down = self.loss(d_out);
+                self.group_mut(g)[i] = orig;
+                (up - down) / (2.0 * h)
+            })
+            .collect()
+    }
+}
+
+fn descriptor() -> HyperConnectionDescriptor {
+    HyperConnectionDescriptor {
+        batch: B,
+        hidden_dim: C,
+        n_streams: N,
+        sinkhorn_iters: SINKHORN_ITERS,
+        eps: EPS,
+        element: ElementKind::F32,
+    }
+}
+
+fn gen_d_out() -> Vec<f32> {
+    (0..(B * N * C) as usize)
+        .map(|i| ((i as f32) * 0.021 + 0.3).cos() * 0.5)
+        .collect()
+}
+
+/// Runs forward then backward on a training plan; returns the five gradients in `GROUPS` order.
+fn run_backward_once(ctx: &Context, stream: &Stream, r: &HcRef) -> Vec<Vec<f32>> {
+    let desc = descriptor();
+    let plan =
+        HyperConnectionPlan::<f32>::select_training(stream, &desc, PlanPreference::default())
+            .expect("select_training");
+    let narrow = |v: &[f64]| v.iter().map(|&x| x as f32).collect::<Vec<f32>>();
+    let gamma_bf: Vec<bf16> = r.gamma.iter().map(|&g| bf16::from_f64(g)).collect();
+    run_once(
+        ctx,
+        stream,
+        &plan,
+        &narrow(&r.x),
+        &gamma_bf,
+        &narrow(&r.h_pre),
+        &narrow(&r.h_post),
+        &narrow(&r.h_res),
+    );
+    let d_out = DeviceBuffer::from_slice(ctx, &gen_d_out()).expect("up d_out");
+    let mut dx: DeviceBuffer<f32> = DeviceBuffer::zeros(ctx, (B * N * C) as usize).expect("dx");
+    let mut dg: DeviceBuffer<f32> = DeviceBuffer::zeros(ctx, C as usize).expect("dg");
+    let mut dpre: DeviceBuffer<f32> = DeviceBuffer::zeros(ctx, N as usize).expect("dpre");
+    let mut dpost: DeviceBuffer<f32> = DeviceBuffer::zeros(ctx, N as usize).expect("dpost");
+    let mut dres: DeviceBuffer<f32> = DeviceBuffer::zeros(ctx, (N * N) as usize).expect("dres");
+    let (sx, sg, sh, sr) = ([B, N, C], [C], [N], [N, N]);
+    plan.run_backward(
+        stream,
+        HyperConnectionBackwardArgs {
+            d_out: TensorRef::new(d_out.as_slice(), sx, contiguous_stride(sx)).unwrap(),
+            d_x_expanded: TensorMut::new(dx.as_slice_mut(), sx, contiguous_stride(sx)).unwrap(),
+            d_rmsnorm_weight: TensorMut::new(dg.as_slice_mut(), sg, contiguous_stride(sg)).unwrap(),
+            d_h_pre: TensorMut::new(dpre.as_slice_mut(), sh, contiguous_stride(sh)).unwrap(),
+            d_h_post: TensorMut::new(dpost.as_slice_mut(), sh, contiguous_stride(sh)).unwrap(),
+            d_h_res: TensorMut::new(dres.as_slice_mut(), sr, contiguous_stride(sr)).unwrap(),
+        },
+    )
+    .expect("run_backward");
+    stream.synchronize().expect("sync");
+    [
+        (&dx, B * N * C),
+        (&dg, C),
+        (&dpre, N),
+        (&dpost, N),
+        (&dres, N * N),
+    ]
+    .into_iter()
+    .map(|(b, n)| download(b, n as usize))
+    .collect()
+}
+
+fn download(b: &DeviceBuffer<f32>, n: usize) -> Vec<f32> {
+    let mut v = vec![0f32; n];
+    b.copy_to_host(&mut v).expect("dl");
+    v
+}
+
+#[test]
+fn hyper_connection_f32_static_h_backward_matches_finite_differences() {
+    let (ctx, stream) = setup();
+    let gamma_bf = gen_gamma_bf16();
+    let mut r = HcRef {
+        x: widen(&gen_x()),
+        gamma: gamma_bf.iter().map(|g| f64::from(g.to_f32())).collect(),
+        h_pre: widen(&gen_h_pre()),
+        h_post: widen(&gen_h_post()),
+        h_res: widen(&gen_h_res()),
+    };
+    let d_out = widen(&gen_d_out());
+    let got = run_backward_once(&ctx, &stream, &r);
+    let mut bad = Vec::new();
+    for (g, name) in GROUPS.iter().enumerate() {
+        let want = r.numeric_grad(g, &d_out);
+        let scale = want.iter().fold(1e-3f64, |m, v| m.max(v.abs()));
+        let worst = got[g]
+            .iter()
+            .zip(&want)
+            .map(|(a, w)| (f64::from(*a) - w).abs() / scale)
+            .fold(0.0f64, f64::max);
+        eprintln!("d_{name}: worst |got - fd| / scale = {worst:.3e} (scale {scale:.3e})");
+        if worst >= 1e-2 {
+            bad.push(*name);
+        }
+    }
+    assert!(
+        bad.is_empty(),
+        "gradient groups off from finite differences: {bad:?}"
+    );
+}
+
+#[test]
+fn hyper_connection_backward_needs_a_training_plan() {
+    let (ctx, stream) = setup();
+    let desc = descriptor();
+    let plan = HyperConnectionPlan::<f32>::select(&stream, &desc, PlanPreference::default())
+        .expect("plan select");
+    let d_out = DeviceBuffer::from_slice(&ctx, &gen_d_out()).expect("up");
+    let mut dx: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (B * N * C) as usize).expect("dx");
+    let mut dg: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, C as usize).expect("dg");
+    let mut dpre: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, N as usize).expect("dpre");
+    let mut dpost: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, N as usize).expect("dpost");
+    let mut dres: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (N * N) as usize).expect("dres");
+    let (sx, sg, sh, sr) = ([B, N, C], [C], [N], [N, N]);
+    let res = plan.run_backward(
+        &stream,
+        HyperConnectionBackwardArgs {
+            d_out: TensorRef::new(d_out.as_slice(), sx, contiguous_stride(sx)).unwrap(),
+            d_x_expanded: TensorMut::new(dx.as_slice_mut(), sx, contiguous_stride(sx)).unwrap(),
+            d_rmsnorm_weight: TensorMut::new(dg.as_slice_mut(), sg, contiguous_stride(sg)).unwrap(),
+            d_h_pre: TensorMut::new(dpre.as_slice_mut(), sh, contiguous_stride(sh)).unwrap(),
+            d_h_post: TensorMut::new(dpost.as_slice_mut(), sh, contiguous_stride(sh)).unwrap(),
+            d_h_res: TensorMut::new(dres.as_slice_mut(), sr, contiguous_stride(sr)).unwrap(),
+        },
+    );
+    assert!(
+        res.is_err(),
+        "run_backward on an inference plan must be refused"
     );
 }

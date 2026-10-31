@@ -13,8 +13,13 @@
 //!
 //! ## Tier 1 scope
 //!
-//! - **Static-H FW only**. Dynamic-H FW and the BW pass live behind
-//!   the same vendored `MHCLayer` class and ship in Tier 2.
+//! - **Static-H FW** (Tier 1). Dynamic-H FW still lives behind the same
+//!   vendored `MHCLayer` class and is not wired.
+//! - **Static-H backward** (Tier 2): [`HyperConnectionPlan::select_training`] +
+//!   [`HyperConnectionPlan::run_backward`]. Checked against central differences
+//!   of an f64 reference on `n = 4`; the Sinkhorn adjoint is baracuda's own
+//!   because the vendored one is wrong (see `mhc_launcher.cu`). Limited to
+//!   `sinkhorn_iters <= 20`.
 //! - **bf16 weights / f32 activations**. The upstream `floatX` is
 //!   hardcoded to `nv_bfloat16`; f16 / f32 paths require additional
 //!   convert kernels in the launcher and ship in Tier 3.
@@ -85,6 +90,26 @@ pub struct HyperConnectionArgs<'a, T: Element> {
     pub out: TensorMut<'a, T, 3>,
 }
 
+/// Args bundle for [`HyperConnectionPlan::run_backward`].
+///
+/// All tensors are f32 (`T`), including `d_rmsnorm_weight`, which is the
+/// gradient of a bf16 weight.
+#[derive(Debug)]
+pub struct HyperConnectionBackwardArgs<'a, T: Element> {
+    /// Upstream gradient of `out` — `[B, n, C]`.
+    pub d_out: TensorRef<'a, T, 3>,
+    /// Gradient w.r.t. `x_expanded` — `[B, n, C]`, fully overwritten.
+    pub d_x_expanded: TensorMut<'a, T, 3>,
+    /// Gradient w.r.t. the RMSNorm gamma — `[C]`, fully overwritten.
+    pub d_rmsnorm_weight: TensorMut<'a, T, 1>,
+    /// Gradient w.r.t. the pre-sigmoid `h_pre` logits — `[n]`.
+    pub d_h_pre: TensorMut<'a, T, 1>,
+    /// Gradient w.r.t. the pre-sigmoid `h_post` logits — `[n]`.
+    pub d_h_post: TensorMut<'a, T, 1>,
+    /// Gradient w.r.t. the pre-exp `h_res` — `[n, n]`.
+    pub d_h_res: TensorMut<'a, T, 2>,
+}
+
 /// Hyper-Connection forward plan (static-H, bf16 weights, Tier 1).
 ///
 /// **Formula** (with `M = Sinkhorn-Knopp(softmax_or_exp(H_res))`,
@@ -111,6 +136,8 @@ pub struct HyperConnectionPlan<T: Element> {
     sku: KernelSku,
     #[cfg(feature = "mhc")]
     handle: *mut c_void,
+    /// True when the handle was created with gradient buffers (`select_training`).
+    training: bool,
     _marker: PhantomData<T>,
 }
 
@@ -127,10 +154,24 @@ impl<T: Element> HyperConnectionPlan<T> {
     /// Returns `Err(Error::Unsupported)` if the `mhc` feature is off
     /// or the descriptor is outside the Tier-1 SKU matrix.
     pub fn select(
-        _stream: &Stream,
+        stream: &Stream,
         desc: &HyperConnectionDescriptor,
-        _pref: PlanPreference,
+        pref: PlanPreference,
     ) -> Result<Self> {
+        Self::select_impl(stream, desc, pref, false)
+    }
+
+    /// Like [`Self::select`], but the plan also allocates the gradient buffers
+    /// so [`Self::run_backward`] can follow a [`Self::run`].
+    pub fn select_training(
+        stream: &Stream,
+        desc: &HyperConnectionDescriptor,
+        pref: PlanPreference,
+    ) -> Result<Self> {
+        Self::select_impl(stream, desc, pref, true)
+    }
+
+    fn validate_descriptor(desc: &HyperConnectionDescriptor, training: bool) -> Result<()> {
         if desc.element != T::KIND {
             return Err(Error::Unsupported(
                 "baracuda-kernels::HyperConnectionPlan: descriptor element != T",
@@ -143,6 +184,11 @@ impl<T: Element> HyperConnectionPlan<T> {
                  (f16 / bf16 deferred to Tier 3)",
             ));
         }
+        Self::validate_shape(desc)?;
+        Self::validate_solver(desc, training)
+    }
+
+    fn validate_shape(desc: &HyperConnectionDescriptor) -> Result<()> {
         if desc.batch <= 0 || desc.hidden_dim <= 0 || desc.n_streams <= 0 {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::HyperConnectionPlan: batch / hidden_dim / n_streams must be positive",
@@ -160,6 +206,15 @@ impl<T: Element> HyperConnectionPlan<T> {
                  one channel per stream for the aggregate kernel)",
             ));
         }
+        Ok(())
+    }
+
+    fn validate_solver(desc: &HyperConnectionDescriptor, training: bool) -> Result<()> {
+        if training && desc.sinkhorn_iters > 20 {
+            return Err(Error::Unsupported(
+                "baracuda-kernels::HyperConnectionPlan: training plans support sinkhorn_iters <= 20",
+            ));
+        }
         if desc.sinkhorn_iters <= 0 || desc.sinkhorn_iters > 1000 {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::HyperConnectionPlan: sinkhorn_iters must be in 1..=1000",
@@ -170,7 +225,10 @@ impl<T: Element> HyperConnectionPlan<T> {
                 "baracuda-kernels::HyperConnectionPlan: eps must be finite and in (0, 1)",
             ));
         }
+        Ok(())
+    }
 
+    fn build_sku() -> KernelSku {
         let precision_guarantee = PrecisionGuarantee {
             math_precision: MathPrecision::F32,
             accumulator: ElementKind::F32,
@@ -181,7 +239,7 @@ impl<T: Element> HyperConnectionPlan<T> {
             bit_stable_on_same_hardware: true,
             deterministic: true,
         };
-        let sku = KernelSku {
+        KernelSku {
             category: OpCategory::Attention,
             op: AttentionKind::HyperConnection as u16,
             element: T::KIND,
@@ -191,40 +249,64 @@ impl<T: Element> HyperConnectionPlan<T> {
             arch: ArchSku::Sm80,
             backend: BackendKind::Bespoke,
             precision_guarantee,
+        }
+    }
+
+    #[cfg(feature = "mhc")]
+    fn create_handle(desc: &HyperConnectionDescriptor, training: bool) -> Result<*mut c_void> {
+        // Pre-flight C-side validation (mirrors create's range
+        // checks). Lets us return InvalidArg / Unsupported without
+        // attempting an alloc that would just fail.
+        let probe = unsafe {
+            baracuda_kernels_sys::baracuda_kernels_mhc_layer_static_bf16_can_implement(
+                desc.batch,
+                desc.hidden_dim,
+                desc.n_streams,
+            )
         };
+        super::map_status(probe)?;
+
+        let create = if training {
+            baracuda_kernels_sys::baracuda_kernels_mhc_layer_static_bf16_create_training
+        } else {
+            baracuda_kernels_sys::baracuda_kernels_mhc_layer_static_bf16_create
+        };
+        // SAFETY: plain value arguments; the function returns an owned handle or null.
+        let handle = unsafe {
+            create(
+                desc.batch,
+                desc.hidden_dim,
+                desc.n_streams,
+                desc.sinkhorn_iters,
+                desc.eps,
+            )
+        };
+        if handle.is_null() {
+            return Err(Error::Unsupported(
+                "baracuda-kernels::HyperConnectionPlan: native MHCLayer init failed",
+            ));
+        }
+        Ok(handle)
+    }
+
+    fn select_impl(
+        _stream: &Stream,
+        desc: &HyperConnectionDescriptor,
+        _pref: PlanPreference,
+        training: bool,
+    ) -> Result<Self> {
+        Self::validate_descriptor(desc, training)?;
+
+        let sku = Self::build_sku();
 
         #[cfg(feature = "mhc")]
         {
-            // Pre-flight C-side validation (mirrors create's range
-            // checks). Lets us return InvalidArg / Unsupported without
-            // attempting an alloc that would just fail.
-            let probe = unsafe {
-                baracuda_kernels_sys::baracuda_kernels_mhc_layer_static_bf16_can_implement(
-                    desc.batch,
-                    desc.hidden_dim,
-                    desc.n_streams,
-                )
-            };
-            super::map_status(probe)?;
-
-            let handle = unsafe {
-                baracuda_kernels_sys::baracuda_kernels_mhc_layer_static_bf16_create(
-                    desc.batch,
-                    desc.hidden_dim,
-                    desc.n_streams,
-                    desc.sinkhorn_iters,
-                    desc.eps,
-                )
-            };
-            if handle.is_null() {
-                return Err(Error::Unsupported(
-                    "baracuda-kernels::HyperConnectionPlan: native MHCLayer init failed",
-                ));
-            }
+            let handle = Self::create_handle(desc, training)?;
             Ok(Self {
                 desc: *desc,
                 sku,
                 handle,
+                training,
                 _marker: PhantomData,
             })
         }
@@ -352,6 +434,79 @@ impl<T: Element> HyperConnectionPlan<T> {
         #[cfg(not(feature = "mhc"))]
         {
             let _ = stream;
+            Err(Error::Unsupported(
+                "baracuda-kernels::HyperConnectionPlan: build with the `mhc` cargo feature",
+            ))
+        }
+    }
+}
+
+impl<T: Element> HyperConnectionPlan<T> {
+    fn check_backward_args(&self, args: &HyperConnectionBackwardArgs<'_, T>) -> Result<()> {
+        Self::check_backward_fits(args)?;
+        let (b, n, c) = (self.desc.batch, self.desc.n_streams, self.desc.hidden_dim);
+        let shapes_ok = args.d_out.shape() == [b, n, c]
+            && args.d_x_expanded.shape() == [b, n, c]
+            && args.d_rmsnorm_weight.shape() == [c]
+            && args.d_h_pre.shape() == [n]
+            && args.d_h_post.shape() == [n]
+            && args.d_h_res.shape() == [n, n];
+        if !shapes_ok {
+            return Err(Error::InvalidProblem(
+                "baracuda-kernels::HyperConnectionPlan: backward tensor shapes disagree with [B, n, C] / [C] / [n] / [n, n]",
+            ));
+        }
+        Ok(())
+    }
+
+    fn check_backward_fits(args: &HyperConnectionBackwardArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.d_out)?;
+        crate::view_check::check_fits(&args.d_x_expanded)?;
+        crate::view_check::check_fits(&args.d_rmsnorm_weight)?;
+        crate::view_check::check_fits(&args.d_h_pre)?;
+        crate::view_check::check_fits(&args.d_h_post)?;
+        crate::view_check::check_fits(&args.d_h_res)
+    }
+
+    /// Static-H backward (Tier 2). The plan must come from
+    /// [`Self::select_training`], and this must follow a [`Self::run`] on the SAME
+    /// plan: the activations are read from the plan's internal buffers, so
+    /// another `run` in between (or concurrent use) changes the result.
+    pub fn run_backward(
+        &self,
+        stream: &Stream,
+        args: HyperConnectionBackwardArgs<'_, T>,
+    ) -> Result<()> {
+        if !self.training {
+            return Err(Error::Unsupported(
+                "baracuda-kernels::HyperConnectionPlan: run_backward needs select_training",
+            ));
+        }
+        self.check_backward_args(&args)?;
+        #[cfg(feature = "mhc")]
+        {
+            let (b, n, c) = (self.desc.batch, self.desc.n_streams, self.desc.hidden_dim);
+            // SAFETY: every pointer is a live device allocation of the checked shape and length; the handle is owned by `self`.
+            let status = unsafe {
+                baracuda_kernels_sys::baracuda_kernels_mhc_layer_static_bf16_backward(
+                    self.handle,
+                    args.d_out.data().as_raw().0 as *const c_void,
+                    args.d_x_expanded.data().as_raw().0 as *mut c_void,
+                    args.d_rmsnorm_weight.data().as_raw().0 as *mut c_void,
+                    args.d_h_pre.data().as_raw().0 as *mut c_void,
+                    args.d_h_post.data().as_raw().0 as *mut c_void,
+                    args.d_h_res.data().as_raw().0 as *mut c_void,
+                    b,
+                    c,
+                    n,
+                    stream.as_raw(),
+                )
+            };
+            super::map_status(status)
+        }
+        #[cfg(not(feature = "mhc"))]
+        {
+            let _ = (stream, args);
             Err(Error::Unsupported(
                 "baracuda-kernels::HyperConnectionPlan: build with the `mhc` cargo feature",
             ))

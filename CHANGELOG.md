@@ -22,6 +22,17 @@ at alpha.82.
 
 - **BREAKING (version line):** `unpopped`, `unpopped-vocab`, `unpopped-cpu-c` 0.35.3 -> 0.36.0 (root pins, `baracuda-cuda-emit` dev-dep, `tools/kiss-ref-diff` incl. its lock); `baracuda-cuda-emit` and `baracuda-cuda-parse` follow to 0.36.0 (the Versioning exception above); `fuel-kernel-seam` / `fuel-kernel-seam-types` 0.32.0 -> 0.33.0 (both on `unpopped-vocab` 0.36, so the graph holds one vocab copy: `cargo tree -d` lists no `unpopped*`, `fuel-*` or `vulkane-*` package). `unpopped-slang` ended at 0.35.3: the test-only dev-dep becomes `vulkane-slang-emit` 0.18.0 (`vulkane_slang_emit::Slang`), and `SLANG` left `unpopped::convert`, so `baracuda-cuda-emit` and `baracuda-cuda-parse` gain `vulkane-slang-parse` 0.18.0 as a dev-dep for `tests/convert.rs` (it needs Rust 1.90; dev-dep only, MSRV job unaffected). unpopped 0.37.0 is also published but `vulkane-slang-emit` 0.18.0 and `fuel-kernel-seam` 0.33.0 require `^0.36`, so 0.37 waits for their republish. Host tests: `cargo test --locked -p baracuda-cuda-emit -p baracuda-cuda-parse -p baracuda-cuda-seam --features baracuda-cuda-emit/convert` green (emit 332 lib + 90 integration, parse 14, seam 20). NOT run on device.
 
+## 0.1.0-alpha.70 - 2026-10-31
+
+### Added
+
+- `baracuda-kernels` (feature `mhc`): static-H mHC backward (ROADMAP SA-31, Tier 2 part 1). `HyperConnectionPlan::select_training` + `run_backward(HyperConnectionBackwardArgs)` (gradients of `x_expanded`, the RMSNorm gamma, `h_pre`, `h_post`, `h_res`; f32; must follow a `run` on the same plan; `sinkhorn_iters <= 20`); `baracuda-kernels-sys` gains `baracuda_kernels_mhc_layer_static_bf16_create_training` and `..._backward` (manifest regenerated, additions only, no ABI bump). Device-verified sm_89 (RTX 4070), `cargo gpu-test -p baracuda-kernels --no-default-features --features mhc,device-tests --test hyper_connection_smoke`: 5 passed, 0 failed. Two new references check the plan for the first time against anything but sanity: the f32 forward matches an independent f64 model to 2e-4, and all five backward gradients match central differences of that model (worst error / scale: d_x 3.6e-7, d_gamma 1.0e-7, d_h_pre 4.7e-7, d_h_post 5.4e-8, d_h_res 2.5e-7; B=2, n=4, C=16, 20 iterations).
+- Not covered: dynamic-H forward and its backward (the vendored backward is static-H only), `n > 4` in the backward check, f16 / bf16 activations (Tier 3).
+
+### Fixed
+
+- Two defects in the vendored mHC backward, worked around in baracuda's launcher (vendored tree untouched, recorded in `vendor/mhc/VENDOR.md`): (1) upstream `MHCLayer::backward` leaves the gradient of `x_expanded` in two buffers (`d_x_expanded` = aggregate path, `d_x_mixed` = mix path) and never sums them, so its `d_x_expanded` was off by ~7% of scale here; the launcher returns their sum. (2) upstream `sinkhorn_knopp_backward` uses `d - y * sum(d * y)` and omits `1/sum` where the adjoint of `y = x / sum(x)` is `(dy - sum(dy * y)) / sum(x)`; its `d_h_res` was ~3.8x too large. The launcher has its own exact adjoint (`mhc_sinkhorn_backward_exact_kernel`, also checked in pure Python at 1, 2 and 20 iterations, max error 2e-10). Not yet reported upstream.
+
 ## 0.1.0-alpha.69 - 2026-10-31
 
 Tests only. No library code.

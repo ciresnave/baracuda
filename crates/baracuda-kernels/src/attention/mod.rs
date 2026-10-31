@@ -102,7 +102,10 @@ pub use flash_sdpa_varlen::{
     FlashSdpaVarlenArgs, FlashSdpaVarlenBackwardArgs, FlashSdpaVarlenBackwardPlan,
     FlashSdpaVarlenDescriptor, FlashSdpaVarlenPlan,
 };
-pub use hyper_connection::{HyperConnectionArgs, HyperConnectionDescriptor, HyperConnectionPlan};
+pub use hyper_connection::{
+    HyperConnectionArgs, HyperConnectionBackwardArgs, HyperConnectionDescriptor,
+    HyperConnectionPlan,
+};
 pub use kv_cache::{KvCacheAppendArgs, KvCacheAppendDescriptor, KvCacheAppendPlan};
 pub use rope::{RopeArgs, RopeDescriptor, RopePlan};
 pub use rope_backward::{RopeBackwardArgs, RopeBackwardDescriptor, RopeBackwardPlan};

@@ -52,6 +52,148 @@
 
 #include "../../vendor/mhc/src/mhc_layer.cuh"
 
+// Exact adjoint of the Sinkhorn-Knopp iteration (row normalise, then column
+// normalise, `iters` times) with respect to its INPUT `K = exp(H_res)`.
+//
+// baracuda-owned replacement for upstream `sinkhorn_knopp_backward`. For
+// y = x / sum(x) the adjoint is dx = (dy - sum(dy * y)) / sum(x); the vendored
+// kernel subtracts `y * sum(dy * y)` (an extra factor of y) and drops the
+// 1/sum, so its result is wrong, by a factor of about `n` when `K = exp(H)` is
+// far from doubly stochastic. Measured against central differences of an f64
+// reference (tests/hyper_connection_smoke.rs) and checked in pure Python at
+// 1, 2 and 20 iterations (max error 2e-10). The vendored tree is left
+// byte-identical (VENDOR.md).
+//
+// One block; N <= 32, iters <= 20. Dynamic shared memory, in floats:
+//   iters*N*N (post-row-normalise checkpoints) + 2*iters*N (inverse sums, 0 = the
+//   normalisation was skipped because the sum was <= eps) + N*N (running tile)
+//   + N*N (running gradient) + N (scratch).
+__global__ void mhc_sinkhorn_backward_exact_kernel(float* __restrict__ d_inp,
+                                                   const float* __restrict__ grad,
+                                                   const float* __restrict__ K, int N, int iters,
+                                                   float eps) {
+    extern __shared__ float smem[];
+    const int NN = N * N;
+    float* chk = smem;                    // [iters][N*N]
+    float* rinv = chk + iters * NN;       // [iters][N]
+    float* cinv = rinv + iters * N;       // [iters][N]
+    float* tile = cinv + iters * N;       // [N*N]
+    float* d = tile + NN;                 // [N*N]
+    float* buf = d + NN;                  // [N]
+
+    for (int i = threadIdx.x; i < NN; i += blockDim.x) {
+        tile[i] = K[i];
+        d[i] = grad[i];
+    }
+    __syncthreads();
+
+    // Forward replay, mirroring the forward kernel (including the `> eps` guard).
+    for (int it = 0; it < iters; it++) {
+        for (int r = threadIdx.x; r < N; r += blockDim.x) {
+            float sum = 0.0f;
+            for (int c = 0; c < N; c++) sum += tile[r * N + c];
+            rinv[it * N + r] = (sum > eps) ? __frcp_rn(sum) : 0.0f;
+        }
+        __syncthreads();
+        for (int i = threadIdx.x; i < NN; i += blockDim.x) {
+            const float f = rinv[it * N + i / N];
+            if (f != 0.0f) tile[i] *= f;
+            chk[it * NN + i] = tile[i];
+        }
+        __syncthreads();
+        for (int c = threadIdx.x; c < N; c += blockDim.x) {
+            float sum = 0.0f;
+            for (int r = 0; r < N; r++) sum += tile[r * N + c];
+            cinv[it * N + c] = (sum > eps) ? __frcp_rn(sum) : 0.0f;
+        }
+        __syncthreads();
+        for (int i = threadIdx.x; i < NN; i += blockDim.x) {
+            const float f = cinv[it * N + i % N];
+            if (f != 0.0f) tile[i] *= f;
+        }
+        __syncthreads();
+    }
+
+    for (int it = iters - 1; it >= 0; it--) {
+        // Column step. B = A * c;  dA_ij = c_j * (dB_ij - sum_k dB_kj B_kj).
+        for (int c = threadIdx.x; c < N; c += blockDim.x) {
+            const float f = cinv[it * N + c];
+            float dot = 0.0f;
+            if (f != 0.0f) {
+                for (int r = 0; r < N; r++) dot += d[r * N + c] * (chk[it * NN + r * N + c] * f);
+            }
+            buf[c] = dot;
+        }
+        __syncthreads();
+        for (int i = threadIdx.x; i < NN; i += blockDim.x) {
+            const float f = cinv[it * N + i % N];
+            if (f != 0.0f) d[i] = f * (d[i] - buf[i % N]);
+        }
+        __syncthreads();
+        // Row step. A = K * r;  dK_ij = r_i * (dA_ij - sum_l dA_il A_il).
+        for (int r = threadIdx.x; r < N; r += blockDim.x) {
+            const float f = rinv[it * N + r];
+            float dot = 0.0f;
+            if (f != 0.0f) {
+                for (int c = 0; c < N; c++) dot += d[r * N + c] * chk[it * NN + r * N + c];
+            }
+            buf[r] = dot;
+        }
+        __syncthreads();
+        for (int i = threadIdx.x; i < NN; i += blockDim.x) {
+            const float f = rinv[it * N + i / N];
+            if (f != 0.0f) d[i] = f * (d[i] - buf[i / N]);
+        }
+        __syncthreads();
+    }
+
+    for (int i = threadIdx.x; i < NN; i += blockDim.x) d_inp[i] = d[i];
+}
+
+// Same sequence as upstream `MHCLayer::backward` (static-H), with the exact
+// Sinkhorn adjoint above. Returns false when the shape is outside the kernel's
+// range (n > 32 or more than 20 iterations).
+static bool mhc_backward_exact(mhc::MHCLayer* layer, const float* d_output) {
+    const int B = layer->config.batch_size;
+    const int C = layer->config.hidden_dim;
+    const int n = layer->config.expansion_rate;
+    const int iters = layer->config.sinkhorn_iters;
+    if (n > 32 || iters > 20) return false;
+    cudaStream_t stream = layer->stream;
+    auto& g = layer->grads;
+    auto& b = layer->buffers;
+
+    g.zero_weight_grads(C, n, stream);
+    mhc::stream_distribute_mix_backward_fused(
+        g.d_x_mixed, g.d_layer_out, g.d_M, g.d_H_post_activated, d_output, b.x_expanded,
+        b.layer_out_f32, b.sinkhorn_M, b.H_post_activated, B, n, C, g.workspace_dM,
+        g.workspace_dH, g.workspace_num_blocks, stream);
+
+    const size_t smem = ((size_t)iters * n * n + 2 * (size_t)iters * n + 2 * (size_t)n * n + n) *
+                        sizeof(float);
+    cudaFuncSetAttribute(mhc_sinkhorn_backward_exact_kernel,
+                         cudaFuncAttributeMaxDynamicSharedMemorySize, (int)smem);
+    mhc_sinkhorn_backward_exact_kernel<<<1, 256, smem, stream>>>(
+        g.d_H_res_exp, g.d_M, b.H_res_tilde, n, iters, layer->config.eps);
+    mhc::exp_backward(g.d_H_res, g.d_H_res_exp, b.H_res_tilde, n * n, stream);
+
+    mhc::sigmoid_scale_backward(g.d_H_post, g.d_H_post_activated, b.H_post_activated, 2.0f, n,
+                                stream);
+    mhc::rmsnorm_backward(g.d_x_aggregated, g.d_rmsnorm_weight, g.d_layer_out, b.x_aggregated_f32,
+                          layer->weights.rmsnorm_weight, b.rms_values, B, C, stream);
+    mhc::stream_aggregate_backward(g.d_x_expanded, g.d_H_pre_activated, g.d_x_aggregated,
+                                   b.x_expanded, b.H_pre_activated, B, n, C, g.workspace_dH,
+                                   g.workspace_num_blocks, stream);
+    mhc::sigmoid_backward(g.d_H_pre, g.d_H_pre_activated, b.H_pre_activated, n, stream);
+    return true;
+}
+
+__global__ void mhc_add2_kernel(float* __restrict__ out, const float* __restrict__ a,
+                                const float* __restrict__ b, size_t n) {
+    size_t i = (size_t)blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) out[i] = a[i] + b[i];
+}
+
 extern "C" {
 
 // Status codes match baracuda-kernels-sys convention:
@@ -68,8 +210,8 @@ constexpr int STATUS_UNSUPPORTED = 3;
 //
 // Upstream allocates ~B*n*C*sizeof(float) bytes of scratch on the
 // device per handle. For (B=32, n=4, C=2048) that's ~1 MiB.
-void* baracuda_kernels_mhc_layer_static_bf16_create(int B, int C, int n,
-                                                    int sinkhorn_iters, float eps) {
+static void* mhc_create_impl(int B, int C, int n, int sinkhorn_iters, float eps,
+                             bool enable_backward) {
     if (B <= 0 || C <= 0 || n <= 0) {
         return nullptr;
     }
@@ -119,10 +261,24 @@ void* baracuda_kernels_mhc_layer_static_bf16_create(int B, int C, int n,
     // Backward off for Tier 1; pipelining off (only beneficial for n>=16
     // anyway).
     layer->init(cfg, /*s=*/nullptr,
-                /*enable_backward=*/false,
+                /*enable_backward=*/enable_backward,
                 /*enable_pipelining=*/false);
 
     return reinterpret_cast<void*>(layer);
+}
+
+void* baracuda_kernels_mhc_layer_static_bf16_create(int B, int C, int n,
+                                                    int sinkhorn_iters, float eps) {
+    return mhc_create_impl(B, C, n, sinkhorn_iters, eps, /*enable_backward=*/false);
+}
+
+// Same as `create`, but also allocates the gradient buffers so
+// `baracuda_kernels_mhc_layer_static_bf16_backward` can follow a `_run`.
+void* baracuda_kernels_mhc_layer_static_bf16_create_training(int B, int C, int n,
+                                                             int sinkhorn_iters, float eps) {
+    // The exact Sinkhorn adjoint keeps its checkpoints in shared memory: <= 20 iterations.
+    if (sinkhorn_iters > 20) return nullptr;
+    return mhc_create_impl(B, C, n, sinkhorn_iters, eps, /*enable_backward=*/true);
 }
 
 // Destroy an MHCLayer handle. Safe to pass nullptr.
@@ -233,6 +389,80 @@ int baracuda_kernels_mhc_layer_static_bf16_run(
         return STATUS_UNSUPPORTED;
     }
     return STATUS_OK;
+}
+
+// Backward (static-H). MUST follow a `_run` on the SAME handle: it reads the
+// activations that forward left in the handle (x_expanded, the normalised
+// aggregate, the Sinkhorn matrix, the activated H vectors, the RMS values).
+//
+//   d_out          : [B, n, C] f32, upstream gradient of `out`.
+//   d_x_expanded   : [B, n, C] f32 out, gradient w.r.t. x_expanded.
+//   d_rmsnorm_w    : [C] f32 out, gradient w.r.t. the RMSNorm gamma (f32 even
+//                    though gamma itself is bf16).
+//   d_h_pre, d_h_post : [n] f32 out, gradients w.r.t. the pre-activation logits.
+//   d_h_res        : [n, n] f32 out, gradient w.r.t. the pre-exp H_res.
+//
+// Returns 0 ok, 2 invalid arg, 3 if the handle was not created for training or
+// its (B, C, n) disagrees with the call.
+int baracuda_kernels_mhc_layer_static_bf16_backward(
+    void* handle,
+    const void* d_out,
+    void* d_x_expanded,
+    void* d_rmsnorm_w,
+    void* d_h_pre,
+    void* d_h_post,
+    void* d_h_res,
+    int B, int C, int n,
+    void* stream)
+{
+    if (!handle) return STATUS_INVALID_ARG;
+    if (!d_out || !d_x_expanded || !d_rmsnorm_w || !d_h_pre || !d_h_post || !d_h_res) {
+        return STATUS_INVALID_ARG;
+    }
+    auto* layer = reinterpret_cast<mhc::MHCLayer*>(handle);
+    if (!layer->backward_enabled) return STATUS_UNSUPPORTED;
+    if (layer->config.batch_size != B ||
+        layer->config.hidden_dim != C ||
+        layer->config.expansion_rate != n) {
+        return STATUS_UNSUPPORTED;
+    }
+
+    cudaStream_t saved_stream = layer->stream;
+    cudaStream_t caller_stream = reinterpret_cast<cudaStream_t>(stream);
+    layer->stream = caller_stream;
+
+    if (!mhc_backward_exact(layer, reinterpret_cast<const float*>(d_out))) {
+        layer->stream = saved_stream;
+        return STATUS_UNSUPPORTED;
+    }
+
+    // Upstream leaves the gradient of x_expanded in two buffers: `d_x_expanded`
+    // holds the aggregate (RMSNorm) path and `d_x_mixed` the distribute / mix
+    // path. The true gradient is their sum.
+    {
+        const size_t total = (size_t)B * n * C;
+        const int block = 256;
+        const int grid = (int)((total + block - 1) / block);
+        mhc_add2_kernel<<<grid, block, 0, caller_stream>>>(
+            reinterpret_cast<float*>(d_x_expanded), layer->grads.d_x_expanded,
+            layer->grads.d_x_mixed, total);
+    }
+    cudaError_t err = cudaGetLastError();
+    if (err == cudaSuccess)
+        err = cudaMemcpyAsync(d_rmsnorm_w, layer->grads.d_rmsnorm_weight,
+                              (size_t)C * sizeof(float), cudaMemcpyDeviceToDevice, caller_stream);
+    if (err == cudaSuccess)
+        err = cudaMemcpyAsync(d_h_pre, layer->grads.d_H_pre, (size_t)n * sizeof(float),
+                              cudaMemcpyDeviceToDevice, caller_stream);
+    if (err == cudaSuccess)
+        err = cudaMemcpyAsync(d_h_post, layer->grads.d_H_post, (size_t)n * sizeof(float),
+                              cudaMemcpyDeviceToDevice, caller_stream);
+    if (err == cudaSuccess)
+        err = cudaMemcpyAsync(d_h_res, layer->grads.d_H_res, (size_t)n * n * sizeof(float),
+                              cudaMemcpyDeviceToDevice, caller_stream);
+
+    layer->stream = saved_stream;
+    return err == cudaSuccess ? STATUS_OK : STATUS_UNSUPPORTED;
 }
 
 // can_implement — pure-host validation, no GPU work. Caller wires
