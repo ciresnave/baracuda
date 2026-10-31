@@ -37,17 +37,11 @@ fn link_ptx_to_cubin() {
     linker
         .add_data(InputType::Ptx, &ptx, "vector_add.ptx")
         .expect("add_data");
-    match linker.complete() {
-        Ok(()) => {
-            let cubin = linker.linked_cubin().expect("linked_cubin");
-            eprintln!("linked cubin: {} bytes", cubin.len());
-            assert!(!cubin.is_empty());
-        }
-        Err(e) => {
-            let log = linker.error_log().unwrap_or_default();
-            eprintln!("nvJitLink complete failed: {e:?}\nerror log: {log}");
-            // Not a hard failure — some combos (compute cap mismatch, PTX
-            // version too new) can genuinely fail even on a working setup.
-        }
+    if let Err(e) = linker.complete() {
+        let log = linker.error_log().unwrap_or_default();
+        panic!("nvJitLink complete failed for {arch}: {e:?}\nerror log: {log}");
     }
+    let cubin = linker.linked_cubin().expect("linked_cubin");
+    eprintln!("linked cubin: {} bytes", cubin.len());
+    assert!(!cubin.is_empty());
 }
