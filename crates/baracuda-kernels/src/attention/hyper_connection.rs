@@ -252,6 +252,43 @@ impl<T: Element> HyperConnectionPlan<T> {
         }
     }
 
+    #[cfg(feature = "mhc")]
+    fn create_handle(desc: &HyperConnectionDescriptor, training: bool) -> Result<*mut c_void> {
+        // Pre-flight C-side validation (mirrors create's range
+        // checks). Lets us return InvalidArg / Unsupported without
+        // attempting an alloc that would just fail.
+        let probe = unsafe {
+            baracuda_kernels_sys::baracuda_kernels_mhc_layer_static_bf16_can_implement(
+                desc.batch,
+                desc.hidden_dim,
+                desc.n_streams,
+            )
+        };
+        super::map_status(probe)?;
+
+        let create = if training {
+            baracuda_kernels_sys::baracuda_kernels_mhc_layer_static_bf16_create_training
+        } else {
+            baracuda_kernels_sys::baracuda_kernels_mhc_layer_static_bf16_create
+        };
+        // SAFETY: plain value arguments; the function returns an owned handle or null.
+        let handle = unsafe {
+            create(
+                desc.batch,
+                desc.hidden_dim,
+                desc.n_streams,
+                desc.sinkhorn_iters,
+                desc.eps,
+            )
+        };
+        if handle.is_null() {
+            return Err(Error::Unsupported(
+                "baracuda-kernels::HyperConnectionPlan: native MHCLayer init failed",
+            ));
+        }
+        Ok(handle)
+    }
+
     fn select_impl(
         _stream: &Stream,
         desc: &HyperConnectionDescriptor,
@@ -264,38 +301,7 @@ impl<T: Element> HyperConnectionPlan<T> {
 
         #[cfg(feature = "mhc")]
         {
-            // Pre-flight C-side validation (mirrors create's range
-            // checks). Lets us return InvalidArg / Unsupported without
-            // attempting an alloc that would just fail.
-            let probe = unsafe {
-                baracuda_kernels_sys::baracuda_kernels_mhc_layer_static_bf16_can_implement(
-                    desc.batch,
-                    desc.hidden_dim,
-                    desc.n_streams,
-                )
-            };
-            super::map_status(probe)?;
-
-            let create = if training {
-                baracuda_kernels_sys::baracuda_kernels_mhc_layer_static_bf16_create_training
-            } else {
-                baracuda_kernels_sys::baracuda_kernels_mhc_layer_static_bf16_create
-            };
-            // SAFETY: plain value arguments; the function returns an owned handle or null.
-            let handle = unsafe {
-                create(
-                    desc.batch,
-                    desc.hidden_dim,
-                    desc.n_streams,
-                    desc.sinkhorn_iters,
-                    desc.eps,
-                )
-            };
-            if handle.is_null() {
-                return Err(Error::Unsupported(
-                    "baracuda-kernels::HyperConnectionPlan: native MHCLayer init failed",
-                ));
-            }
+            let handle = Self::create_handle(desc, training)?;
             Ok(Self {
                 desc: *desc,
                 sku,
