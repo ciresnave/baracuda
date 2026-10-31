@@ -1,7 +1,7 @@
 //! Measures the opt-in `Conv2dPlan` forward algorithm picker against the pinned `IMPLICIT_GEMM`
 //! on typical shapes (SA-25: the evidence for or against making the picker the default).
 //!
-//! For each shape it runs the forward pass with the picker off and on (f32, NCHW), prints the
+//! For each shape and dtype (f32, f16, bf16; NCHW) it runs the forward pass with the picker off and on, prints the
 //! resolved algorithm and the mean wall time over `ITERS` stream-synchronised runs, and asserts only
 //! that the two outputs agree within a tolerance relative to the output's scale. It asserts NO
 //! speed: timings are printed for a human to read (`-- --nocapture`), one device, one run.
@@ -14,9 +14,10 @@ use std::time::Instant;
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    Conv2dArgs, Conv2dDescriptor, Conv2dPlan, ElementKind, PlanPreference, TensorMut, TensorRef,
-    Workspace, contiguous_stride,
+    Conv2dArgs, Conv2dDescriptor, Conv2dPlan, Element, ElementKind, PlanPreference, TensorMut,
+    TensorRef, Workspace, contiguous_stride,
 };
+use half::{bf16, f16};
 
 const ITERS: u32 = 20;
 
@@ -31,26 +32,40 @@ const SHAPES: [Shape; 5] = [
     ("7x7 s2 3->64 224x224", 8, 3, 224, 224, 64, 7, 3, 2),
 ];
 
-fn fill(len: usize, mul: usize) -> Vec<f32> {
+fn fill<T>(len: usize, mul: usize, from: fn(f32) -> T) -> Vec<T> {
     (0..len)
-        .map(|i| ((i * mul % 101) as f32 - 50.0) / 50.0)
+        .map(|i| from(((i * mul % 101) as f32 - 50.0) / 50.0))
         .collect()
 }
 
-fn plan(stream: &Stream, s: &Shape, picker: bool) -> Conv2dPlan<f32> {
+/// Per-dtype conversions and the agreement tolerance.
+struct Cfg<T> {
+    kind: ElementKind,
+    from: fn(f32) -> T,
+    to: fn(T) -> f32,
+    tol: f32,
+}
+
+fn plan<T: Element>(stream: &Stream, s: &Shape, picker: bool, kind: ElementKind) -> Conv2dPlan<T> {
     let &(_, n, c_in, h, w, c_out, k, pad, stride) = s;
-    let desc = Conv2dDescriptor::new(n, c_in, h, w, c_out, k, k, ElementKind::F32)
+    let desc = Conv2dDescriptor::new(n, c_in, h, w, c_out, k, k, kind)
         .with_padding(pad, pad)
         .with_stride(stride, stride);
-    Conv2dPlan::<f32>::select(stream, &desc, PlanPreference::default())
+    Conv2dPlan::<T>::select(stream, &desc, PlanPreference::default())
         .expect("select")
         .with_fw_algo_picker(picker)
 }
 
 /// Runs `s` forward with the picker `on`/off: returns the output, the resolved algo and mean ms.
-fn run(ctx: &Context, stream: &Stream, s: &Shape, picker: bool) -> (Vec<f32>, Option<i32>, f64) {
+fn run<T: Element + 'static>(
+    ctx: &Context,
+    stream: &Stream,
+    s: &Shape,
+    picker: bool,
+    cfg: &Cfg<T>,
+) -> (Vec<f32>, Option<i32>, f64) {
     let &(_, n, c_in, h, w, c_out, k, _, _) = s;
-    let p = plan(stream, s, picker);
+    let p = plan::<T>(stream, s, picker, cfg.kind);
     let (h_out, w_out) = p.output_dims();
     let (xs, ws, ys) = (
         [n, c_in, h, w],
@@ -58,9 +73,9 @@ fn run(ctx: &Context, stream: &Stream, s: &Shape, picker: bool) -> (Vec<f32>, Op
         [n, c_out, h_out, w_out],
     );
     let numel = |d: [i32; 4]| d.iter().product::<i32>() as usize;
-    let dev_x = DeviceBuffer::from_slice(ctx, &fill(numel(xs), 37)).expect("up x");
-    let dev_w = DeviceBuffer::from_slice(ctx, &fill(numel(ws), 53)).expect("up w");
-    let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(ctx, numel(ys)).expect("alloc y");
+    let dev_x = DeviceBuffer::from_slice(ctx, &fill(numel(xs), 37, cfg.from)).expect("up x");
+    let dev_w = DeviceBuffer::from_slice(ctx, &fill(numel(ws), 53, cfg.from)).expect("up w");
+    let mut dev_y: DeviceBuffer<T> = DeviceBuffer::zeros(ctx, numel(ys)).expect("alloc y");
     let ws_bytes = p.query_fw_workspace_size(stream).expect("ws query");
     let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(ctx, ws_bytes.max(1)).expect("alloc ws");
     let mut once = || {
@@ -69,7 +84,7 @@ fn run(ctx: &Context, stream: &Stream, s: &Shape, picker: bool) -> (Vec<f32>, Op
         } else {
             Workspace::Borrowed(dev_ws.as_slice_mut())
         };
-        let args = Conv2dArgs::<f32> {
+        let args = Conv2dArgs::<T> {
             x: TensorRef::new(dev_x.as_slice(), xs, contiguous_stride(xs)).unwrap(),
             w: TensorRef::new(dev_w.as_slice(), ws, contiguous_stride(ws)).unwrap(),
             y: TensorMut::new(dev_y.as_slice_mut(), ys, contiguous_stride(ys)).unwrap(),
@@ -84,8 +99,9 @@ fn run(ctx: &Context, stream: &Stream, s: &Shape, picker: bool) -> (Vec<f32>, Op
     }
     stream.synchronize().expect("sync");
     let ms = t.elapsed().as_secs_f64() * 1e3 / f64::from(ITERS);
-    let mut got = vec![0f32; numel(ys)];
+    let mut got = vec![(cfg.from)(0.0); numel(ys)];
     dev_y.copy_to_host(&mut got).expect("dl y");
+    let got = got.into_iter().map(cfg.to).collect();
     (got, p.fw_algo(), ms)
 }
 
@@ -98,19 +114,15 @@ fn rel_diff(a: &[f32], b: &[f32]) -> f32 {
         / scale
 }
 
-#[test]
-fn picker_vs_pinned_forward_on_typical_shapes() {
-    init().expect("driver init");
-    let device = Device::get(0).expect("device 0");
-    let ctx = Context::new(&device).expect("context");
-    let stream = Stream::new(&ctx).expect("stream");
-    eprintln!("shape | pinned algo ms | picker algo ms | speedup | rel diff");
+/// Prints one table for dtype `name` and asserts the picker agrees with the pinned output.
+fn measure<T: Element + 'static>(ctx: &Context, stream: &Stream, name: &str, cfg: &Cfg<T>) {
+    eprintln!("== {name}: shape | pinned algo ms | picker algo ms | speedup | rel diff");
     for s in &SHAPES {
-        let (pinned, pinned_algo, pinned_ms) = run(&ctx, &stream, s, false);
-        let (picked, picked_algo, picked_ms) = run(&ctx, &stream, s, true);
+        let (pinned, pinned_algo, pinned_ms) = run(ctx, stream, s, false, cfg);
+        let (picked, picked_algo, picked_ms) = run(ctx, stream, s, true, cfg);
         let diff = rel_diff(&pinned, &picked);
         eprintln!(
-            "{} | {:?} {:.3} | {:?} {:.3} | {:.2}x | {:.2e}",
+            "{name} {} | {:?} {:.3} | {:?} {:.3} | {:.2}x | {:.2e}",
             s.0,
             pinned_algo,
             pinned_ms,
@@ -120,6 +132,35 @@ fn picker_vs_pinned_forward_on_typical_shapes() {
             diff
         );
         assert_eq!(pinned_algo, Some(0), "default must stay IMPLICIT_GEMM");
-        assert!(diff < 1e-2, "{}: picker output differs by {diff}", s.0);
+        assert!(diff < cfg.tol, "{name} {}: picker differs by {diff}", s.0);
     }
+}
+
+#[test]
+fn picker_vs_pinned_forward_on_typical_shapes() {
+    init().expect("driver init");
+    let device = Device::get(0).expect("device 0");
+    let ctx = Context::new(&device).expect("context");
+    let stream = Stream::new(&ctx).expect("stream");
+    let f32c = Cfg::<f32> {
+        kind: ElementKind::F32,
+        from: |v| v,
+        to: |v| v,
+        tol: 1e-2,
+    };
+    measure(&ctx, &stream, "f32", &f32c);
+    let f16c = Cfg::<f16> {
+        kind: ElementKind::F16,
+        from: f16::from_f32,
+        to: f16::to_f32,
+        tol: 5e-2,
+    };
+    measure(&ctx, &stream, "f16", &f16c);
+    let bf16c = Cfg::<bf16> {
+        kind: ElementKind::Bf16,
+        from: bf16::from_f32,
+        to: bf16::to_f32,
+        tol: 1e-1,
+    };
+    measure(&ctx, &stream, "bf16", &bf16c);
 }

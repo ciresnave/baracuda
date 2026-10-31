@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.64 - 2026-10-31
+
+### Added
+
+- `baracuda-kernels`: `tests/conv2d_picker_measure.rs` now also measures f16 and bf16 forward (SA-49 item 1; backward still unmeasured, it has no picker). Measured on TUF-LAPTOP, NVIDIA GeForce RTX 4070 Laptop GPU (sm_89), driver 617.42, cuDNN 9.23 / CUDA 13.3, one run, batch 8, mean of 20, pinned `IMPLICIT_GEMM` vs picker (ms): f16 3x3 64ch 56x56 0.591 vs 0.527 (1.12x), 3x3 128ch 28x28 0.358 vs 0.570 (0.63x), 3x3 256ch 14x14 0.485 vs 0.651 (0.74x), 1x1 256->64 0.284 vs 0.392 (0.72x), 7x7 s2 0.502 vs 0.295 (1.70x); bf16 3x3 64ch 0.603 vs 0.737 (0.82x), 3x3 128ch 0.364 vs 0.772 (0.47x), 3x3 256ch 1.508 vs 1.534 (0.98x), 1x1 1.011 vs 1.295 (0.78x), 7x7 s2 2.274 vs 2.607 (0.87x). Picker output is bit-identical to the pinned output in f16 and bf16 (rel diff 0). The f32 table was re-measured in the same run and reproduces alpha.62 within ~10% (3x3 64ch 2.02x vs 1.98x; 1x1 0.18x vs 0.17x), a first variance reading. Reading: in half precision the picker wins on only 2 of 10 cases (f16 64ch 3x3, f16 7x7 s2) and loses on most, so it stays opt-in and default-on is not supported by the data. Single device and run; the bf16 timings (e.g. 7x7 s2 at 2.3 ms) look noisy and want a repeat before being trusted.
+
 ## 0.1.0-alpha.63 - 2026-10-30
 
 Docs only. No code, no device run.
