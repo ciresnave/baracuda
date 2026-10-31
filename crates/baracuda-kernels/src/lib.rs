@@ -301,6 +301,7 @@ pub use attention::{
     FlashSdpaVarlenDescriptor,
     FlashSdpaVarlenPlan,
     HyperConnectionArgs,
+    HyperConnectionBackwardArgs,
     HyperConnectionDescriptor,
     HyperConnectionPlan,
     KvCacheAppendArgs,

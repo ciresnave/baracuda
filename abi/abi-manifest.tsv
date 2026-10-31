@@ -2627,8 +2627,10 @@ fn	baracuda-kernels-sys	baracuda_kernels_masked_fill_f64_can_implement	291916f2c
 fn	baracuda-kernels-sys	baracuda_kernels_masked_fill_f64_run	8c9187df284145d2	-
 fn	baracuda-kernels-sys	baracuda_kernels_masked_fill_i32_can_implement	291916f2c8a72b67	-
 fn	baracuda-kernels-sys	baracuda_kernels_masked_fill_i32_run	8c9187df284145d2	-
+fn	baracuda-kernels-sys	baracuda_kernels_mhc_layer_static_bf16_backward	46b225c95b05566f	-
 fn	baracuda-kernels-sys	baracuda_kernels_mhc_layer_static_bf16_can_implement	0ddb1574ffc70e2d	-
 fn	baracuda-kernels-sys	baracuda_kernels_mhc_layer_static_bf16_create	96f7ff90cd636304	-
+fn	baracuda-kernels-sys	baracuda_kernels_mhc_layer_static_bf16_create_training	96f7ff90cd636304	-
 fn	baracuda-kernels-sys	baracuda_kernels_mhc_layer_static_bf16_destroy	042c4736ed93431a	-
 fn	baracuda-kernels-sys	baracuda_kernels_mhc_layer_static_bf16_run	39094b90d8a9c794	-
 fn	baracuda-kernels-sys	baracuda_kernels_mmvq_batched_bf16_can_implement	9e5d6db0b6f7dc14	-

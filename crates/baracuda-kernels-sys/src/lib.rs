@@ -52184,6 +52184,35 @@ unsafe extern "C" {
         eps: f32,
     ) -> *mut c_void;
 
+    /// Like `create`, but also allocates the gradient buffers so
+    /// `baracuda_kernels_mhc_layer_static_bf16_backward` can follow a `run`.
+    pub fn baracuda_kernels_mhc_layer_static_bf16_create_training(
+        b: i32,
+        c: i32,
+        n: i32,
+        sinkhorn_iters: i32,
+        eps: f32,
+    ) -> *mut c_void;
+
+    /// Static-H backward. Must follow a `run` on the same handle (it reads the
+    /// activations that forward left in the handle). Handle must come from
+    /// `create_training`. All pointers are device pointers to f32: `d_out` and
+    /// `d_x_expanded` are `[B, n, C]`, `d_rmsnorm_w` is `[C]`, `d_h_pre` and
+    /// `d_h_post` are `[n]`, `d_h_res` is `[n, n]`.
+    pub fn baracuda_kernels_mhc_layer_static_bf16_backward(
+        handle: *mut c_void,
+        d_out: *const c_void,
+        d_x_expanded: *mut c_void,
+        d_rmsnorm_w: *mut c_void,
+        d_h_pre: *mut c_void,
+        d_h_post: *mut c_void,
+        d_h_res: *mut c_void,
+        b: i32,
+        c: i32,
+        n: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
     /// Destroy an mHC layer handle returned from `create`. Safe to
     /// pass nullptr.
     pub fn baracuda_kernels_mhc_layer_static_bf16_destroy(handle: *mut c_void);
