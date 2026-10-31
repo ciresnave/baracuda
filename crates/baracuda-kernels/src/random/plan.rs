@@ -226,14 +226,14 @@ impl<T: Element, const N: usize> RandomPlan<T, N> {
         // CURAND_RNG_PSEUDO_DEFAULT == 100 (XORWOW).
         let status = unsafe { curandCreateGenerator(&mut handle as *mut _, 100) };
         if status != 0 {
-            return Err(Error::CutlassInternal(curand_to_status(status)));
+            return Err(Error::KernelInternal(curand_to_status(status)));
         }
         let status = unsafe { curandSetPseudoRandomGeneratorSeed(handle, self.desc.seed) };
         if status != 0 {
             unsafe {
                 let _ = curandDestroyGenerator(handle);
             }
-            return Err(Error::CutlassInternal(curand_to_status(status)));
+            return Err(Error::KernelInternal(curand_to_status(status)));
         }
         self.generator.set(handle);
         Ok(handle)
@@ -246,7 +246,7 @@ impl<T: Element, const N: usize> RandomPlan<T, N> {
         let stream_ptr = stream.as_raw();
         let status = unsafe { curandSetStream(gen_handle, stream_ptr) };
         if status != 0 {
-            return Err(Error::CutlassInternal(curand_to_status(status)));
+            return Err(Error::KernelInternal(curand_to_status(status)));
         }
         Ok(())
     }
@@ -309,7 +309,7 @@ impl<const N: usize> RandomPlan<f32, N> {
                 // instead.
                 let status = unsafe { curandGenerateUniform(gen_handle, ptr, n) };
                 if status != 0 {
-                    return Err(Error::CutlassInternal(curand_to_status(status)));
+                    return Err(Error::KernelInternal(curand_to_status(status)));
                 }
                 let low = self.desc.param1;
                 let high = self.desc.param2;
@@ -332,7 +332,7 @@ impl<const N: usize> RandomPlan<f32, N> {
                 // surface if it doesn't.
                 let status = unsafe { curandGenerateNormal(gen_handle, ptr, n, mean, stddev) };
                 if status != 0 {
-                    return Err(Error::CutlassInternal(curand_to_status(status)));
+                    return Err(Error::KernelInternal(curand_to_status(status)));
                 }
                 Ok(())
             }
@@ -369,7 +369,7 @@ impl<const N: usize> RandomPlan<f64, N> {
             RandomKind::Uniform => {
                 let status = unsafe { curandGenerateUniformDouble(gen_handle, ptr, n) };
                 if status != 0 {
-                    return Err(Error::CutlassInternal(curand_to_status(status)));
+                    return Err(Error::KernelInternal(curand_to_status(status)));
                 }
                 let low = self.desc.param1 as f64;
                 let high = self.desc.param2 as f64;
@@ -384,7 +384,7 @@ impl<const N: usize> RandomPlan<f64, N> {
                 let status =
                     unsafe { curandGenerateNormalDouble(gen_handle, ptr, n, mean, stddev) };
                 if status != 0 {
-                    return Err(Error::CutlassInternal(curand_to_status(status)));
+                    return Err(Error::KernelInternal(curand_to_status(status)));
                 }
                 Ok(())
             }
@@ -443,7 +443,7 @@ impl<const N: usize> RandomPlan<Bool, N> {
         let n = numel as usize;
         let status = unsafe { curandGenerateUniform(gen_handle, rand_ptr, n) };
         if status != 0 {
-            return Err(Error::CutlassInternal(curand_to_status(status)));
+            return Err(Error::KernelInternal(curand_to_status(status)));
         }
 
         let y_ptr = args.y.data().as_raw().0 as *mut c_void;
@@ -497,7 +497,7 @@ fn map_status(code: i32) -> Result<()> {
             "baracuda-kernels-sys reported unsupported configuration",
         )),
         4 => Err(Error::WorkspaceTooSmall { needed: 0, got: 0 }),
-        n => Err(Error::CutlassInternal(n)),
+        n => Err(Error::KernelInternal(n)),
     }
 }
 

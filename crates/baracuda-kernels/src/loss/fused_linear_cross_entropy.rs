@@ -317,7 +317,7 @@ impl<T: Element> FusedLinearCrossEntropyPlan<T> {
             ));
         }
         if last_status != 0 {
-            return Err(Error::CutlassInternal(-last_status));
+            return Err(Error::KernelInternal(-last_status));
         }
         self.handle.set(handle);
         Ok(handle)
@@ -326,7 +326,7 @@ impl<T: Element> FusedLinearCrossEntropyPlan<T> {
     fn bind_stream(&self, h: cublasHandle_t, stream: &Stream) -> Result<()> {
         let status = unsafe { cublasSetStream_v2(h, stream.as_raw()) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         Ok(())
     }
@@ -632,7 +632,7 @@ impl<T: Element> FusedLinearCrossEntropyPlan<T> {
                 }
             };
             if status != 0 {
-                return Err(Error::CutlassInternal(status));
+                return Err(Error::KernelInternal(status));
             }
 
             // ---- 3. grad_input[chunk] = grad_logits_chunk @ weight ----
@@ -795,7 +795,7 @@ impl<T: Element> FusedLinearCrossEntropyPlan<T> {
             }
         };
         if status != 0 {
-            return Err(Error::CutlassInternal(status));
+            return Err(Error::KernelInternal(status));
         }
         Ok(())
     }
@@ -855,7 +855,7 @@ impl<T: Element> FusedLinearCrossEntropyPlan<T> {
             )
         };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         Ok(())
     }
@@ -892,7 +892,7 @@ impl<T: Element> FusedLinearCrossEntropyPlan<T> {
             )
         };
         if status != 0 {
-            return Err(Error::CutlassInternal(status));
+            return Err(Error::KernelInternal(status));
         }
         // D2H read forces the count to be available before we use it
         // as `1/N` in the per-chunk kernel launch parameters.
@@ -1164,7 +1164,7 @@ impl<T: Element> FusedLinearCrossEntropyBackwardPlan<T> {
                 }
             };
             if status != 0 {
-                return Err(Error::CutlassInternal(status));
+                return Err(Error::KernelInternal(status));
             }
         }
         if let Some(ref gw) = args.grad_weight {
@@ -1207,7 +1207,7 @@ impl<T: Element> FusedLinearCrossEntropyBackwardPlan<T> {
                 }
             };
             if status != 0 {
-                return Err(Error::CutlassInternal(status));
+                return Err(Error::KernelInternal(status));
             }
         }
 

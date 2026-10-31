@@ -39,6 +39,7 @@
 
 #![deny(missing_docs)]
 
+pub mod error;
 pub mod matrix;
 pub mod operand_desc_ext;
 pub mod plan;
@@ -66,6 +67,7 @@ pub use unpopped_vocab::{
     structure_key_token, winner_of,
 };
 
+pub use error::{Error, Result};
 pub use matrix::{MatrixMut, MatrixRef, VectorRef};
 pub use operand_desc_ext::OperandDescExt;
 pub use plan::Workspace;

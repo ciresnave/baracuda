@@ -378,7 +378,7 @@ pub enum Error {
     MisalignedOperand,
     WorkspaceTooSmall { needed: usize, got: usize },
     BufferTooSmall { needed: usize, got: usize },
-    CutlassInternal(i32),
+    KernelInternal(i32),
     Driver(baracuda_driver::Error),
 }
 ```
@@ -391,14 +391,13 @@ Status-code mapping from `.cu` kernels' `int32_t` returns:
 | 1 | misaligned operand | `Error::MisalignedOperand` |
 | 2 | invalid problem (M, N, or K non-positive, or shape inconsistency) | `Error::InvalidProblem(...)` |
 | 3 | not supported (this kernel doesn't implement the requested shape) | `Error::Unsupported(...)` |
-| 4 | workspace too small or null when required | pre-checked at the safe layer; surfaces as `Error::WorkspaceTooSmall { needed, got }` with the actual byte counts. A status-4 return from a kernel after the safe layer pre-checked workspace indicates a plan-vs-runtime inconsistency and is surfaced as `Error::CutlassInternal(4)` so it's visible. |
-| 5 | internal launch failure | `Error::CutlassInternal(5)` |
-| n > 5 | reserved | `Error::CutlassInternal(n)` |
+| 4 | workspace too small or null when required | pre-checked at the safe layer; surfaces as `Error::WorkspaceTooSmall { needed, got }` with the actual byte counts. A status-4 return from a kernel after the safe layer pre-checked workspace indicates a plan-vs-runtime inconsistency and is surfaced as `Error::KernelInternal(4)` so it's visible. |
+| 5 | internal launch failure | `Error::KernelInternal(5)` |
+| n > 5 | reserved | `Error::KernelInternal(n)` |
 
-The `CutlassInternal` variant name is historical — the same status-
-code ABI is used by every bespoke kernel under
+The same status-code ABI is used by every bespoke kernel under
 `baracuda-kernels-sys/kernels/`, not only the CUTLASS-instantiated
-ones. The variant will likely be renamed `KernelInternal` before 1.0.
+ones, so the variant is `KernelInternal` (renamed from `CutlassInternal` in alpha.72).
 
 ## Sibling-plan pattern for arch-specific tuning
 
@@ -728,7 +727,7 @@ The original "Phase 11 = Hopper sm_90a" and "Phase 12 = 1.0 freeze"
 items remain valid targets but are sequenced behind ongoing
 downstream-driven work.
 
-The workspace is at **v0.1.0-alpha.71**. The most recent structural
+The workspace is at **v0.1.0-alpha.72**. The most recent structural
 change is that the kernel-generation layer described above moved out to the
 standalone `unpopped` crates, leaving the CUDA emitter, parser, vocabulary and
 seam crates here. Consult `CHANGELOG.md` for the release-by-release detail;

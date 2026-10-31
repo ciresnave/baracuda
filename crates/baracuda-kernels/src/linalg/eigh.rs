@@ -251,7 +251,7 @@ impl<T: Element> EighPlan<T> {
             _ => unreachable!("select() gates on F32 / F64 / Complex64 / Complex128"),
         };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         let bytes = (lwork as usize) * core::mem::size_of::<T>();
         self.workspace_bytes.set(bytes);
@@ -266,7 +266,7 @@ impl<T: Element> EighPlan<T> {
         let mut handle: cusolverDnHandle_t = core::ptr::null_mut();
         let status = unsafe { cusolverDnCreate(&mut handle as *mut _) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         self.handle.set(handle);
         Ok(handle)
@@ -275,7 +275,7 @@ impl<T: Element> EighPlan<T> {
     fn bind_stream(&self, h: cusolverDnHandle_t, stream: &Stream) -> Result<()> {
         let status = unsafe { cusolverDnSetStream(h, stream.as_raw()) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         Ok(())
     }
@@ -376,7 +376,7 @@ impl EighPlan<f32> {
             )
         };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         Ok(())
     }
@@ -428,7 +428,7 @@ impl EighPlan<f64> {
             )
         };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         Ok(())
     }
@@ -482,7 +482,7 @@ impl EighPlan<Complex64> {
             )
         };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         Ok(())
     }
@@ -534,7 +534,7 @@ impl EighPlan<Complex128> {
             )
         };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         Ok(())
     }

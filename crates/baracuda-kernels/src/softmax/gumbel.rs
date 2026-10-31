@@ -202,14 +202,14 @@ impl<T: Element, const N: usize> GumbelSoftmaxPlan<T, N> {
         let mut handle: curandGenerator_t = core::ptr::null_mut();
         let status = unsafe { curandCreateGenerator(&mut handle as *mut _, 100) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         let status = unsafe { curandSetPseudoRandomGeneratorSeed(handle, self.desc.seed) };
         if status != 0 {
             unsafe {
                 let _ = curandDestroyGenerator(handle);
             }
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         self.generator.set(handle);
         Ok(handle)
@@ -248,12 +248,12 @@ impl<T: Element, const N: usize> GumbelSoftmaxPlan<T, N> {
         let gen_handle = self.ensure_generator()?;
         let status = unsafe { curandSetStream(gen_handle, stream_ptr) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         let rand_ptr = ws_ptr as *mut f32;
         let status = unsafe { curandGenerateUniform(gen_handle, rand_ptr, numel as usize) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
 
         let x_ptr = args.x.data().as_raw().0 as *const c_void;
@@ -334,6 +334,6 @@ fn map_status(code: i32) -> Result<()> {
             "baracuda-kernels-sys reported unsupported configuration",
         )),
         4 => Err(Error::WorkspaceTooSmall { needed: 0, got: 0 }),
-        n => Err(Error::CutlassInternal(n)),
+        n => Err(Error::KernelInternal(n)),
     }
 }

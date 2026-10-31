@@ -380,7 +380,7 @@ impl<T: Element> Conv3dPlan<T> {
             )
         };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         self.workspace_bytes_fw.set(bytes);
         Ok(bytes)
@@ -405,7 +405,7 @@ impl<T: Element> Conv3dPlan<T> {
             )
         };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         self.workspace_bytes_bw_data.set(bytes);
         Ok(bytes)
@@ -430,7 +430,7 @@ impl<T: Element> Conv3dPlan<T> {
             )
         };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         self.workspace_bytes_bw_filter.set(bytes);
         Ok(bytes)
@@ -497,7 +497,7 @@ impl<T: Element> Conv3dPlan<T> {
             }
         };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         Ok(())
     }
@@ -563,7 +563,7 @@ impl<T: Element> Conv3dPlan<T> {
             }
         };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         Ok(())
     }
@@ -629,7 +629,7 @@ impl<T: Element> Conv3dPlan<T> {
             }
         };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         Ok(())
     }
@@ -646,7 +646,7 @@ impl<T: Element> Conv3dPlan<T> {
         let mut handle: cudnnHandle_t = core::ptr::null_mut();
         let status = unsafe { cudnnCreate(&mut handle as *mut _) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         self.handle.set(handle);
         Ok(handle)
@@ -655,7 +655,7 @@ impl<T: Element> Conv3dPlan<T> {
     fn bind_stream(&self, h: cudnnHandle_t, stream: &Stream) -> Result<()> {
         let status = unsafe { cudnnSetStream(h, stream.as_raw()) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         Ok(())
     }
@@ -677,7 +677,7 @@ impl<T: Element> Conv3dPlan<T> {
         let mut xd: cudnnTensorDescriptor_t = core::ptr::null_mut();
         let status = unsafe { cudnnCreateTensorDescriptor(&mut xd as *mut _) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         let x_dims = [
             self.desc.batch,
@@ -700,7 +700,7 @@ impl<T: Element> Conv3dPlan<T> {
             unsafe {
                 let _ = cudnnDestroyTensorDescriptor(xd);
             }
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         self.x_desc.set(xd);
 
@@ -708,7 +708,7 @@ impl<T: Element> Conv3dPlan<T> {
         let mut yd: cudnnTensorDescriptor_t = core::ptr::null_mut();
         let status = unsafe { cudnnCreateTensorDescriptor(&mut yd as *mut _) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         let y_dims = [self.desc.batch, self.desc.c_out, d_out, h_out, w_out];
         let y_s_w = 1;
@@ -723,7 +723,7 @@ impl<T: Element> Conv3dPlan<T> {
             unsafe {
                 let _ = cudnnDestroyTensorDescriptor(yd);
             }
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         self.y_desc.set(yd);
 
@@ -731,7 +731,7 @@ impl<T: Element> Conv3dPlan<T> {
         let mut wd: cudnnFilterDescriptor_t = core::ptr::null_mut();
         let status = unsafe { cudnnCreateFilterDescriptor(&mut wd as *mut _) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         let w_dims = [
             self.desc.c_out,
@@ -746,7 +746,7 @@ impl<T: Element> Conv3dPlan<T> {
             unsafe {
                 let _ = cudnnDestroyFilterDescriptor(wd);
             }
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         self.w_desc.set(wd);
 
@@ -754,7 +754,7 @@ impl<T: Element> Conv3dPlan<T> {
         let mut cd: cudnnConvolutionDescriptor_t = core::ptr::null_mut();
         let status = unsafe { cudnnCreateConvolutionDescriptor(&mut cd as *mut _) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         let pad_a = [self.desc.pad_d, self.desc.pad_h, self.desc.pad_w];
         let stride_a = [self.desc.stride_d, self.desc.stride_h, self.desc.stride_w];
@@ -778,14 +778,14 @@ impl<T: Element> Conv3dPlan<T> {
             unsafe {
                 let _ = cudnnDestroyConvolutionDescriptor(cd);
             }
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         let status = unsafe { cudnnSetConvolutionGroupCount(cd, self.desc.groups) };
         if status != 0 {
             unsafe {
                 let _ = cudnnDestroyConvolutionDescriptor(cd);
             }
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         self.conv_desc.set(cd);
 

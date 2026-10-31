@@ -167,14 +167,14 @@ impl<T: Element, const N: usize> DropoutPlan<T, N> {
         let mut handle: curandGenerator_t = core::ptr::null_mut();
         let status = unsafe { curandCreateGenerator(&mut handle as *mut _, 100) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         let status = unsafe { curandSetPseudoRandomGeneratorSeed(handle, self.desc.seed) };
         if status != 0 {
             unsafe {
                 let _ = curandDestroyGenerator(handle);
             }
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         self.generator.set(handle);
         Ok(handle)
@@ -241,12 +241,12 @@ impl<const N: usize> DropoutPlan<f32, N> {
         let gen_handle = self.ensure_generator()?;
         let status = unsafe { curandSetStream(gen_handle, stream_ptr) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         // Generate the uniform sample buffer.
         let status = unsafe { curandGenerateUniform(gen_handle, rand_ptr, numel as usize) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
 
         // Compute scale = 1 / (1 - p) at the safe layer so the kernel
@@ -318,11 +318,11 @@ impl<const N: usize> DropoutPlan<f64, N> {
         let gen_handle = self.ensure_generator()?;
         let status = unsafe { curandSetStream(gen_handle, stream_ptr) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         let status = unsafe { curandGenerateUniform(gen_handle, rand_ptr, numel as usize) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
 
         let p = self.desc.p;
@@ -598,6 +598,6 @@ fn map_status(code: i32) -> Result<()> {
             "baracuda-kernels-sys reported unsupported configuration",
         )),
         4 => Err(Error::WorkspaceTooSmall { needed: 0, got: 0 }),
-        n => Err(Error::CutlassInternal(n)),
+        n => Err(Error::KernelInternal(n)),
     }
 }

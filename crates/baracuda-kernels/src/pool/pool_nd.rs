@@ -49,7 +49,7 @@ pub(crate) fn ensure_handle(handle: &Cell<cudnnHandle_t>) -> Result<cudnnHandle_
     let mut new_h: cudnnHandle_t = core::ptr::null_mut();
     let status = unsafe { cudnnCreate(&mut new_h as *mut _) };
     if status != 0 {
-        return Err(Error::CutlassInternal(-status));
+        return Err(Error::KernelInternal(-status));
     }
     handle.set(new_h);
     Ok(new_h)
@@ -59,7 +59,7 @@ pub(crate) fn ensure_handle(handle: &Cell<cudnnHandle_t>) -> Result<cudnnHandle_
 pub(crate) fn bind_stream(h: cudnnHandle_t, stream: &Stream) -> Result<()> {
     let status = unsafe { cudnnSetStream(h, stream.as_raw()) };
     if status != 0 {
-        return Err(Error::CutlassInternal(-status));
+        return Err(Error::KernelInternal(-status));
     }
     Ok(())
 }
@@ -76,7 +76,7 @@ fn create_tensor_nd<T: Element>(
     let mut td: cudnnTensorDescriptor_t = core::ptr::null_mut();
     let status = unsafe { cudnnCreateTensorDescriptor(&mut td as *mut _) };
     if status != 0 {
-        return Err(Error::CutlassInternal(-status));
+        return Err(Error::KernelInternal(-status));
     }
     // cuDNN requires nb_dims >= 4 for `cudnnSetTensorNdDescriptor`. Pad
     // the rank-3 (1-D pool) case to rank-4 by appending W=1.
@@ -102,7 +102,7 @@ fn create_tensor_nd<T: Element>(
         unsafe {
             let _ = cudnnDestroyTensorDescriptor(td);
         }
-        return Err(Error::CutlassInternal(-status));
+        return Err(Error::KernelInternal(-status));
     }
     desc_cell.set(td);
     Ok(())
@@ -123,7 +123,7 @@ fn create_pool_nd(
     let mut pd: cudnnPoolingDescriptor_t = core::ptr::null_mut();
     let status = unsafe { cudnnCreatePoolingDescriptor(&mut pd as *mut _) };
     if status != 0 {
-        return Err(Error::CutlassInternal(-status));
+        return Err(Error::KernelInternal(-status));
     }
     // cuDNN requires nb_dims >= 2 for `cudnnSetPoolingNdDescriptor`. Pad
     // the rank-1 (1-D pool) case by appending a W=1 / pad=0 / stride=1
@@ -156,7 +156,7 @@ fn create_pool_nd(
         unsafe {
             let _ = cudnnDestroyPoolingDescriptor(pd);
         }
-        return Err(Error::CutlassInternal(-status));
+        return Err(Error::KernelInternal(-status));
     }
     pool_desc.set(pd);
     Ok(())
@@ -259,7 +259,7 @@ pub(crate) fn run_fw_nd<T: Element>(
         }
     };
     if status != 0 {
-        return Err(Error::CutlassInternal(-status));
+        return Err(Error::KernelInternal(-status));
     }
     Ok(())
 }
@@ -315,7 +315,7 @@ pub(crate) fn run_bw_nd<T: Element>(
         }
     };
     if status != 0 {
-        return Err(Error::CutlassInternal(-status));
+        return Err(Error::KernelInternal(-status));
     }
     Ok(())
 }

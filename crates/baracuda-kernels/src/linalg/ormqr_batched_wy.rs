@@ -326,7 +326,7 @@ impl<T: Element> BatchedOrmqrWyPlan<T> {
         let mut handle: cublasHandle_t = core::ptr::null_mut();
         let status = unsafe { cublasCreate_v2(&mut handle as *mut _) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         self.handle.set(handle);
         Ok(handle)
@@ -335,7 +335,7 @@ impl<T: Element> BatchedOrmqrWyPlan<T> {
     fn bind_stream(&self, h: cublasHandle_t, stream: &Stream) -> Result<()> {
         let status = unsafe { cublasSetStream_v2(h, stream.as_raw()) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         Ok(())
     }
@@ -377,7 +377,7 @@ fn map_status(code: i32) -> Result<()> {
             "baracuda-kernels-sys reported unsupported configuration",
         )),
         4 => Err(Error::WorkspaceTooSmall { needed: 0, got: 0 }),
-        n => Err(Error::CutlassInternal(n)),
+        n => Err(Error::KernelInternal(n)),
     }
 }
 
@@ -589,7 +589,7 @@ macro_rules! impl_batched_ormqr_wy_run {
                         )
                     };
                     if status != 0 {
-                        return Err(Error::CutlassInternal(-status));
+                        return Err(Error::KernelInternal(-status));
                     }
 
                     // --------- GEMM 2: W2 := op(T) · W    (nb × N)
@@ -624,7 +624,7 @@ macro_rules! impl_batched_ormqr_wy_run {
                         )
                     };
                     if status != 0 {
-                        return Err(Error::CutlassInternal(-status));
+                        return Err(Error::KernelInternal(-status));
                     }
 
                     // --------- GEMM 3: C := C - V · W2    (M × N)
@@ -654,7 +654,7 @@ macro_rules! impl_batched_ormqr_wy_run {
                         )
                     };
                     if status != 0 {
-                        return Err(Error::CutlassInternal(-status));
+                        return Err(Error::KernelInternal(-status));
                     }
                 }
 

@@ -150,6 +150,6 @@ pub(crate) fn map_lp_pool_status(code: i32) -> Result<()> {
             "baracuda-kernels-sys::lp_pool reported unsupported configuration",
         )),
         4 => Err(Error::WorkspaceTooSmall { needed: 0, got: 0 }),
-        n => Err(Error::CutlassInternal(n)),
+        n => Err(Error::KernelInternal(n)),
     }
 }

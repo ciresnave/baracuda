@@ -536,7 +536,7 @@ impl<T: Element> DenseGemmPlan<T> {
             2 => Err(Error::InvalidProblem(
                 "baracuda-kernels-sys dense GEMM facade reported an invalid problem",
             )),
-            n => Err(Error::CutlassInternal(n)),
+            n => Err(Error::KernelInternal(n)),
         }
     }
 }

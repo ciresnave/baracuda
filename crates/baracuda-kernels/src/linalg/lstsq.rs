@@ -258,7 +258,7 @@ impl<T: Element> LstSqPlan<T> {
         let mut handle: cusolverDnHandle_t = core::ptr::null_mut();
         let status = unsafe { cusolverDnCreate(&mut handle as *mut _) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         self.handle.set(handle);
         Ok(handle)
@@ -272,7 +272,7 @@ impl<T: Element> LstSqPlan<T> {
         let mut handle: cublasHandle_t = core::ptr::null_mut();
         let status = unsafe { cublasCreate_v2(&mut handle as *mut _) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         self.cublas_handle.set(handle);
         Ok(handle)
@@ -281,7 +281,7 @@ impl<T: Element> LstSqPlan<T> {
     fn bind_stream(&self, h: cusolverDnHandle_t, stream: &Stream) -> Result<()> {
         let status = unsafe { cusolverDnSetStream(h, stream.as_raw()) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         Ok(())
     }
@@ -289,7 +289,7 @@ impl<T: Element> LstSqPlan<T> {
     fn bind_cublas_stream(&self, h: cublasHandle_t, stream: &Stream) -> Result<()> {
         let status = unsafe { cublasSetStream_v2(h, stream.as_raw()) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         Ok(())
     }
@@ -338,7 +338,7 @@ impl<T: Element> LstSqPlan<T> {
             _ => unreachable!("select() gates on F32 / F64"),
         };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         self.workspace_bytes.set(lwork_bytes);
         Ok(lwork_bytes)
@@ -379,7 +379,7 @@ impl<T: Element> LstSqPlan<T> {
             _ => unreachable!(),
         };
         if status_geqrf != 0 {
-            return Err(Error::CutlassInternal(-status_geqrf));
+            return Err(Error::KernelInternal(-status_geqrf));
         }
         // `ormqr` applies Q^T (k reflectors) to B (m x nrhs).
         let status_ormqr = match T::KIND {
@@ -418,7 +418,7 @@ impl<T: Element> LstSqPlan<T> {
             _ => unreachable!(),
         };
         if status_ormqr != 0 {
-            return Err(Error::CutlassInternal(-status_ormqr));
+            return Err(Error::KernelInternal(-status_ormqr));
         }
         let lwork_max = lwork_geqrf.max(lwork_ormqr) as usize;
         let elem_size = core::mem::size_of::<T>();
@@ -537,7 +537,7 @@ macro_rules! impl_lstsq_run {
                     )
                 };
                 if status != 0 {
-                    return Err(Error::CutlassInternal(-status));
+                    return Err(Error::KernelInternal(-status));
                 }
                 if niters >= 0 {
                     return Ok(());
@@ -589,7 +589,7 @@ macro_rules! impl_lstsq_run {
                 let status =
                     unsafe { $geqrf(h, m, n, a_ptr, m, tau_ptr, tail_ptr, lwork, info_ptr) };
                 if status != 0 {
-                    return Err(Error::CutlassInternal(-status));
+                    return Err(Error::KernelInternal(-status));
                 }
 
                 // 3. ormqr (side=LEFT, trans=T) — B := Q^T · B.
@@ -612,7 +612,7 @@ macro_rules! impl_lstsq_run {
                     )
                 };
                 if status != 0 {
-                    return Err(Error::CutlassInternal(-status));
+                    return Err(Error::KernelInternal(-status));
                 }
 
                 // 4. trsm (side=LEFT, uplo=UPPER, trans=N, diag=NON_UNIT)
@@ -639,7 +639,7 @@ macro_rules! impl_lstsq_run {
                     )
                 };
                 if status != 0 {
-                    return Err(Error::CutlassInternal(-status));
+                    return Err(Error::KernelInternal(-status));
                 }
 
                 // 5. Copy the solution (top-N rows of B, ldb = m,
@@ -720,7 +720,7 @@ unsafe fn copy_d2d(
     }
     let status = unsafe { cuMemcpyDtoDAsync_v2(dst as u64, src as u64, bytes, stream.as_raw()) };
     if status != 0 {
-        return Err(Error::CutlassInternal(-status));
+        return Err(Error::KernelInternal(-status));
     }
     Ok(())
 }

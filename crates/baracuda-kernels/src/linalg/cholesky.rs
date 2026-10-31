@@ -227,7 +227,7 @@ impl<T: Element> CholeskyPlan<T> {
             _ => unreachable!("select() gates on F32 / F64"),
         };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         let bytes = (lwork as usize) * core::mem::size_of::<T>();
         self.workspace_bytes.set(bytes);
@@ -255,7 +255,7 @@ impl<T: Element> CholeskyPlan<T> {
         let mut handle: cusolverDnHandle_t = core::ptr::null_mut();
         let status = unsafe { cusolverDnCreate(&mut handle as *mut _) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         self.handle.set(handle);
         Ok(handle)
@@ -268,7 +268,7 @@ impl<T: Element> CholeskyPlan<T> {
         let stream_ptr = stream.as_raw();
         let status = unsafe { cusolverDnSetStream(h, stream_ptr) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         Ok(())
     }
@@ -342,7 +342,7 @@ impl CholeskyPlan<f32> {
                 cusolverDnSpotrf(h, uplo, n, a_ptr, n, ws_ptr as *mut f32, lwork, info_ptr)
             };
             if status != 0 {
-                return Err(Error::CutlassInternal(-status));
+                return Err(Error::KernelInternal(-status));
             }
             Ok(())
         } else {
@@ -388,7 +388,7 @@ impl CholeskyPlan<f32> {
                 )
             };
             if status != 0 {
-                return Err(Error::CutlassInternal(-status));
+                return Err(Error::KernelInternal(-status));
             }
             Ok(())
         }
@@ -428,7 +428,7 @@ impl CholeskyPlan<f64> {
                 cusolverDnDpotrf(h, uplo, n, a_ptr, n, ws_ptr as *mut f64, lwork, info_ptr)
             };
             if status != 0 {
-                return Err(Error::CutlassInternal(-status));
+                return Err(Error::KernelInternal(-status));
             }
             Ok(())
         } else {
@@ -467,7 +467,7 @@ impl CholeskyPlan<f64> {
                 )
             };
             if status != 0 {
-                return Err(Error::CutlassInternal(-status));
+                return Err(Error::KernelInternal(-status));
             }
             Ok(())
         }
@@ -547,7 +547,7 @@ pub(crate) unsafe fn copy_h2d(
     }
     let status = unsafe { cuMemcpyHtoDAsync_v2(dst as u64, src, bytes, stream.as_raw()) };
     if status != 0 {
-        return Err(Error::CutlassInternal(-status));
+        return Err(Error::KernelInternal(-status));
     }
     // Sync so the host buffer can be safely freed when this function
     // returns. The batched cuSOLVER call that follows expects the

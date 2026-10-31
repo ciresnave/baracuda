@@ -552,6 +552,6 @@ pub(crate) fn ffi_status(status: i32) -> Result<()> {
         2 => Err(Error::InvalidProblem(
             "baracuda-kernels::FractionalMaxPool*dPlan: invalid problem (ffi status 2)",
         )),
-        _ => Err(Error::CutlassInternal(-status)),
+        _ => Err(Error::KernelInternal(-status)),
     }
 }

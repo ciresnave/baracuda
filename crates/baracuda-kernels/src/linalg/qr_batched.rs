@@ -62,7 +62,7 @@ pub struct BatchedQrDescriptor {
 ///
 /// cuBLAS's batched-geqrf contract returns a single host-side
 /// argument-validity flag (NOT a per-slot device array); any non-zero
-/// value surfaces as [`Error::CutlassInternal`] from `run`.
+/// value surfaces as [`Error::KernelInternal`] from `run`.
 #[derive(Debug)]
 pub struct BatchedQrArgs<'a, T: Element> {
     /// Input batch stack `[batch, M, N]` column-major contiguous.
@@ -213,7 +213,7 @@ impl<T: Element> BatchedQrPlan<T> {
         let mut handle: cublasHandle_t = core::ptr::null_mut();
         let status = unsafe { cublasCreate_v2(&mut handle as *mut _) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         self.handle.set(handle);
         Ok(handle)
@@ -222,7 +222,7 @@ impl<T: Element> BatchedQrPlan<T> {
     fn bind_stream(&self, h: cublasHandle_t, stream: &Stream) -> Result<()> {
         let status = unsafe { cublasSetStream_v2(h, stream.as_raw()) };
         if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+            return Err(Error::KernelInternal(-status));
         }
         Ok(())
     }
@@ -322,10 +322,10 @@ macro_rules! impl_batched_qr_run {
                     )
                 };
                 if status != 0 {
-                    return Err(Error::CutlassInternal(-status));
+                    return Err(Error::KernelInternal(-status));
                 }
                 if host_info != 0 {
-                    return Err(Error::CutlassInternal(-host_info));
+                    return Err(Error::KernelInternal(-host_info));
                 }
                 Ok(())
             }

@@ -265,7 +265,7 @@ impl<T: Element, const N: usize> PReluBackwardPlan<T, N> {
                 "baracuda-kernels-sys reported unsupported configuration",
             )),
             4 => Err(Error::WorkspaceTooSmall { needed: 0, got: 0 }),
-            n => Err(Error::CutlassInternal(n)),
+            n => Err(Error::KernelInternal(n)),
         }
     }
 }
