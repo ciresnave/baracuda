@@ -299,31 +299,7 @@ impl<T: Element> Im2ColPlan<T> {
 /// once `dilation > 1`: `h_in = 1, kh = 2, dilation_h = 2, pad_h = 1` has one window whose taps
 /// lie at -1 and 1.
 fn validate_geometry(desc: &Im2ColDescriptor) -> Result<(i32, i32)> {
-    if desc.batch <= 0 || desc.channels <= 0 || desc.h_in <= 0 || desc.w_in <= 0 {
-        return Err(Error::InvalidProblem(
-            "baracuda-kernels::Im2ColPlan: input shape extents must be > 0",
-        ));
-    }
-    if desc.kh <= 0 || desc.kw <= 0 {
-        return Err(Error::InvalidProblem(
-            "baracuda-kernels::Im2ColPlan: kernel extents must be > 0",
-        ));
-    }
-    if desc.stride_h <= 0 || desc.stride_w <= 0 {
-        return Err(Error::InvalidProblem(
-            "baracuda-kernels::Im2ColPlan: stride must be > 0",
-        ));
-    }
-    if desc.dilation_h <= 0 || desc.dilation_w <= 0 {
-        return Err(Error::InvalidProblem(
-            "baracuda-kernels::Im2ColPlan: dilation must be > 0",
-        ));
-    }
-    if desc.pad_h < 0 || desc.pad_w < 0 {
-        return Err(Error::InvalidProblem(
-            "baracuda-kernels::Im2ColPlan: padding must be >= 0",
-        ));
-    }
+    validate_attrs(desc)?;
     let (h_out, w_out) = compute_im2col_2d_dims(desc);
     if h_out <= 0 || w_out <= 0 {
         return Err(Error::InvalidProblem(
@@ -333,25 +309,45 @@ fn validate_geometry(desc: &Im2ColDescriptor) -> Result<(i32, i32)> {
     }
     let tap =
         |n, pad, k, stride, dil| crate::window_axis::every_window_has_tap(n, pad, k, stride, dil);
-    if !tap(
+    let h_ok = tap(
         desc.h_in,
         desc.pad_h,
         desc.kh,
         desc.stride_h,
         desc.dilation_h,
-    ) || !tap(
+    );
+    let w_ok = tap(
         desc.w_in,
         desc.pad_w,
         desc.kw,
         desc.stride_w,
         desc.dilation_w,
-    ) {
+    );
+    if !(h_ok && w_ok) {
         return Err(Error::InvalidProblem(
             "baracuda-kernels::Im2ColPlan: an output window has no in-bounds tap \
              (KISS-OPS-6.13-0011) — padding / dilation / extent combination",
         ));
     }
     Ok((h_out, w_out))
+}
+
+/// Sign / positivity checks on the descriptor fields (no geometry).
+fn validate_attrs(desc: &Im2ColDescriptor) -> Result<()> {
+    let msg = if desc.batch <= 0 || desc.channels <= 0 || desc.h_in <= 0 || desc.w_in <= 0 {
+        "baracuda-kernels::Im2ColPlan: input shape extents must be > 0"
+    } else if desc.kh <= 0 || desc.kw <= 0 {
+        "baracuda-kernels::Im2ColPlan: kernel extents must be > 0"
+    } else if desc.stride_h <= 0 || desc.stride_w <= 0 {
+        "baracuda-kernels::Im2ColPlan: stride must be > 0"
+    } else if desc.dilation_h <= 0 || desc.dilation_w <= 0 {
+        "baracuda-kernels::Im2ColPlan: dilation must be > 0"
+    } else if desc.pad_h < 0 || desc.pad_w < 0 {
+        "baracuda-kernels::Im2ColPlan: padding must be >= 0"
+    } else {
+        return Ok(());
+    };
+    Err(Error::InvalidProblem(msg))
 }
 
 /// Standard `(H_out, W_out)` formula — matches the PyTorch / cuDNN
