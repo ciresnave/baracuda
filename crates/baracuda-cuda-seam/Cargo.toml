@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-cuda-seam"
-version = "0.1.0-alpha.65"
+version = "0.1.0-alpha.66"
 description = "The Fuel kernel-seam `Synthesizer` implementation (`BaracudaSynthesizer`) over the CUDA backend in `baracuda-cuda-emit`."
 edition.workspace = true
 # No `rust-version.workspace = true`: no MSRV CI job builds this crate under 1.88
@@ -9,6 +9,9 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
+readme = "README.md"
+keywords = ["cuda", "gpu", "codegen", "nvrtc", "jit"]
+categories = ["compilers", "hardware-support"]
 homepage.workspace = true
 [features]
 # Real on-demand NVRTC compile (needs the CUDA toolkit at run time). Off by
