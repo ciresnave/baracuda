@@ -42,8 +42,8 @@ use unpopped::{
 use baracuda_cuda_emit::Cuda;
 // The sibling backends, published from the Unpopped extraction (test-only dev-deps).
 use unpopped_cpu_c::CpuC;
-use unpopped_slang::Slang;
 use unpopped_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key};
+use vulkane_slang_emit::Slang;
 
 // ---------------------------------------------------------------------------
 // Seeded LCG (Knuth/MMIX constants) — the same generator used by the reader
