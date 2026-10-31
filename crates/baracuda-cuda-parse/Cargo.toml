@@ -8,7 +8,7 @@ name = "baracuda-cuda-parse"
 # counter (0.14.3 chosen to match baracuda-cuda-emit exactly since both
 # crates work with the identical Unpopped release, not because PATCH tracks
 # Unpopped's own patch number as a rule).
-version = "0.34.11"
+version = "0.35.3"
 description = "CUDA -> IR frontend for the neutral `unpopped` kernel generator: the tree-sitter grammar binding (`parse_cuda`), the CUDA residue list, and the `CUDA` `Frontend` descriptor. Depends on the neutral generator `unpopped` (feature `convert`) and supplies the CUDA-specific parse-side surface from OUTSIDE the neutral core, mirroring `baracuda-cuda-emit`'s emit-side placement."
 edition.workspace = true
 # NOT `rust-version.workspace = true` (1.88): unlike baracuda-cuda-emit, whose
@@ -37,7 +37,7 @@ unpopped = { workspace = true, features = ["convert"] }
 # (crates/unpopped/Cargo.toml), so the `Tree`/`Parser` types this crate's
 # `parse_cuda` returns are the same types `unpopped::convert::Frontend::parse`
 # expects -- a version skew here would be a type mismatch, not a runtime bug.
-tree-sitter = "0.26"
+tree-sitter = "0.27"
 tree-sitter-cuda = "0.21"
 
 [dev-dependencies]
