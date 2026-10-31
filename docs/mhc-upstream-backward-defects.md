@@ -31,12 +31,12 @@ is about n times too large:
     h_res[ 0]: d_H_res=-0.63429  finite-diff=-0.16727  ratio=3.79
     h_res[12]: d_H_res= 0.65333  finite-diff= 0.16594  ratio=3.94
 
-Pure-Python check of the Sinkhorn adjoint alone (n=4, random K, max error against a central difference, gradient scale
-0.1-0.2):
+Pure-Python check of the Sinkhorn adjoint alone (n=4, fixed-seed K, max error against a central difference, gradient scale
+0.17-0.35):
 
-    iters= 1  exact 9.5e-11   mHC.cu style 7.2e-01
-    iters= 2  exact 9.7e-11   mHC.cu style 6.0e-01
-    iters=20  exact 1.7e-10   mHC.cu style 4.0e-01
+    iters= 1  exact 3.6e-11   mHC.cu style 7.5e-01
+    iters= 2  exact 1.6e-10   mHC.cu style 6.2e-01
+    iters=20  exact 2.0e-10   mHC.cu style 8.8e-01
 
 baracuda's replacement kernel (`mhc_sinkhorn_backward_exact_kernel` in `kernels/attention/mhc_launcher.cu`) uses the exact
 formula; with it all five gradients of the layer match the finite differences to <= 5e-7 of scale.

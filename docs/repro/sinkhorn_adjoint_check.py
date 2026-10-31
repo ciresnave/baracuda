@@ -7,10 +7,17 @@ For y = x / sum(x) the exact adjoint is  dx = (dy - sum(dy * y)) / sum(x)  (a co
 mHC.cu `sinkhorn_knopp_backward` instead does  d = d - y * sum(d * y)  (the subtracted term is multiplied by y)
 and has no 1/sum. This script differentiates the same forward numerically and prints the error of both.
 """
-import math, random
+import math
 
 N = 4
-random.seed(1)
+_state = 12345
+
+
+def uniform(lo, hi):
+    """Deterministic LCG in [lo, hi): reproducible test data, not for security."""
+    global _state
+    _state = (_state * 1103515245 + 12345) % 2**31
+    return lo + (hi - lo) * _state / 2**31
 
 
 def forward(K, iters):
@@ -24,34 +31,54 @@ def forward(K, iters):
     return M
 
 
-def adjoint(K, G, iters, upstream_style):
+def checkpoints(K, iters):
     tile = [r[:] for r in K]; chk = []; rin = []; cin = []
     for _ in range(iters):
         r = [1 / sum(tile[i]) for i in range(N)]
         tile = [[tile[i][j] * r[i] for j in range(N)] for i in range(N)]; chk.append([x[:] for x in tile]); rin.append(r)
         c = [1 / sum(tile[i][j] for i in range(N)) for j in range(N)]
         tile = [[tile[i][j] * c[j] for j in range(N)] for i in range(N)]; cin.append(c)
+    return chk, rin, cin
+
+
+def col_dot(d, M):
+    return [sum(d[i][j] * M[i][j] for i in range(N)) for j in range(N)]
+
+
+def row_dot(d, M):
+    return [sum(d[i][j] * M[i][j] for j in range(N)) for i in range(N)]
+
+
+def step_upstream(d, A):
+    # mHC.cu: column step then row step, each  d -= y * sum(d * y), no 1/sum; y = the checkpoint A.
+    dot = col_dot(d, A)
+    d = [[d[i][j] - A[i][j] * dot[j] for j in range(N)] for i in range(N)]
+    dot = row_dot(d, A)
+    return [[d[i][j] - A[i][j] * dot[i] for j in range(N)] for i in range(N)]
+
+
+def step_exact(d, A, c, r):
+    B = [[A[i][j] * c[j] for j in range(N)] for i in range(N)]
+    dot = col_dot(d, B)
+    d = [[c[j] * (d[i][j] - dot[j]) for j in range(N)] for i in range(N)]
+    dot = row_dot(d, A)
+    return [[r[i] * (d[i][j] - dot[i]) for j in range(N)] for i in range(N)]
+
+
+def adjoint(K, G, iters, upstream_style):
+    chk, rin, cin = checkpoints(K, iters)
     d = [r[:] for r in G]
     for it in range(iters - 1, -1, -1):
-        A, c, r = chk[it], cin[it], rin[it]
         if upstream_style:
-            # mHC.cu: column step then row step, each  d -= y * sum(d * y), no 1/sum; y = the checkpoint A.
-            dot = [sum(d[i][j] * A[i][j] for i in range(N)) for j in range(N)]
-            d = [[d[i][j] - A[i][j] * dot[j] for j in range(N)] for i in range(N)]
-            dot = [sum(d[i][j] * A[i][j] for j in range(N)) for i in range(N)]
-            d = [[d[i][j] - A[i][j] * dot[i] for j in range(N)] for i in range(N)]
+            d = step_upstream(d, chk[it])
         else:
-            B = [[A[i][j] * c[j] for j in range(N)] for i in range(N)]
-            dot = [sum(d[i][j] * B[i][j] for i in range(N)) for j in range(N)]
-            d = [[c[j] * (d[i][j] - dot[j]) for j in range(N)] for i in range(N)]
-            dot = [sum(d[i][j] * A[i][j] for j in range(N)) for i in range(N)]
-            d = [[r[i] * (d[i][j] - dot[i]) for j in range(N)] for i in range(N)]
+            d = step_exact(d, chk[it], cin[it], rin[it])
     return d
 
 
 for iters in (1, 2, 20):
-    K = [[math.exp(random.uniform(-0.3, 0.3)) for _ in range(N)] for _ in range(N)]
-    G = [[random.uniform(-1, 1) for _ in range(N)] for _ in range(N)]
+    K = [[math.exp(uniform(-0.3, 0.3)) for _ in range(N)] for _ in range(N)]
+    G = [[uniform(-1, 1) for _ in range(N)] for _ in range(N)]
     loss = lambda K: sum(forward(K, iters)[i][j] * G[i][j] for i in range(N) for j in range(N))
     e = 1e-6; fd = [[0.0] * N for _ in range(N)]
     for i in range(N):

@@ -435,18 +435,22 @@ fn run_backward_once(ctx: &Context, stream: &Stream, r: &HcRef) -> Vec<Vec<f32>>
     )
     .expect("run_backward");
     stream.synchronize().expect("sync");
-    let host = |b: &DeviceBuffer<f32>, n: usize| {
-        let mut v = vec![0f32; n];
-        b.copy_to_host(&mut v).expect("dl");
-        v
-    };
-    vec![
-        host(&dx, (B * N * C) as usize),
-        host(&dg, C as usize),
-        host(&dpre, N as usize),
-        host(&dpost, N as usize),
-        host(&dres, (N * N) as usize),
+    [
+        (&dx, B * N * C),
+        (&dg, C),
+        (&dpre, N),
+        (&dpost, N),
+        (&dres, N * N),
     ]
+    .into_iter()
+    .map(|(b, n)| download(b, n as usize))
+    .collect()
+}
+
+fn download(b: &DeviceBuffer<f32>, n: usize) -> Vec<f32> {
+    let mut v = vec![0f32; n];
+    b.copy_to_host(&mut v).expect("dl");
+    v
 }
 
 #[test]

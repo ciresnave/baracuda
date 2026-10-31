@@ -171,12 +171,7 @@ impl<T: Element> HyperConnectionPlan<T> {
         Self::select_impl(stream, desc, pref, true)
     }
 
-    fn select_impl(
-        _stream: &Stream,
-        desc: &HyperConnectionDescriptor,
-        _pref: PlanPreference,
-        training: bool,
-    ) -> Result<Self> {
+    fn validate_descriptor(desc: &HyperConnectionDescriptor, training: bool) -> Result<()> {
         if desc.element != T::KIND {
             return Err(Error::Unsupported(
                 "baracuda-kernels::HyperConnectionPlan: descriptor element != T",
@@ -221,6 +216,16 @@ impl<T: Element> HyperConnectionPlan<T> {
                 "baracuda-kernels::HyperConnectionPlan: eps must be finite and in (0, 1)",
             ));
         }
+        Ok(())
+    }
+
+    fn select_impl(
+        _stream: &Stream,
+        desc: &HyperConnectionDescriptor,
+        _pref: PlanPreference,
+        training: bool,
+    ) -> Result<Self> {
+        Self::validate_descriptor(desc, training)?;
 
         let precision_guarantee = PrecisionGuarantee {
             math_precision: MathPrecision::F32,
@@ -418,20 +423,7 @@ impl<T: Element> HyperConnectionPlan<T> {
 }
 
 impl<T: Element> HyperConnectionPlan<T> {
-    /// Static-H backward (Tier 2). The plan must come from
-    /// [`Self::select_training`], and this must follow a [`Self::run`] on the SAME
-    /// plan: the activations are read from the plan's internal buffers, so
-    /// another `run` in between (or concurrent use) changes the result.
-    pub fn run_backward(
-        &self,
-        stream: &Stream,
-        args: HyperConnectionBackwardArgs<'_, T>,
-    ) -> Result<()> {
-        if !self.training {
-            return Err(Error::Unsupported(
-                "baracuda-kernels::HyperConnectionPlan: run_backward needs select_training",
-            ));
-        }
+    fn check_backward_args(&self, args: &HyperConnectionBackwardArgs<'_, T>) -> Result<()> {
         let (b, n, c) = (self.desc.batch, self.desc.n_streams, self.desc.hidden_dim);
         crate::view_check::check_fits(&args.d_out)?;
         crate::view_check::check_fits(&args.d_x_expanded)?;
@@ -450,6 +442,25 @@ impl<T: Element> HyperConnectionPlan<T> {
                 "baracuda-kernels::HyperConnectionPlan: backward tensor shapes disagree with [B, n, C] / [C] / [n] / [n, n]",
             ));
         }
+        Ok(())
+    }
+
+    /// Static-H backward (Tier 2). The plan must come from
+    /// [`Self::select_training`], and this must follow a [`Self::run`] on the SAME
+    /// plan: the activations are read from the plan's internal buffers, so
+    /// another `run` in between (or concurrent use) changes the result.
+    pub fn run_backward(
+        &self,
+        stream: &Stream,
+        args: HyperConnectionBackwardArgs<'_, T>,
+    ) -> Result<()> {
+        if !self.training {
+            return Err(Error::Unsupported(
+                "baracuda-kernels::HyperConnectionPlan: run_backward needs select_training",
+            ));
+        }
+        self.check_backward_args(&args)?;
+        let (b, n, c) = (self.desc.batch, self.desc.n_streams, self.desc.hidden_dim);
         #[cfg(feature = "mhc")]
         {
             // SAFETY: every pointer is a live device allocation of the checked shape and length; the handle is owned by `self`.
