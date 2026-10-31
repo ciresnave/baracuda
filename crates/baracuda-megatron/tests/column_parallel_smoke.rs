@@ -9,7 +9,6 @@
 
 #[cfg(feature = "device-tests")]
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, require_optional};
-use baracuda_megatron::Error as MegError;
 #[cfg(feature = "device-tests")]
 use baracuda_megatron::{ColumnParallelLinearPlan, TensorParallelContext};
 #[cfg(feature = "device-tests")]
@@ -191,19 +190,4 @@ fn column_parallel_f32_backward_single_rank_matches_linear() {
             "[{i}] dw mismatch: got {g}, expected {e}"
         );
     }
-}
-
-#[test]
-fn column_parallel_rejects_indivisible_out_features() {
-    // out_features=15 not divisible by world_size=2 — but we can't
-    // build a 2-rank communicator on a single-GPU dev box. Use a
-    // forged-but-unused communicator via the validation path: a
-    // single-rank comm (world_size=1) always divides. So instead we
-    // verify the rejection logic via the host-only error variant
-    // checker — InvalidArgument is returned without GPU access.
-    //
-    // We can't construct TensorParallelContext without a real
-    // Communicator. Instead, validate the error-construction helpers
-    // by inspecting that `Error::InvalidArgument` is the right shape.
-    let _ = MegError::InvalidArgument("smoke");
 }

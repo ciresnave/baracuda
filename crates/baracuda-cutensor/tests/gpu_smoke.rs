@@ -2,10 +2,11 @@
 //! is not part of the default CUDA Toolkit install — the test gracefully
 //! skips if the library isn't available.
 
+use baracuda_driver::require_optional;
+
 #[test]
 fn cutensor_probe() {
-    match baracuda_cutensor::probe() {
-        Ok(()) => eprintln!("cuTENSOR loaded"),
-        Err(e) => eprintln!("cuTENSOR not available on this host: {e:?}"),
-    }
+    // Absent library: a declared skip (visible to `cargo gpu-test`), not a silent pass.
+    require_optional!(baracuda_cutensor::probe(), "cuTENSOR");
+    eprintln!("cuTENSOR loaded");
 }

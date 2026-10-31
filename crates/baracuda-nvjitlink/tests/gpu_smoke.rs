@@ -3,6 +3,7 @@
 //! The GPU-gated test targets the device's compute capability via the
 //! driver-reported version and expects a non-empty cubin blob.
 
+use baracuda_driver::require_optional;
 use baracuda_nvjitlink::version;
 #[cfg(feature = "device-tests")]
 use baracuda_nvjitlink::{InputType, Linker};
@@ -15,7 +16,7 @@ fn nvjitlink_loads() {
     // Non-GPU host test: nvJitLink is a CPU-side linker — loading it is
     // enough to prove the FFI works. Platforms without nvJitLink shipped
     // gracefully return `Err` without panic.
-    let _ = version();
+    require_optional!(version(), "nvJitLink");
 }
 
 #[test]

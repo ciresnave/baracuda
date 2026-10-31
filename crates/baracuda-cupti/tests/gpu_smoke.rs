@@ -1,9 +1,10 @@
 //! CUPTI presence + version probe.
 
+use baracuda_driver::require_optional;
+
 #[test]
 fn cupti_version_query() {
-    match baracuda_cupti::version() {
-        Ok(v) => eprintln!("CUPTI version: {v}"),
-        Err(e) => eprintln!("CUPTI not available on this host: {e:?}"),
-    }
+    // Absent library: a declared skip (visible to `cargo gpu-test`), not a silent pass.
+    let v = require_optional!(baracuda_cupti::version(), "CUPTI");
+    eprintln!("CUPTI version: {v}");
 }

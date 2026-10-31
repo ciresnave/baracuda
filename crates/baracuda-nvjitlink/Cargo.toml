@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-nvjitlink"
-version = "0.1.0-alpha.68"
+version = "0.1.0-alpha.69"
 description = "Safe Rust wrappers for NVIDIA nvJitLink (CUDA 12.0+ JIT linker)."
 edition.workspace = true
 license.workspace = true
@@ -24,7 +24,7 @@ baracuda-nvjitlink-sys.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
-baracuda-driver.workspace = true
+baracuda-driver = { workspace = true, features = ["test-support"] }
 
 [lints]
 workspace = true
