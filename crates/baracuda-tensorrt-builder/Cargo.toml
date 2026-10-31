@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-tensorrt-builder"
-version = "0.1.0-alpha.73"
+version = "0.1.0-alpha.74"
 description = "Safe Rust API for the NVIDIA TensorRT builder: network definition, builder config, serialized engines."
 edition.workspace = true
 license.workspace = true

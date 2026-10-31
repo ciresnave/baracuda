@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-cufft-sys"
-version = "0.1.0-alpha.73"
+version = "0.1.0-alpha.74"
 description = "Raw FFI bindings and dynamic loader for NVIDIA cuFFT."
 edition.workspace = true
 license.workspace = true
