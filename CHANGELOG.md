@@ -16,6 +16,14 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.65 - 2026-10-31
+
+Docs only. No code, no device run.
+
+### Changed
+
+- `OP-MATRIX.md` (ROADMAP SA-37, coverage pass): a closing section lists the 37 `baracuda-kernels` `Plan` types (of 293) that had no row, taken from each type's doc comment. The existing rows were not re-audited.
+
 ## 0.1.0-alpha.64 - 2026-10-31
 
 ### Added
