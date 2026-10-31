@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.75 - 2026-10-31
+
+### Fixed
+
+- **Test only (SA-17):** `roi_align_full_image_f32_smoke` compared against 2x2 quadrant means with tolerance 4.0, which is larger than the 2.0 gap between adjacent cells, so a left/right-swapped output passed. It now pins the exact torchvision-convention values `[6.0, 7.75, 13.0, 14.75]` at 1e-4 (device-verified sm89). No library code changed.
+
 ## 0.1.0-alpha.74 - 2026-10-31
 
 ### Changed

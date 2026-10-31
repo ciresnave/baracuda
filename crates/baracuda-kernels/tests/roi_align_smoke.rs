@@ -1,6 +1,6 @@
 //! Real-GPU smoke for `RoiAlignPlan<T>` (Phase 9 Category T).
 //! Single full-image RoI on a 1×1×4×4 input pooled to 2×2 →
-//! 2x2 block-average of the 4 input quadrants. gated behind the `device-tests` feature.
+//! the exact torchvision-convention bilinear average per bin. gated behind the `device-tests` feature.
 #![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
@@ -73,23 +73,22 @@ fn roi_align_full_image_f32_smoke() {
     stream.synchronize().expect("sync");
     let mut got = vec![0f32; 4];
     dev_out.copy_to_host(&mut got).expect("");
-    // Each output cell should be roughly the average of its 2x2 quadrant
-    // in the 4x4 input.
-    // Quadrant means (rough): TL=mean(1,2,5,6)=3.5, TR=mean(3,4,7,8)=5.5,
-    //                          BL=mean(9,10,13,14)=11.5, BR=mean(11,12,15,16)=13.5.
-    // RoiAlign uses bilinear sampling with continuous coords — won't be
-    // exactly these means, but should be close enough.
-    // PyTorch's RoiAlign with `aligned=false` + `sampling_ratio=0`
-    // adaptive sampling diverges from the naive quadrant-mean reference
-    // by up to ~3 units on this fixture (bilinear interpolation at
-    // adaptive sample points within each bin). Loosen the tolerance to
-    // catch obvious algorithmic regressions while accepting the
-    // PyTorch-convention drift from naive mean.
-    let approx = [3.5f32, 5.5, 11.5, 13.5];
-    for (i, (g, a)) in got.iter().zip(approx.iter()).enumerate() {
+    // Exact reference (torchvision convention, `aligned = false`, `sampling_ratio = 0`).
+    // Pixel (y, x) holds 4y + x + 1 and sits at the integer coordinate (y, x). The RoI
+    // [0, 4)^2 pooled to 2x2 has 2x2-pixel bins, and adaptive sampling takes
+    // ceil(2 / 1) = 2 samples per axis per bin, at bin_start + (k + 0.5) * 1. Sample
+    // coordinates above H - 1 = 3 clamp to 3 (they are inside the image's [-1, H]
+    // window, so they are not zeroed). The input is linear, so bilinear sampling is exact:
+    //   y samples: top bin {0.5, 1.5}, bottom bin {2.5, 3.5 -> 3}; likewise for x.
+    //   cell = 4 * mean(y) + mean(x) + 1 with mean(y|x) = 1.0 (first bin), 2.75 (second).
+    // The old check compared against 2x2 quadrant means with a tolerance of 4.0, which
+    // is larger than the 2.0 gap between horizontally adjacent cells, so a left/right
+    // swapped output passed. The order and each value are pinned here.
+    let expected = [6.0f32, 7.75, 13.0, 14.75];
+    for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
         assert!(
-            (g - a).abs() < 4.0,
-            "roi_align cell {i}: got {g}, expected ~{a}"
+            (g - e).abs() < 1e-4,
+            "roi_align cell {i}: got {g}, expected {e}"
         );
     }
 }
