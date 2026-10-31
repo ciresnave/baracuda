@@ -32,11 +32,11 @@ use baracuda_kernels_types::{Element, ElementKind};
 use super::max_pool2d::{PoolMode, cudnn_dtype, cudnn_pool_mode, is_double_compute};
 
 /// Spatial-axes-only output-dim formula
-/// `out = floor((in + 2·pad - window) / stride) + 1`. Used by 1-D / 3-D
-/// pool plans for their per-axis output extents.
+/// `out = floor((in + 2·pad - window) / stride) + 1`, or `0` when no window fits
+/// (KISS-OPS-6.13-0010). Used by 1-D / 3-D pool plans for their per-axis output extents.
 #[inline]
 pub(crate) fn out_dim(in_dim: i32, pad: i32, window: i32, stride: i32) -> i32 {
-    (in_dim + 2 * pad - window) / stride + 1
+    crate::window_axis::out_extent(in_dim, pad, window, stride, 1)
 }
 
 /// Create a cuDNN handle on first call. Idempotent — returns the cached

@@ -247,11 +247,18 @@ pub(super) fn validate_im2col_1d<T: Element>(d: &Im2Col1dDescriptor) -> Result<(
 }
 
 pub(super) fn compute_im2col_1d_l_out(d: &Im2Col1dDescriptor) -> Result<i32> {
-    let l_eff = d.dilation_l * (d.kl - 1) + 1;
-    let l_out = (d.l_in + 2 * d.pad_l - l_eff) / d.stride_l + 1;
+    // Floor semantics, `0` when no window fits (KISS-OPS-6.13-0010).
+    let l_out = crate::window_axis::out_extent(d.l_in, d.pad_l, d.kl, d.stride_l, d.dilation_l);
     if l_out <= 0 {
         return Err(Error::InvalidProblem(
             "baracuda-kernels::Im2Col1dPlan: computed l_out <= 0",
+        ));
+    }
+    // KISS-OPS-6.13-0011: every output window needs a real in-bounds tap.
+    if !crate::window_axis::every_window_has_tap(d.l_in, d.pad_l, d.kl, d.stride_l, d.dilation_l) {
+        return Err(Error::InvalidProblem(
+            "baracuda-kernels::Im2Col1dPlan: an output window has no in-bounds tap \
+             (KISS-OPS-6.13-0011) — padding / dilation / extent combination",
         ));
     }
     Ok(l_out)
@@ -275,4 +282,37 @@ fn check_args_1d<T: Element>(
         ));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod window_tests {
+    use super::*;
+
+    fn desc(l_in: i32, kl: i32, stride: i32, pad: i32, dil: i32) -> Im2Col1dDescriptor {
+        Im2Col1dDescriptor {
+            batch: 1,
+            channels: 1,
+            l_in,
+            kl,
+            stride_l: stride,
+            pad_l: pad,
+            dilation_l: dil,
+            element: ElementKind::F32,
+        }
+    }
+
+    #[test]
+    fn declines_a_window_with_no_real_tap() {
+        // KISS-OPS-6.13-0011 counterexample (n=1, k=2, d=2, s=1, p=1): one window, taps -1 and 1.
+        assert!(compute_im2col_1d_l_out(&desc(1, 2, 1, 1, 2)).is_err());
+        // Control: the same attributes over l_in = 4 hold three windows, each with a tap.
+        assert_eq!(compute_im2col_1d_l_out(&desc(4, 2, 1, 1, 2)).unwrap(), 4);
+    }
+
+    #[test]
+    fn declines_when_no_window_fits() {
+        // l_in = 3, kl = 4, stride 4: the truncating form reported l_out = 1.
+        assert!(compute_im2col_1d_l_out(&desc(3, 4, 4, 0, 1)).is_err());
+        assert_eq!(compute_im2col_1d_l_out(&desc(4, 4, 4, 0, 1)).unwrap(), 1);
+    }
 }
