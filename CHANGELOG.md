@@ -16,6 +16,14 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.68 - 2026-10-31
+
+Docs only. No code, no device run.
+
+### Changed
+
+- ROADMAP SA-29: the seven unconsumed kernel helper headers each compile alone for sm_89 (nvcc 13.3, 0 errors, with a failing control); templates are never instantiated, so behaviour stays unverified.
+
 ## 0.1.0-alpha.67 - 2026-10-31
 
 ### Changed
