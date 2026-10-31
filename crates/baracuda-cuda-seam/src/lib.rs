@@ -305,6 +305,15 @@ impl Synthesizer for BaracudaSynthesizer {
                             ),
                         };
                     }
+                    // `ArtifactKind` is `#[non_exhaustive]` since unpopped 0.38 (HIP, SPIR-V, ...).
+                    // The CUDA compiler yields only the three above; refuse anything else.
+                    other => {
+                        return SeamResponse::Declined {
+                            reason: format!(
+                                "{fused_op_id}: unsupported artifact kind {other:?} for a CUDA kernel"
+                            ),
+                        };
+                    }
                 };
                 let entry_point = resp.kernel.entry_point.clone();
                 // Convert to the envelope SynthArtifact at the boundary so Fuel
