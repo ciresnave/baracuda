@@ -16,6 +16,15 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.73 - 2026-10-31
+
+Tests and CI only. No library code.
+
+### Changed
+
+- `baracuda-nvjitlink` `link_ptx_to_cubin` (SA-17): a failed `Linker::complete()` used to print and pass; it now panics with the error log. Device-verified sm89 (nvJitLink 13.3): `cargo gpu-test -p baracuda-nvjitlink --features device-tests --test gpu_smoke`, 2 passed, 0 failed, 0 declared skips.
+- CI: new `scripts/check-no-nul-bytes.py` step fails on a raw NUL byte in any tracked text file (a backslash-zero mangled by editing tooling compiles but shows only as grep's "Binary file matches"). Prints the population (2443 tracked, 2442 scanned); seen red on an injected NUL, green on the tree. The CodeRipper portfolio job is re-pinned to `ee9c3950c510fae136d316fed3bd9ecda343cede` (coderipper main, workspace 0.9.25, installs 0.9.24).
+
 ## 0.1.0-alpha.72 - 2026-10-31
 
 ### Changed
