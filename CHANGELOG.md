@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.74 - 2026-10-31
+
+### Changed
+
+- **BREAKING (version line):** `unpopped`, `unpopped-vocab`, `unpopped-cpu-c` 0.36.0 -> 0.38.1 (root pins, `baracuda-cuda-emit` dev-dep, `tools/kiss-ref-diff` incl. its lock); `baracuda-cuda-emit` and `baracuda-cuda-parse` follow to 0.38.1 (the Versioning exception above); `fuel-kernel-seam` / `fuel-kernel-seam-types` 0.33.0 -> 0.34.0 (built on unpopped-vocab 0.38.1); test dev-deps `vulkane-slang-emit` / `vulkane-slang-parse` 0.18.0 -> 0.19.0. The graph holds one copy of each: `cargo tree -d --prefix none` lists no `unpopped*`, `fuel-*` or `vulkane-*` package at a second version. `unpopped::ArtifactKind` is `#[non_exhaustive]` since 0.38 (new HIP code-object and SPIR-V variants), so `baracuda-cuda-seam` gains a wildcard arm that declines such an artifact (the CUDA compiler yields only Ptx, Cubin or Stub). unpopped 0.38.3 (after Unpopped#210) was not published when this landed. Host tests: `cargo test --locked -p baracuda-cuda-emit -p baracuda-cuda-parse -p baracuda-cuda-seam --features baracuda-cuda-emit/convert` green (emit 332 lib + 50 + 22 integration, parse 14, seam 17 + 3); clippy `-D warnings` on those crates clean. NOT run on device.
+
 ## 0.1.0-alpha.72 - 2026-10-31
 
 ### Changed
