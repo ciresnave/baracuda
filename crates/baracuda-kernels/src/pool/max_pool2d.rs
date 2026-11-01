@@ -449,8 +449,10 @@ pub(crate) fn build_sku<T: Element>(op: PoolKind) -> KernelSku {
 /// for `W_out`.
 #[inline]
 pub(crate) fn compute_output_dims(d: &Pool2dDescriptor) -> (i32, i32) {
-    let h_out = (d.h_in + 2 * d.pad_h - d.window_h) / d.stride_h + 1;
-    let w_out = (d.w_in + 2 * d.pad_w - d.window_w) / d.stride_w + 1;
+    // Floor semantics, `0` when no window fits (KISS-OPS-6.13-0010); a truncating `/`
+    // reported 1 for `h_in = 3, window = 4, stride = 4`.
+    let h_out = crate::window_axis::out_extent(d.h_in, d.pad_h, d.window_h, d.stride_h, 1);
+    let w_out = crate::window_axis::out_extent(d.w_in, d.pad_w, d.window_w, d.stride_w, 1);
     (h_out, w_out)
 }
 
@@ -758,4 +760,36 @@ pub(crate) fn run_bw_inner<T: Element>(
         return Err(Error::KernelInternal(-status));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod window_tests {
+    use super::*;
+
+    fn desc(h_in: i32) -> Pool2dDescriptor {
+        Pool2dDescriptor {
+            batch: 1,
+            channels: 1,
+            h_in,
+            w_in: 8,
+            window_h: 4,
+            window_w: 4,
+            pad_h: 0,
+            pad_w: 0,
+            stride_h: 4,
+            stride_w: 4,
+            mode: PoolMode::Max,
+            element: ElementKind::F32,
+        }
+    }
+
+    #[test]
+    fn declines_an_axis_where_no_window_fits() {
+        // Control: h_in = 4 holds exactly one 4-tap window and validates.
+        assert!(validate_descriptor::<f32>(&desc(4)).is_ok());
+        assert_eq!(compute_output_dims(&desc(4)), (1, 2));
+        // h_in = 3: no window fits. The truncating form reported h_out = 1 and accepted it.
+        assert_eq!(compute_output_dims(&desc(3)).0, 0);
+        assert!(validate_descriptor::<f32>(&desc(3)).is_err());
+    }
 }

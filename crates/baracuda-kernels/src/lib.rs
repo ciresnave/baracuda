@@ -92,6 +92,9 @@ pub use baracuda_cutlass::{
 // strided-batch).
 pub mod gemm;
 mod view_check;
+// Window-view axis arithmetic for the `pool` and `conv` (im2col) plans, which are `cudnn`-gated.
+#[cfg(feature = "cudnn")]
+mod window_axis;
 
 pub use gemm::{
     BinGemmArgs, BinGemmDescriptor, BinGemmPlan, DenseGemmArgs, DenseGemmDescriptor,
