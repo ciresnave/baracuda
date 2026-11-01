@@ -334,13 +334,14 @@ fn validate_geometry(desc: &Im2ColDescriptor) -> Result<(i32, i32)> {
 
 /// Sign / positivity checks on the descriptor fields (no geometry).
 fn validate_attrs(desc: &Im2ColDescriptor) -> Result<()> {
-    let msg = if desc.batch <= 0 || desc.channels <= 0 || desc.h_in <= 0 || desc.w_in <= 0 {
+    let pos = |v: &[i32]| v.iter().all(|&x| x > 0);
+    let msg = if !pos(&[desc.batch, desc.channels, desc.h_in, desc.w_in]) {
         "baracuda-kernels::Im2ColPlan: input shape extents must be > 0"
-    } else if desc.kh <= 0 || desc.kw <= 0 {
+    } else if !pos(&[desc.kh, desc.kw]) {
         "baracuda-kernels::Im2ColPlan: kernel extents must be > 0"
-    } else if desc.stride_h <= 0 || desc.stride_w <= 0 {
+    } else if !pos(&[desc.stride_h, desc.stride_w]) {
         "baracuda-kernels::Im2ColPlan: stride must be > 0"
-    } else if desc.dilation_h <= 0 || desc.dilation_w <= 0 {
+    } else if !pos(&[desc.dilation_h, desc.dilation_w]) {
         "baracuda-kernels::Im2ColPlan: dilation must be > 0"
     } else if desc.pad_h < 0 || desc.pad_w < 0 {
         "baracuda-kernels::Im2ColPlan: padding must be >= 0"
