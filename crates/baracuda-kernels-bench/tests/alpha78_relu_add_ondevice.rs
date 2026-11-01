@@ -1,5 +1,5 @@
 //! Gate 5 (regression repro) + gate 6 (on-device output-CORRECTNESS) for the
-//! alpha.78 all-zero bug: Fuel bisected a synthesized `relu(add(a,b))` f32-scalar
+//! alpha.79 all-zero bug: Fuel bisected a synthesized `relu(add(a,b))` f32-scalar
 //! kernel writing all zeros (alpha.76/77 PASS, .78 FAIL; byte-identical symbol →
 //! emitted body or launch ABI, not identity). This test EMITS the exact kernel,
 //! NVRTC-compiles it, LAUNCHES it on the RTX 4070 with a mixed-sign input, and
@@ -23,7 +23,7 @@ use unpopped::{Compiler, OpDef, contract, generate, input};
 /// Parse the `count_unit:` line of an FKC contract into the divisor `w` for the
 /// launch count (`elements` -> 1, `vectors_x{w}` -> w). This is exactly the read
 /// a launcher must do to marshal `n` — validating it end-to-end on device is the
-/// gap the alpha.78 all-zero exposed (count_unit is the emit→launch contract).
+/// gap the alpha.79 all-zero exposed (count_unit is the emit→launch contract).
 fn count_unit_divisor(contract_text: &str) -> u32 {
     for line in contract_text.lines() {
         let l = line.trim();

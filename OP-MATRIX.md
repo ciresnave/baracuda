@@ -3,11 +3,11 @@
 Baseline generated for **baracuda-kernels** on **RTX 4070 (sm_89)**; the body
 has since been re-annotated with the **baracuda-kernelgen op-matrix audit**
 (rounds through **2026-07-03**). The workspace was at **0.1.0-alpha.28**
-(2026-10-25; the workspace is now at 0.1.0-alpha.78). The body reflects the alpha.78 line, with these items re-checked
+(2026-10-25; the workspace is now at 0.1.0-alpha.79). The body reflects the alpha.79 line, with these items re-checked
 against the code at `origin/main` on 2026-10-25 (ROADMAP SA-37): the
 `RepeatPlan` / `InterpolatePlan` dtypes, the `ArgsortPlan` row length, adaptive
 pool, and strided siblings. The other rows have **not** been re-audited for
-alpha.78 onward, except that the Plans with no row at all are listed
+alpha.79 onward, except that the Plans with no row at all are listed
 in the last section (SA-37 coverage pass, alpha.65). `baracuda-kernelgen` has since left this repo (it lives in
 `unpopped` / `unpopped-vocab`), so read its "Kernelgen audit" notes below as
 historical.
@@ -366,35 +366,12 @@ scaling for `dequantize_*`.
 | `DynamicRangeQuantizePlan<TIn, TOut>` | Bespoke | `TIn ∈ {f32, f64}`, `TOut = S8` | rank ≤ 8 | ✓ | N/A | One-shot min/max-driven dynamic-range W8 quant. |
 | `QuantizedLinearPlan<TIn, TWQ>` | Bespoke | `TIn ∈ {f32, f64}`, `TWQ = S8` | matmul shape | ✓ | N/A | Composing quant op — fused dequant + matmul. |
 | `GgufDequantizePlan` | Bespoke (vendored llama.cpp) | block → `f32` (`f16` for Q8K) | per-block-format size | ✓ | N/A | Block formats: `{Q4_0, Q4_1, Q5_0, Q5_1, Q8_0, Q2K, Q3K, Q4K, Q5K, Q6K, Q8K}`. Q8K is dequant-only (no MMVQ). |
-| `GgufMmvqPlan` | Bespoke (Q8_K is bespoke baracuda; rest vendored llama.cpp) | activation: `{f32, f16, bf16}`; weights: GGUF block | matrix-vector | ✓ | N/A | Fused dequant + matrix-vector multiply. **All 11 block formats wired** as of Phase 11.4 (Q8_K added bespoke; no llama.cpp upstream). Phase 14.5 added activation-strided sibling FFI. Phase 18 added f16 / bf16 activations across all 11 block formats × contig + strided (44 new FFI symbols). |
-| `GgufMmvqMultiMPlan` | Bespoke (Phase 33-34) | activation: `f32` (Q8_1-staged); weights: GGUF block | multi-M GEMM | ✓ | N/A | Phase 33-34 — multi-M prefill fast path. M ∈ {1, 2, 4, 8} launchers. **Bench peak: Q5_0 hits 17.32× at M=8** (Phase 27's 3-7× target massively exceeded). Numerical caveat: not bit-equivalent to M=1 fp-dequant path (~1e-3 relative error from 8-bit activation quant; documented). |
-| `GgufMmvqBatchedPlan` | Bespoke (Phase 20) | activation: `{f32, f16, bf16}`; weights: GGUF block; top-k routing | MoE × N-experts | ✓ | N/A | Phase 20 — batched MMVQ × N-experts. 36 FFI symbols (11 block formats × 3 act dtypes + 3 pure-FP). Template-bool `if constexpr` for atomic-vs-store dispatch on top_k. Phase 22 added debug-build assertion `ncols ≥ 64`. |
 
 ---
 
 ## OpCategory: MoE (Mixture-of-Experts)
 
-**Caller contract (important)**: The MoE kernels do **straight
-assignment** to the output (`out[token_id, n] = …`), not accumulation.
-There is **no kernel-side synchronization** for the case where multiple
-dispatch entries write to the same `(token_id, n)` cell. Callers must
-ensure each output cell is written by at most one dispatch:
-
-- **Single-expert routing**: `top_k = 1` (each token goes to exactly
-  one expert) is always safe.
-- **Multi-expert routing**: `top_k > 1` requires the caller to
-  pre-sort routing so each `(token_id, expert)` pair maps to a
-  distinct output row. The kernel does NOT fan-out multi-expert
-  outputs to one cell; the caller does that downstream (e.g. a
-  weighted sum kernel over the per-expert outputs).
-
-Violating this contract produces silent-wrong results — the last
-writer wins on each contested cell, ordering is non-deterministic.
-Surfaced during the Phase 15.3 fixture-race investigation.
-
-| Op | Backend | Dtypes | Shapes / Limits | FW | BW | Notes |
-|----|---------|--------|-----------------|----|----|-------|
-| `MoePlan` | Bespoke (vendored from `attention.rs`) | varies by variant (see below) | `[num_tokens, d_model]` | ✓ | N/A | Phase 8.5. Three variants: `ScalarGguf` (scalar dequant + GEMV per expert, `f32` activations), `Wmma` (sm_70+ tensor cores, `{f16, bf16}` activations), `WmmaGguf` (fused tensor-core + GGUF dequant; `{f16, bf16}` activations, `f32` output). |
+The MoE kernels (`MoePlan`) and the GGUF MMVQ plans were removed in alpha.79 (board 307); see CHANGELOG.
 
 ---
 

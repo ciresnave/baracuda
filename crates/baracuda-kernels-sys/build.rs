@@ -1263,47 +1263,15 @@ fn collect_kernel_files() -> Vec<&'static str> {
             // (DynamicRangeQuantize + QuantizedLinear). Builds on 8.1 /
             // 8.2 primitives — see `kernels/include/baracuda_quantize_compose.cuh`.
             "quantize/compose.cu",
-            // Phase 8 Milestone 8.4 — GGUF block-format dequant + MMVQ
+            // Phase 8 Milestone 8.4 — GGUF block-format dequant
             // (Category P). Vendored from llama.cpp via fuel-cuda-kernels.
-            // Two .cu files behind a single shared header
+            // One .cu file behind a shared header
             // (`kernels/include/baracuda_gguf.cuh`):
             //   * dequantize.cu — 11 `_run` symbols, one per block format
             //     (Q4_0/Q4_1/Q5_0/Q5_1/Q8_0 + Q2_K..Q8_K). f32 output.
-            //   * mmvq.cu — 11 `_run` symbols (one per block format).
-            //     Phase 11.4 added a bespoke Q8_K MMVQ (upstream
-            //     llama.cpp / Fuel ship only Q8_K dequant). f32
-            //     activation, f32 output.
             "gguf/dequantize.cu",
-            "gguf/mmvq.cu",
-            // Phase 20.1 — batched MMVQ × N-experts (general-purpose
-            // routing primitive). 33 quant FFI symbols (11 block formats
-            // × 3 activation dtypes) + 3 pure-FP FFI symbols. Shares
-            // the per-row dot-product math with `gguf/mmvq.cu`; the
-            // batched template adds (token, expert, topk_weight)
-            // routing semantics + atomic-vs-store dispatch.
-            "gguf/mmvq_batched.cu",
-            // Phase 33 — multi-M MMVQ via Q8_1 activation staging. The
-            // staging kernel converts fp activations into the Q8_1 block
-            // format (int8 quants + half scale + half sum); the multi-M
-            // launcher reuses one weight load across `ncols_y ∈ {1,2,4,8}`
-            // activation vectors → up to 8× gmem bandwidth save at
-            // M=8 prefill. Q8_0 weights only in this phase; remaining
-            // block formats follow in a subsequent phase.
-            "gguf/quantize_q8_1.cu",
-            "gguf/mmvq_multim.cu",
-            // Phase 8 Milestone 8.5 — Mixture-of-Experts forward
-            // (Category V). Three fused per-token-dispatch + expert-
-            // matmul + accumulate kernels vendored from Fuel / attention.rs.
-            //   * moe/moe_gguf.cu — scalar GGUF (Q8_0 + k-quants),
-            //     f32 activations through a q8_1-staged intermediate.
-            //   * moe/moe_wmma.cu — WMMA FP weights (f16, bf16).
-            //   * moe/moe_wmma_gguf.cu — WMMA + GGUF combined hot path
-            //     (f16/bf16 activations, Q8_0 + k-quants weights).
-            // sm_70+ for the WMMA paths (already covered by every
-            // arch feature this crate exposes).
-            "moe/moe_gguf.cu",
-            "moe/moe_wmma.cu",
-            "moe/moe_wmma_gguf.cu",
+            // Removed 2026-11-01 (board 307, CireSnave ruling): the MMVQ / Q8_1-staged / MoE-GGUF
+            // integer-dot kernels. Dequantize-then-multiply (dequantize.cu + float GEMM) remains.
             // Phase 3 fanout — cast / fill / affine. Vendored from
             // fuel-cuda-kernels (cast.cu / fill.cu / affine.cu) with
             // the standard SPDX header. Contig-only fast path; baracuda's
