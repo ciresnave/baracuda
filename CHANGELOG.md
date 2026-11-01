@@ -20,8 +20,8 @@ at alpha.82.
 
 ### Removed (BREAKING)
 
-- **Integer-dot / MMVQ / MoE-GGUF kernels (board 307, CireSnave 2026-11-01: "Yank even if it breaks something but then immediately publish versions without those kernels").** `baracuda-kernels-sys`: `kernels/gguf/{mmvq,mmvq_batched,mmvq_multim,quantize_q8_1}.cu`, `kernels/include/baracuda_{mmvq_batched,mmvq_multim,moe}.cuh`, `kernels/moe/*.cu`, `vendor/fuel-q8_1/`, and all 301 FFI symbols (`baracuda_kernels_mmvq_*`, `_mmvq_batched_*`, `_mmvq_multim_*`, `_quantize_q8_1_*`, `_moe_*`). `baracuda-kernels`: `GgufMmvqPlan`, `GgufMmvqBatchedPlan`, `GgufMmvqMultiMPlan` (+ Args/Descriptor/Format/Activation types), the `moe` module (`MoePlan`/`MoeArgs`/`MoeDescriptor`/`MoeVariant`), their tests and the `mmvq` bench. Kept: `GgufDequantizePlan` (dequantize, then multiply with a float GEMM), NF4, and all other paths. No new int8 per-vector dot kernel was added.
-- C `ABI_VERSION` 1 -> 2 (`abi/abi-manifest.tsv`: 5727 -> 5426 entries, 0 changed). `QuantizeKind::GgufMmvq` (baracuda-kernels-types) is left in place as an op identifier.
+- **Integer-dot kernels (board 307, CireSnave 2026-11-01: "Yank even if it breaks something but then immediately publish versions without those kernels").** `baracuda-kernels-sys`: `kernels/gguf/{mmvq_multim,quantize_q8_1}.cu`, `kernels/include/baracuda_{mmvq_multim,moe}.cuh`, `kernels/moe/*.cu`, `vendor/fuel-q8_1/`, and 97 FFI symbols (`baracuda_kernels_mmvq_multim_*`, `_quantize_q8_1_*`, `_moe_*`). `baracuda-kernels`: `GgufMmvqMultiMPlan` (+ Args/Descriptor), the `moe` module (`MoePlan`/`MoeArgs`/`MoeDescriptor`/`MoeVariant`) and their tests. Kept (float-activation, no dp4a/q8_1): `GgufMmvqPlan`, `GgufMmvqBatchedPlan`, `GgufDequantizePlan`, NF4. No new int8 per-vector dot kernel was added.
+- C `ABI_VERSION` 1 -> 2 (`abi/abi-manifest.tsv`: 5727 -> 5630 entries, 0 changed). `QuantizeKind::GgufMmvq` (baracuda-kernels-types) is left in place as an op identifier.
 - Workspace 0.1.0-alpha.78 -> alpha.79. All 73 prior `baracuda-kernels-sys` versions are yanked.
 
 ## 0.1.0-alpha.78 - 2026-11-01

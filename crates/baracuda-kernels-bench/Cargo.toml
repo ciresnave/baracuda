@@ -150,6 +150,10 @@ name = "gemm_vs_cublas"
 harness = false
 
 [[bench]]
+name = "mmvq"
+harness = false
+
+[[bench]]
 name = "softmax_vs_cudnn"
 harness = false
 

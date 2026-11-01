@@ -138,10 +138,18 @@ pub use quantized_linear::{QuantizedLinearArgs, QuantizedLinearDescriptor, Quant
 // --- Phase 45 export — SmoothQuant linear (pure Rust composition). ---
 pub use smoothquant::{SmoothQuantLinearArgs, SmoothQuantLinearDescriptor, SmoothQuantLinearPlan};
 
-// --- Milestone 8.4 exports — GGUF block-format dequant ---
+// --- Milestone 8.4 exports — GGUF block-format dequant + MMVQ ---
 pub use gguf::{
     BlockQ2K, BlockQ3K, BlockQ4_0, BlockQ4_1, BlockQ4K, BlockQ5_0, BlockQ5_1, BlockQ5K, BlockQ6K,
     BlockQ8_0, BlockQ8K, GgufDequantizeArgs, GgufDequantizeDescriptor, GgufDequantizePlan,
+    GgufMmvqArgs, GgufMmvqDescriptor, GgufMmvqPlan,
+};
+
+// --- Phase 20.1 export — GGUF batched MMVQ × N-experts (general-purpose
+//     routing primitive). 33 quant FFI symbols + 3 pure-FP FFI symbols. ---
+pub use gguf::{
+    GgufMmvqBatchedActivation, GgufMmvqBatchedArgs, GgufMmvqBatchedDescriptor,
+    GgufMmvqBatchedFormat, GgufMmvqBatchedPlan,
 };
 
 // --- Phase 53 exports — bitsandbytes NF4 dequant + GEMV (QLoRA

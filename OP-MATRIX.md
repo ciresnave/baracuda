@@ -366,12 +366,14 @@ scaling for `dequantize_*`.
 | `DynamicRangeQuantizePlan<TIn, TOut>` | Bespoke | `TIn ∈ {f32, f64}`, `TOut = S8` | rank ≤ 8 | ✓ | N/A | One-shot min/max-driven dynamic-range W8 quant. |
 | `QuantizedLinearPlan<TIn, TWQ>` | Bespoke | `TIn ∈ {f32, f64}`, `TWQ = S8` | matmul shape | ✓ | N/A | Composing quant op — fused dequant + matmul. |
 | `GgufDequantizePlan` | Bespoke (vendored llama.cpp) | block → `f32` (`f16` for Q8K) | per-block-format size | ✓ | N/A | Block formats: `{Q4_0, Q4_1, Q5_0, Q5_1, Q8_0, Q2K, Q3K, Q4K, Q5K, Q6K, Q8K}`. Q8K is dequant-only (no MMVQ). |
+| `GgufMmvqPlan` | Bespoke (Q8_K is bespoke baracuda; rest vendored llama.cpp) | activation: `{f32, f16, bf16}`; weights: GGUF block | matrix-vector | ✓ | N/A | Fused dequant + matrix-vector multiply. **All 11 block formats wired** as of Phase 11.4 (Q8_K added bespoke; no llama.cpp upstream). Phase 14.5 added activation-strided sibling FFI. Phase 18 added f16 / bf16 activations across all 11 block formats × contig + strided (44 new FFI symbols). |
+| `GgufMmvqBatchedPlan` | Bespoke (Phase 20) | activation: `{f32, f16, bf16}`; weights: GGUF block; top-k routing | MoE × N-experts | ✓ | N/A | Phase 20 — batched MMVQ × N-experts. 36 FFI symbols (11 block formats × 3 act dtypes + 3 pure-FP). Template-bool `if constexpr` for atomic-vs-store dispatch on top_k. Phase 22 added debug-build assertion `ncols ≥ 64`. |
 
 ---
 
 ## OpCategory: MoE (Mixture-of-Experts)
 
-The MoE kernels (`MoePlan`) and the GGUF MMVQ plans were removed in alpha.79 (board 307); see CHANGELOG.
+The MoE kernels (`MoePlan`) and the Q8_1-staged `GgufMmvqMultiMPlan` were removed in alpha.79 (board 307); see CHANGELOG.
 
 ---
 

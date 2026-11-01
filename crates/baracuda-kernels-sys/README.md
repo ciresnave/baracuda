@@ -21,7 +21,7 @@ kernels/
   embedding/      embedding + embedding_bag (FW + BW)
   fft/            fftshift / ifftshift index-permutation helpers
   gemm/           int8 RRR, FP8 (sm_89), int4, bin GEMM
-  gguf/           llama.cpp GGUF block-format dequant (Q4_0..Q8_K + k-quants)
+  gguf/           llama.cpp GGUF block-format dequant + MMVQ (Q4_0..Q8_K + k-quants)
   image/          interpolate, grid_sample, pixel_shuffle, ROI ops, NMS
   indexing/       gather, scatter_add, index_select, masked_fill, one_hot, nonzero
   linalg/         ormqr WY-blocked + reflector-by-reflector, batched QR helpers
@@ -112,7 +112,8 @@ level. The safe layer in `baracuda-kernels` enforces all of these.
 
 A subset of kernels in this crate are vendored from upstream open-
 source projects (HuggingFace candle via fuel-cuda-kernels for the
-elementwise core; llama.cpp's `ggml-cuda` for GGUF dequant). Each adapted source carries
+elementwise core; llama.cpp's `ggml-cuda` for GGUF dequant + MMVQ;
+`guoqingbao/attention.rs` for fused MoE, removed in alpha.79). Each adapted source carries
 an `SPDX-FileCopyrightText:` + `SPDX-License-Identifier:` header; the
 consolidated provenance is in
 [`LICENSE-thirdparty.md`](LICENSE-thirdparty.md).

@@ -185,4 +185,4 @@ Derived files that were absent from `LICENSE-thirdparty.md` at audit time (heade
 
 Method: `git log --follow` for the first-add commit; read-only parse of the PNG chunks (`caBX` = C2PA JUMBF box) at `origin/main` `1dd782a2`. `assets/README.txt` ("Placeholder ... barracuda.jpg ... attached to your Claude chat") is a stale placeholder note that does not describe the current file.
 
-**Removed in alpha.79 (2026-11-01, board 307):** `vendor/fuel-q8_1`, `kernels/gguf/{mmvq,mmvq_batched,mmvq_multim,quantize_q8_1}.cu`, `kernels/include/baracuda_{mmvq_batched,mmvq_multim,moe}.cuh`, `kernels/moe/*`. Rows above (G-Q8-1, G-H-2, G-MMVQ-1, G-FQ-1, the fuel-q8_1 chain) and `docs/provenance/*.tsv` are the record of what shipped through alpha.78; the files are in git history.
+**Removed in alpha.79 (2026-11-01, board 307):** `vendor/fuel-q8_1`, `kernels/gguf/{mmvq_multim,quantize_q8_1}.cu`, `kernels/include/baracuda_{mmvq_multim,moe}.cuh`, `kernels/moe/*`. Rows above for those files (G-Q8-1, G-H-2, G-FQ-1, the fuel-q8_1 chain) and `docs/provenance/*.tsv` are the record of what shipped through alpha.78; the files are in git history.

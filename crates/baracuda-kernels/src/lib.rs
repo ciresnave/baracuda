@@ -529,11 +529,18 @@ pub use quantize::{
 // existing `quantized_linear_w8a8` kernel; zero new CUDA).
 pub use quantize::{SmoothQuantLinearArgs, SmoothQuantLinearDescriptor, SmoothQuantLinearPlan};
 
-// Milestone 8.4 — GGUF block-format dequant (Category P).
+// Milestone 8.4 — GGUF block-format dequant + MMVQ (Category P).
 // Vendored from llama.cpp via fuel-cuda-kernels.
 pub use quantize::{
     BlockQ2K, BlockQ3K, BlockQ4_0, BlockQ4_1, BlockQ4K, BlockQ5_0, BlockQ5_1, BlockQ5K, BlockQ6K,
     BlockQ8_0, BlockQ8K, GgufDequantizeArgs, GgufDequantizeDescriptor, GgufDequantizePlan,
+    GgufMmvqArgs, GgufMmvqDescriptor, GgufMmvqPlan,
+};
+
+// Phase 20.1 — GGUF batched MMVQ × N-experts (general-purpose routing primitive).
+pub use quantize::{
+    GgufMmvqBatchedActivation, GgufMmvqBatchedArgs, GgufMmvqBatchedDescriptor,
+    GgufMmvqBatchedFormat, GgufMmvqBatchedPlan,
 };
 
 // Phase 53 — bitsandbytes NF4 (NormalFloat 4-bit) dequant + GEMV
