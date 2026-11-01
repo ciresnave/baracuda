@@ -529,22 +529,12 @@ pub use quantize::{
 // existing `quantized_linear_w8a8` kernel; zero new CUDA).
 pub use quantize::{SmoothQuantLinearArgs, SmoothQuantLinearDescriptor, SmoothQuantLinearPlan};
 
-// Milestone 8.4 — GGUF block-format dequant + MMVQ (Category P).
+// Milestone 8.4 — GGUF block-format dequant (Category P).
 // Vendored from llama.cpp via fuel-cuda-kernels.
 pub use quantize::{
     BlockQ2K, BlockQ3K, BlockQ4_0, BlockQ4_1, BlockQ4K, BlockQ5_0, BlockQ5_1, BlockQ5K, BlockQ6K,
     BlockQ8_0, BlockQ8K, GgufDequantizeArgs, GgufDequantizeDescriptor, GgufDequantizePlan,
-    GgufMmvqArgs, GgufMmvqDescriptor, GgufMmvqPlan,
 };
-
-// Phase 20.1 — GGUF batched MMVQ × N-experts (general-purpose routing primitive).
-pub use quantize::{
-    GgufMmvqBatchedActivation, GgufMmvqBatchedArgs, GgufMmvqBatchedDescriptor,
-    GgufMmvqBatchedFormat, GgufMmvqBatchedPlan,
-};
-
-// Phase 33 — multi-M MMVQ via Q8_1 activation staging (prefill speedup).
-pub use quantize::{GgufMmvqMultiMArgs, GgufMmvqMultiMDescriptor, GgufMmvqMultiMPlan};
 
 // Phase 53 — bitsandbytes NF4 (NormalFloat 4-bit) dequant + GEMV
 // (QLoRA inference path). Plan types are always re-exported; the FFI
@@ -555,11 +545,6 @@ pub use quantize::{
     NF4_CODEBOOK, Nf4Activation, Nf4DequantizeArgs, Nf4DequantizePlan, Nf4Descriptor, Nf4MmvqArgs,
     Nf4MmvqMultiMArgs, Nf4MmvqMultiMDescriptor, Nf4MmvqMultiMPlan, Nf4MmvqPlan,
 };
-
-// Milestone 8.5 — Mixture-of-Experts inference forward (Category V).
-// Vendored from attention.rs via fuel-cuda-kernels.
-pub mod moe;
-pub use moe::{MoeArgs, MoeDescriptor, MoePlan, MoeVariant};
 
 // Image / spatial-transform family — Phase 9 Category T. Bespoke
 // kernels for the canonical vision-domain ops: interpolate (bilinear

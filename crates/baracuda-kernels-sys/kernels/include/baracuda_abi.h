@@ -11,7 +11,7 @@
 #ifndef BARACUDA_ABI_H
 #define BARACUDA_ABI_H
 
-#define BARACUDA_KERNELS_ABI_VERSION 1u
+#define BARACUDA_KERNELS_ABI_VERSION 2u
 
 #ifdef __cplusplus
 extern "C" {

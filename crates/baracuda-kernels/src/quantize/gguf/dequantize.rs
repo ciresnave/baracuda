@@ -45,8 +45,7 @@ pub struct GgufDequantizeArgs<'a> {
 /// tensor.
 ///
 /// **When to use**: ahead-of-time weight unpacking, or as a fallback
-/// when batched FP matmul is preferred over the dequant-fused
-/// [`GgufMmvqPlan`](crate::GgufMmvqPlan).
+/// for dequantize-then-multiply with a float GEMM.
 ///
 /// **Dtypes**: input is packed `u8` bytes; output `f32`. `f16`
 /// output deferred.
