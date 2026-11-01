@@ -22,7 +22,7 @@ strided siblings). Recurring deferral reasons: *Tier-2 cadence / trailblazer-onl
 ## ⚠ Reconciliation flags (the doc set disagrees with itself — verify before acting)
 
 1. **Stale release version.** `ROADMAP.md` header + `OP-MATRIX.md` both say the current
-   release is **v0.0.1-alpha.77 (2026-07-09)**. The workspace is at alpha.79+. The
+   release is **v0.0.1-alpha.78 (2026-07-09)**. The workspace is at alpha.79+. The
    headers are ~1.5 months stale; several "planned" phase headings below are already
    shipped as a result — a refresh pass is warranted.
 2. **OP-MATRIX ⟂ ROADMAP conflicts (do NOT treat as open work):** OP-MATRIX lists two

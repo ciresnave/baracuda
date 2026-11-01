@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.78 - 2026-11-01
+
+### Changed
+
+- `unpopped`, `unpopped-vocab`, `unpopped-cpu-c` 0.38.4 -> 0.40.0 (root pins, `baracuda-cuda-emit` dev-dep, `tools/kiss-ref-diff` incl. its lock); `fuel-kernel-seam`/`-types` 0.34.0 -> 0.35.2; `vulkane-slang-emit`/`-parse` 0.19.0 -> 0.20.2. `baracuda-cuda-emit` and `baracuda-cuda-parse` 0.38.4 -> 0.40.0 (MAJOR.MINOR follows unpopped). One copy of each in both graphs (`cargo tree -d`). No source changes.
+
 ## 0.1.0-alpha.77 - 2026-10-31
 
 ### Fixed
