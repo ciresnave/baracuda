@@ -13,7 +13,8 @@ Enumerates with `git ls-files` (never a disk walk). Files are handled as latin-1
 cp1252 bytes round-trip unchanged.
 """
 import re
-import subprocess
+import shutil
+import subprocess  # nosec B404 - runs only `git ls-files` with fixed arguments, no shell
 import sys
 
 CURRENT_STATEMENTS = [
@@ -49,7 +50,13 @@ def main(argv):
         print(__doc__)
         return 2
     old, new = argv[1], argv[2]
-    files = subprocess.run(["git", "ls-files", "-z"], capture_output=True, check=True).stdout.decode().split("\0")
+    git = shutil.which("git")
+    if git is None:
+        print("git not found on PATH")
+        return 1
+    # Absolute git path, fixed argument list, no shell; no user input reaches argv.
+    result = subprocess.run([git, "ls-files", "-z"], capture_output=True, check=True)  # nosec B603
+    files = result.stdout.decode().split("\0")
     changed = 0
     for path in filter(None, files):
         if not (path.endswith(("Cargo.toml", "Cargo.lock")) or path in dict(CURRENT_STATEMENTS)):
