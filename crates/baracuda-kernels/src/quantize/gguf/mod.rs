@@ -10,7 +10,7 @@
 //!   vector multiply with FP activations (`out[r] = Σ_c W_q[r, c] · y[c]`).
 //!
 //! The Q8_1-staged multi-M launchers and the MoE-GGUF kernels (integer-dot)
-//! were removed in 0.1.0-alpha.79 (board 307).
+//! were removed in 0.1.0-alpha.80 (board 307).
 //!
 //! ## Block formats
 //!

@@ -66,7 +66,7 @@ but ships no LICENSE file at any commit (G-K-1 in `PROVENANCE.md`); `guoqingbao/
     function template + per-pair explicit specializations covering
     the half-precision endpoints.
 
-> **Removed in 0.1.0-alpha.79 (2026-11-01, board 307 / CireSnave ruling):** `gguf/mmvq_multim.cu`, `gguf/quantize_q8_1.cu`,
+> **Removed in 0.1.0-alpha.80 (2026-11-01, board 307 / CireSnave ruling):** `gguf/mmvq_multim.cu`, `gguf/quantize_q8_1.cu`,
 > `include/baracuda_{mmvq_multim,moe}.cuh`, `moe/*.cu` and `vendor/fuel-q8_1/`, with their Rust wrappers and 97 FFI symbols. The attribution entries
 > below for those files and for attention.rs (MoE) describe code no longer shipped; kept as the record of what shipped through alpha.78.
 
