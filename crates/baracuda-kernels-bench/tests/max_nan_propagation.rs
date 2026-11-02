@@ -11,7 +11,7 @@
 //! (NaN-suppressing without the `.NaN` modifier). On CUDA that is decided by
 //! ptxas / the driver JIT — a layer BELOW the emitted source, so every
 //! source-text golden is structurally blind to it. Same "correct bytes, wrong
-//! behavior" shape as the alpha.79 all-zero. The only way to know is to LAUNCH.
+//! behavior" shape as the alpha.78 all-zero. The only way to know is to LAUNCH.
 //!
 //! `Max` and `Min` are covered SEPARATELY: they are different emitted expressions
 //! (`>=` vs `<`), so verifying one does not verify the other — a transposed
