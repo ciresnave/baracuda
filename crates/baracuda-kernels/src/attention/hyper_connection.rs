@@ -24,7 +24,7 @@
 //!   path is f32 activations with a bf16 RMSNorm gamma, and it is unchanged.
 //!   For `T = f16 / bf16` the plan widens `x_expanded` to an f32 scratch
 //!   buffer it owns, runs the f32 path, and narrows `out` back, using
-//!   [`CastPlan`]. The result equals the f32 path on the widened inputs,
+//!   [`CastPlan`](crate::elementwise::CastPlan). The result equals the f32 path on the widened inputs,
 //!   rounded once to `T` on the way out; the cast is a scratch conversion,
 //!   not a change to the numerics. See [`HyperConnectionPlan::scratch_bytes`]
 //!   for the scratch size and the per-call traffic.
