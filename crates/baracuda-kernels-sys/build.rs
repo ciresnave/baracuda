@@ -1263,15 +1263,22 @@ fn collect_kernel_files() -> Vec<&'static str> {
             // (DynamicRangeQuantize + QuantizedLinear). Builds on 8.1 /
             // 8.2 primitives — see `kernels/include/baracuda_quantize_compose.cuh`.
             "quantize/compose.cu",
-            // Phase 8 Milestone 8.4 — GGUF block-format dequant
+            // Phase 8 Milestone 8.4 — GGUF block-format dequant + MMVQ
             // (Category P). Vendored from llama.cpp via fuel-cuda-kernels.
-            // One .cu file behind a shared header
+            // Two .cu files behind a single shared header
             // (`kernels/include/baracuda_gguf.cuh`):
             //   * dequantize.cu — 11 `_run` symbols, one per block format
             //     (Q4_0/Q4_1/Q5_0/Q5_1/Q8_0 + Q2_K..Q8_K). f32 output.
+            //   * mmvq.cu — 11 `_run` symbols (one per block format).
+            //     Phase 11.4 added a bespoke Q8_K MMVQ (upstream
+            //     llama.cpp / Fuel ship only Q8_K dequant). f32
+            //     activation, f32 output.
             "gguf/dequantize.cu",
-            // Removed 2026-11-01 (board 307, CireSnave ruling): the MMVQ / Q8_1-staged / MoE-GGUF
-            // integer-dot kernels. Dequantize-then-multiply (dequantize.cu + float GEMM) remains.
+            "gguf/mmvq.cu",
+            // Phase 20.1 — batched MMVQ × N-experts (FP activations).
+            "gguf/mmvq_batched.cu",
+            // Removed 2026-11-01 (board 307, CireSnave ruling): the Q8_1-staged multi-M
+            // (mmvq_multim / quantize_q8_1) and MoE-GGUF integer-dot kernels.
             // Phase 3 fanout — cast / fill / affine. Vendored from
             // fuel-cuda-kernels (cast.cu / fill.cu / affine.cu) with
             // the standard SPDX header. Contig-only fast path; baracuda's

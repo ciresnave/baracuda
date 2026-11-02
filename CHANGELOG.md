@@ -16,6 +16,13 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.80 - 2026-11-02
+
+### Added
+
+- **Restores the float-activation GGUF MMVQ removed in alpha.79** (PM ruling 2026-11-01: `mmvq.cu`, `mmvq_batched.cu`, `baracuda_mmvq_batched.cuh` have 0 dp4a / q8_1 hits, and Fuel binds the `bk::mmvq_*` call paths). `baracuda-kernels-sys`: those three files and 204 FFI symbols (`baracuda_kernels_mmvq_*`, `_mmvq_batched_*`); `baracuda-kernels`: `GgufMmvqPlan`, `GgufMmvqBatchedPlan` (+ Args/Descriptor/Format/Activation types), their tests, and the `mmvq` bench without its multi-M section. Additive against alpha.79: `ABI_VERSION` stays 2 (manifest 5426 -> 5630 entries, 0 changed).
+- Still removed (alpha.79, not restored): `mmvq_multim`, `quantize_q8_1`, `moe_*` kernels and `vendor/fuel-q8_1`, with `GgufMmvqMultiM*` and the `moe` module.
+
 ## 0.1.0-alpha.79 - 2026-11-01
 
 ### Removed (BREAKING)

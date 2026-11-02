@@ -68330,11 +68330,35 @@ unsafe extern "C" {
 // Vendored from llama.cpp via fuel-cuda-kernels. See
 // `kernels/include/baracuda_gguf.cuh` for lineage notes.
 //
-// Symbols: `baracuda_kernels_dequantize_<qtype>_run` — unpack a GGUF-packed
-// weight matrix into a dense f32 tensor (`x` = packed bytes, `y` = `float*`,
-// length `numel`, a multiple of the block size: 32 for Q4_0/Q4_1/Q5_0/Q5_1/Q8_0,
-// 256 for Q2_K..Q8_K). The fused MMVQ / MoE-GGUF integer-dot symbols were
-// removed in alpha.79 (ABI_VERSION 2).
+// Symbols are split into two op families:
+//   * `baracuda_kernels_dequantize_<qtype>_run` — unpack a GGUF-packed
+//     weight matrix into a dense f32 tensor.
+//   * `baracuda_kernels_mmvq_<qtype>_run` — fused dequant + matmul-vec
+//     (FP-activation MMVQ): `out[r] = Σ_c W_q[r, c] · y[c]`. Single FP
+//     activation vector in, FP output vector out.
+//
+// Pointer ABI (both families):
+//   - `x` / `vx` is the GGUF-packed weight buffer (raw bytes; element
+//     stride = the block size of the qtype). For dequant: pointer is
+//     to a flat byte buffer storing `ceil(numel / block_size)` blocks.
+//     For MMVQ: pointer is to a `[nrows × packed_cols_bytes]` matrix
+//     laid out row-major (one block-row per qtype row).
+//   - Dequant output `y` is `float* ` device memory, length `numel`.
+//   - MMVQ activation `y` is `float* ` of length `ncols`. MMVQ output
+//     `dst` is `float*` of length `nrows`.
+//
+// `numel` (dequant) and `ncols` (MMVQ) MUST be divisible by the qtype's
+// block size: 32 for the type-0/1 qtypes (Q4_0 / Q4_1 / Q5_0 / Q5_1 /
+// Q8_0); 256 for the k-quants (Q2_K / Q3_K / Q4_K / Q5_K / Q6_K / Q8_K).
+//
+// Q8_K MMVQ — added by baracuda in Phase 11.4 as a bespoke kernel
+// (not vendored). Upstream llama.cpp / Fuel ship only the dequant
+// kernel and treat Q8_K as a CPU-side intermediate; baracuda exposes
+// a fused MMVQ to avoid the 2× memory traffic of dequant-then-GEMV
+// on the inference decode step.
+//
+// The Q8_1-staged multi-M (`mmvq_multim`, `quantize_q8_1`) and `moe_*` integer-dot
+// symbols were removed in alpha.79 (ABI_VERSION 2).
 
 #[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
 unsafe extern "C" {
@@ -68531,6 +68555,2719 @@ unsafe extern "C" {
         y: *const c_void,
     ) -> i32;
 
+    // ---- MMVQ: type-0/1 (32-element blocks) ----
+
+    /// GGUF `Q4_0` MMVQ — FP-activation matrix-vector mul.
+    /// `ncols` must be a multiple of 32.
+    /// # Safety: device-resident `x` (packed), `y` (f32 activation),
+    /// `dst` (f32 output); valid stream.
+    pub fn baracuda_kernels_mmvq_q4_0_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q4_0_can_implement` (baracuda kernels mmvq q4 0 can implement).
+    pub fn baracuda_kernels_mmvq_q4_0_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    /// GGUF `Q4_1` MMVQ. # Safety: as `Q4_0`.
+    pub fn baracuda_kernels_mmvq_q4_1_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q4_1_can_implement` (baracuda kernels mmvq q4 1 can implement).
+    pub fn baracuda_kernels_mmvq_q4_1_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    /// GGUF `Q5_0` MMVQ. # Safety: as `Q4_0`.
+    pub fn baracuda_kernels_mmvq_q5_0_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q5_0_can_implement` (baracuda kernels mmvq q5 0 can implement).
+    pub fn baracuda_kernels_mmvq_q5_0_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    /// GGUF `Q5_1` MMVQ. # Safety: as `Q4_0`.
+    pub fn baracuda_kernels_mmvq_q5_1_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q5_1_can_implement` (baracuda kernels mmvq q5 1 can implement).
+    pub fn baracuda_kernels_mmvq_q5_1_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    /// GGUF `Q8_0` MMVQ. # Safety: as `Q4_0`.
+    pub fn baracuda_kernels_mmvq_q8_0_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q8_0_can_implement` (baracuda kernels mmvq q8 0 can implement).
+    pub fn baracuda_kernels_mmvq_q8_0_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    // ---- MMVQ: k-quants (256-element blocks) ----
+    //
+    // `Q8_K` MMVQ is exposed (Phase 11.4 — bespoke, not vendored). Upstream
+    // llama.cpp / Fuel ship only the Q8_K dequant kernel; baracuda adds a
+    // fused MMVQ to avoid the 2× memory traffic of dequant-then-GEMV.
+
+    /// GGUF `Q2_K` MMVQ — FP-activation matrix-vector mul.
+    /// `ncols` must be a multiple of 256.
+    /// # Safety: as `Q4_0`.
+    pub fn baracuda_kernels_mmvq_q2_K_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q2_K_can_implement` (baracuda kernels mmvq q2 k can implement).
+    pub fn baracuda_kernels_mmvq_q2_K_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    /// GGUF `Q3_K` MMVQ. # Safety: as `Q2_K`.
+    pub fn baracuda_kernels_mmvq_q3_K_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q3_K_can_implement` (baracuda kernels mmvq q3 k can implement).
+    pub fn baracuda_kernels_mmvq_q3_K_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    /// GGUF `Q4_K` MMVQ. # Safety: as `Q2_K`.
+    pub fn baracuda_kernels_mmvq_q4_K_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q4_K_can_implement` (baracuda kernels mmvq q4 k can implement).
+    pub fn baracuda_kernels_mmvq_q4_K_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    /// GGUF `Q5_K` MMVQ. # Safety: as `Q2_K`.
+    pub fn baracuda_kernels_mmvq_q5_K_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q5_K_can_implement` (baracuda kernels mmvq q5 k can implement).
+    pub fn baracuda_kernels_mmvq_q5_K_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    /// GGUF `Q6_K` MMVQ. # Safety: as `Q2_K`.
+    pub fn baracuda_kernels_mmvq_q6_K_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q6_K_can_implement` (baracuda kernels mmvq q6 k can implement).
+    pub fn baracuda_kernels_mmvq_q6_K_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    /// GGUF `Q8_K` MMVQ — Phase 11.4 (bespoke, not vendored from
+    /// llama.cpp). `ncols` must be a multiple of 256. # Safety: as `Q2_K`.
+    pub fn baracuda_kernels_mmvq_q8_K_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q8_K_can_implement` (baracuda kernels mmvq q8 k can implement).
+    pub fn baracuda_kernels_mmvq_q8_K_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    // ----- Activation-strided + W-offset MMVQ — Phase 14.5 ----------------
+    //
+    // Three runtime params added vs. the contig MMVQ FFI:
+    //
+    //   * `w_start_byte_offset` (`i64`) — affine byte offset into W's
+    //     allocation. Lets a single device buffer host multiple GGUF
+    //     matrices; the launcher does the pointer arithmetic host-side
+    //     and the kernel is unchanged on the W side. Zero cost at
+    //     offset = 0.
+    //   * `stride_y` (`i64`) — element stride along the activation's
+    //     `ncols` axis. Signed.
+    //       - `stride_y == 1` matches the contig kernel exactly.
+    //       - `stride_y == 0` broadcasts the single-element activation
+    //         across every column (the GQA "kv-head-axis-stride-0"
+    //         degenerate case is still the rank-2 host-batched arm; at
+    //         the kernel-level FFI this just shows up as the host
+    //         launching one MMVQ call per Q-head with the same `y`
+    //         pointer).
+    //       - other values walk a strided view.
+    //   * Activation rank is implicitly 1 at the kernel-level FFI; the
+    //     host loops over higher dims (batch / sequence / Q-head) if
+    //     needed. This keeps the kernel surface narrow — MMVQ is by
+    //     construction matrix × vector.
+    //
+    // Status codes match the contig family: 0 success, 2 invalid problem,
+    // 5 internal launch error.
+
+    /// Strided MMVQ — GGUF `Q4_0`. # Safety: as the contig Q4_0 variant,
+    /// plus `(y[k * stride_y])_k=0..ncols` must be a valid f32 read.
+    pub fn baracuda_kernels_mmvq_q4_0_actstrided_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q4_0_actstrided_can_implement` (baracuda kernels mmvq q4 0 actstrided can implement).
+    pub fn baracuda_kernels_mmvq_q4_0_actstrided_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    /// Strided MMVQ — GGUF `Q4_1`. # Safety: as the contig sibling.
+    pub fn baracuda_kernels_mmvq_q4_1_actstrided_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q4_1_actstrided_can_implement` (baracuda kernels mmvq q4 1 actstrided can implement).
+    pub fn baracuda_kernels_mmvq_q4_1_actstrided_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    /// Strided MMVQ — GGUF `Q5_0`. # Safety: as the contig sibling.
+    pub fn baracuda_kernels_mmvq_q5_0_actstrided_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q5_0_actstrided_can_implement` (baracuda kernels mmvq q5 0 actstrided can implement).
+    pub fn baracuda_kernels_mmvq_q5_0_actstrided_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    /// Strided MMVQ — GGUF `Q5_1`. # Safety: as the contig sibling.
+    pub fn baracuda_kernels_mmvq_q5_1_actstrided_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q5_1_actstrided_can_implement` (baracuda kernels mmvq q5 1 actstrided can implement).
+    pub fn baracuda_kernels_mmvq_q5_1_actstrided_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    /// Strided MMVQ — GGUF `Q8_0`. # Safety: as the contig sibling.
+    pub fn baracuda_kernels_mmvq_q8_0_actstrided_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q8_0_actstrided_can_implement` (baracuda kernels mmvq q8 0 actstrided can implement).
+    pub fn baracuda_kernels_mmvq_q8_0_actstrided_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    /// Strided MMVQ — GGUF `Q2_K`. # Safety: as the contig sibling.
+    pub fn baracuda_kernels_mmvq_q2_K_actstrided_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q2_K_actstrided_can_implement` (baracuda kernels mmvq q2 k actstrided can implement).
+    pub fn baracuda_kernels_mmvq_q2_K_actstrided_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    /// Strided MMVQ — GGUF `Q3_K`. # Safety: as the contig sibling.
+    pub fn baracuda_kernels_mmvq_q3_K_actstrided_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q3_K_actstrided_can_implement` (baracuda kernels mmvq q3 k actstrided can implement).
+    pub fn baracuda_kernels_mmvq_q3_K_actstrided_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    /// Strided MMVQ — GGUF `Q4_K`. # Safety: as the contig sibling.
+    pub fn baracuda_kernels_mmvq_q4_K_actstrided_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q4_K_actstrided_can_implement` (baracuda kernels mmvq q4 k actstrided can implement).
+    pub fn baracuda_kernels_mmvq_q4_K_actstrided_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    /// Strided MMVQ — GGUF `Q5_K`. # Safety: as the contig sibling.
+    pub fn baracuda_kernels_mmvq_q5_K_actstrided_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q5_K_actstrided_can_implement` (baracuda kernels mmvq q5 k actstrided can implement).
+    pub fn baracuda_kernels_mmvq_q5_K_actstrided_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    /// Strided MMVQ — GGUF `Q6_K`. # Safety: as the contig sibling.
+    pub fn baracuda_kernels_mmvq_q6_K_actstrided_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q6_K_actstrided_can_implement` (baracuda kernels mmvq q6 k actstrided can implement).
+    pub fn baracuda_kernels_mmvq_q6_K_actstrided_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    /// Strided MMVQ — GGUF `Q8_K` (bespoke; Phase 11.4 + 14.5).
+    /// # Safety: as the contig sibling.
+    pub fn baracuda_kernels_mmvq_q8_K_actstrided_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q8_K_actstrided_can_implement` (baracuda kernels mmvq q8 k actstrided can implement).
+    pub fn baracuda_kernels_mmvq_q8_K_actstrided_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    // ===== Phase 18.1 — f16 / bf16 activation MMVQ ============================
+    //
+    // 11 block formats × {f16, bf16} × {contig, actstrided} = 44 new symbols.
+    //
+    // Convention vs. the f32 baseline:
+    //   * `y` and `dst` share the same dtype (PyTorch convention: f16 activation
+    //     → f16 dst; bf16 → bf16). The dtype is encoded in the symbol suffix
+    //     (`_f16_run` / `_bf16_run` / `_actstrided_f16_run` / `_actstrided_bf16_run`).
+    //   * The existing un-suffixed symbol (`*_run`, `*_actstrided_run`) keeps
+    //     f32 activation + f32 output, preserved for back-compat.
+    //   * Internal accumulator stays f32 in every variant — the f16 / bf16 cast
+    //     happens at the load (activation read) and store (dst write) sites.
+    //
+    // Status codes match the f32 family: 0 success, 2 invalid problem,
+    // 5 internal launch error.
+
+    /// MMVQ — Q4_0, f16 activation + f16 output. # Safety: as the f32 sibling
+    /// with `y` / `dst` typed `__half` device-resident.
+    pub fn baracuda_kernels_mmvq_q4_0_f16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q4_0_f16_can_implement` (baracuda kernels mmvq q4 0 f16 can implement).
+    pub fn baracuda_kernels_mmvq_q4_0_f16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+    /// MMVQ — Q4_0, bf16 activation + bf16 output. # Safety: as the f32 sibling
+    /// with `y` / `dst` typed `__nv_bfloat16` device-resident.
+    pub fn baracuda_kernels_mmvq_q4_0_bf16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q4_0_bf16_can_implement` (baracuda kernels mmvq q4 0 bf16 can implement).
+    pub fn baracuda_kernels_mmvq_q4_0_bf16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    /// MMVQ — Q4_1, f16 activation + f16 output. # Safety: as Q4_0 f16.
+    pub fn baracuda_kernels_mmvq_q4_1_f16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q4_1_f16_can_implement` (baracuda kernels mmvq q4 1 f16 can implement).
+    pub fn baracuda_kernels_mmvq_q4_1_f16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+    /// MMVQ — Q4_1, bf16 activation + bf16 output. # Safety: as Q4_0 bf16.
+    pub fn baracuda_kernels_mmvq_q4_1_bf16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q4_1_bf16_can_implement` (baracuda kernels mmvq q4 1 bf16 can implement).
+    pub fn baracuda_kernels_mmvq_q4_1_bf16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    /// MMVQ — Q5_0, f16. # Safety: as Q4_0 f16.
+    pub fn baracuda_kernels_mmvq_q5_0_f16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q5_0_f16_can_implement` (baracuda kernels mmvq q5 0 f16 can implement).
+    pub fn baracuda_kernels_mmvq_q5_0_f16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+    /// MMVQ — Q5_0, bf16. # Safety: as Q4_0 bf16.
+    pub fn baracuda_kernels_mmvq_q5_0_bf16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q5_0_bf16_can_implement` (baracuda kernels mmvq q5 0 bf16 can implement).
+    pub fn baracuda_kernels_mmvq_q5_0_bf16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    /// MMVQ — Q5_1, f16. # Safety: as Q4_0 f16.
+    pub fn baracuda_kernels_mmvq_q5_1_f16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q5_1_f16_can_implement` (baracuda kernels mmvq q5 1 f16 can implement).
+    pub fn baracuda_kernels_mmvq_q5_1_f16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+    /// MMVQ — Q5_1, bf16. # Safety: as Q4_0 bf16.
+    pub fn baracuda_kernels_mmvq_q5_1_bf16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q5_1_bf16_can_implement` (baracuda kernels mmvq q5 1 bf16 can implement).
+    pub fn baracuda_kernels_mmvq_q5_1_bf16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    /// MMVQ — Q8_0, f16. # Safety: as Q4_0 f16.
+    pub fn baracuda_kernels_mmvq_q8_0_f16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q8_0_f16_can_implement` (baracuda kernels mmvq q8 0 f16 can implement).
+    pub fn baracuda_kernels_mmvq_q8_0_f16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+    /// MMVQ — Q8_0, bf16. # Safety: as Q4_0 bf16.
+    pub fn baracuda_kernels_mmvq_q8_0_bf16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q8_0_bf16_can_implement` (baracuda kernels mmvq q8 0 bf16 can implement).
+    pub fn baracuda_kernels_mmvq_q8_0_bf16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    /// MMVQ — Q2_K, f16. # Safety: as Q4_0 f16, ncols must be multiple of 256.
+    pub fn baracuda_kernels_mmvq_q2_K_f16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q2_K_f16_can_implement` (baracuda kernels mmvq q2 k f16 can implement).
+    pub fn baracuda_kernels_mmvq_q2_K_f16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+    /// MMVQ — Q2_K, bf16. # Safety: as Q4_0 bf16, ncols must be multiple of 256.
+    pub fn baracuda_kernels_mmvq_q2_K_bf16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q2_K_bf16_can_implement` (baracuda kernels mmvq q2 k bf16 can implement).
+    pub fn baracuda_kernels_mmvq_q2_K_bf16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    /// MMVQ — Q3_K, f16. # Safety: as Q2_K f16.
+    pub fn baracuda_kernels_mmvq_q3_K_f16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q3_K_f16_can_implement` (baracuda kernels mmvq q3 k f16 can implement).
+    pub fn baracuda_kernels_mmvq_q3_K_f16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+    /// MMVQ — Q3_K, bf16. # Safety: as Q2_K bf16.
+    pub fn baracuda_kernels_mmvq_q3_K_bf16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q3_K_bf16_can_implement` (baracuda kernels mmvq q3 k bf16 can implement).
+    pub fn baracuda_kernels_mmvq_q3_K_bf16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    /// MMVQ — Q4_K, f16. # Safety: as Q2_K f16.
+    pub fn baracuda_kernels_mmvq_q4_K_f16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q4_K_f16_can_implement` (baracuda kernels mmvq q4 k f16 can implement).
+    pub fn baracuda_kernels_mmvq_q4_K_f16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+    /// MMVQ — Q4_K, bf16. # Safety: as Q2_K bf16.
+    pub fn baracuda_kernels_mmvq_q4_K_bf16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q4_K_bf16_can_implement` (baracuda kernels mmvq q4 k bf16 can implement).
+    pub fn baracuda_kernels_mmvq_q4_K_bf16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    /// MMVQ — Q5_K, f16. # Safety: as Q2_K f16.
+    pub fn baracuda_kernels_mmvq_q5_K_f16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q5_K_f16_can_implement` (baracuda kernels mmvq q5 k f16 can implement).
+    pub fn baracuda_kernels_mmvq_q5_K_f16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+    /// MMVQ — Q5_K, bf16. # Safety: as Q2_K bf16.
+    pub fn baracuda_kernels_mmvq_q5_K_bf16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q5_K_bf16_can_implement` (baracuda kernels mmvq q5 k bf16 can implement).
+    pub fn baracuda_kernels_mmvq_q5_K_bf16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    /// MMVQ — Q6_K, f16. # Safety: as Q2_K f16.
+    pub fn baracuda_kernels_mmvq_q6_K_f16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q6_K_f16_can_implement` (baracuda kernels mmvq q6 k f16 can implement).
+    pub fn baracuda_kernels_mmvq_q6_K_f16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+    /// MMVQ — Q6_K, bf16. # Safety: as Q2_K bf16.
+    pub fn baracuda_kernels_mmvq_q6_K_bf16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q6_K_bf16_can_implement` (baracuda kernels mmvq q6 k bf16 can implement).
+    pub fn baracuda_kernels_mmvq_q6_K_bf16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    /// MMVQ — Q8_K, f16 (bespoke; Phase 11.4 + 18.1). # Safety: as Q2_K f16.
+    pub fn baracuda_kernels_mmvq_q8_K_f16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q8_K_f16_can_implement` (baracuda kernels mmvq q8 k f16 can implement).
+    pub fn baracuda_kernels_mmvq_q8_K_f16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+    /// MMVQ — Q8_K, bf16 (bespoke; Phase 11.4 + 18.1). # Safety: as Q2_K bf16.
+    pub fn baracuda_kernels_mmvq_q8_K_bf16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q8_K_bf16_can_implement` (baracuda kernels mmvq q8 k bf16 can implement).
+    pub fn baracuda_kernels_mmvq_q8_K_bf16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    // ---- Phase 18.1 strided f16 / bf16 siblings ------------------------------
+
+    /// Strided MMVQ — Q4_0, f16. # Safety: as the f32 strided sibling.
+    pub fn baracuda_kernels_mmvq_q4_0_actstrided_f16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q4_0_actstrided_f16_can_implement` (baracuda kernels mmvq q4 0 actstrided f16 can implement).
+    pub fn baracuda_kernels_mmvq_q4_0_actstrided_f16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+    /// Strided MMVQ — Q4_0, bf16. # Safety: as the f32 strided sibling.
+    pub fn baracuda_kernels_mmvq_q4_0_actstrided_bf16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q4_0_actstrided_bf16_can_implement` (baracuda kernels mmvq q4 0 actstrided bf16 can implement).
+    pub fn baracuda_kernels_mmvq_q4_0_actstrided_bf16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    /// Strided MMVQ — Q4_1, f16. # Safety: as Q4_0 strided f16.
+    pub fn baracuda_kernels_mmvq_q4_1_actstrided_f16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q4_1_actstrided_f16_can_implement` (baracuda kernels mmvq q4 1 actstrided f16 can implement).
+    pub fn baracuda_kernels_mmvq_q4_1_actstrided_f16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+    /// Strided MMVQ — Q4_1, bf16. # Safety: as Q4_0 strided bf16.
+    pub fn baracuda_kernels_mmvq_q4_1_actstrided_bf16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q4_1_actstrided_bf16_can_implement` (baracuda kernels mmvq q4 1 actstrided bf16 can implement).
+    pub fn baracuda_kernels_mmvq_q4_1_actstrided_bf16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    /// Strided MMVQ — Q5_0, f16. # Safety: as Q4_0 strided f16.
+    pub fn baracuda_kernels_mmvq_q5_0_actstrided_f16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q5_0_actstrided_f16_can_implement` (baracuda kernels mmvq q5 0 actstrided f16 can implement).
+    pub fn baracuda_kernels_mmvq_q5_0_actstrided_f16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+    /// Strided MMVQ — Q5_0, bf16. # Safety: as Q4_0 strided bf16.
+    pub fn baracuda_kernels_mmvq_q5_0_actstrided_bf16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q5_0_actstrided_bf16_can_implement` (baracuda kernels mmvq q5 0 actstrided bf16 can implement).
+    pub fn baracuda_kernels_mmvq_q5_0_actstrided_bf16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    /// Strided MMVQ — Q5_1, f16. # Safety: as Q4_0 strided f16.
+    pub fn baracuda_kernels_mmvq_q5_1_actstrided_f16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q5_1_actstrided_f16_can_implement` (baracuda kernels mmvq q5 1 actstrided f16 can implement).
+    pub fn baracuda_kernels_mmvq_q5_1_actstrided_f16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+    /// Strided MMVQ — Q5_1, bf16. # Safety: as Q4_0 strided bf16.
+    pub fn baracuda_kernels_mmvq_q5_1_actstrided_bf16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q5_1_actstrided_bf16_can_implement` (baracuda kernels mmvq q5 1 actstrided bf16 can implement).
+    pub fn baracuda_kernels_mmvq_q5_1_actstrided_bf16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    /// Strided MMVQ — Q8_0, f16. # Safety: as Q4_0 strided f16.
+    pub fn baracuda_kernels_mmvq_q8_0_actstrided_f16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q8_0_actstrided_f16_can_implement` (baracuda kernels mmvq q8 0 actstrided f16 can implement).
+    pub fn baracuda_kernels_mmvq_q8_0_actstrided_f16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+    /// Strided MMVQ — Q8_0, bf16. # Safety: as Q4_0 strided bf16.
+    pub fn baracuda_kernels_mmvq_q8_0_actstrided_bf16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q8_0_actstrided_bf16_can_implement` (baracuda kernels mmvq q8 0 actstrided bf16 can implement).
+    pub fn baracuda_kernels_mmvq_q8_0_actstrided_bf16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    /// Strided MMVQ — Q2_K, f16. # Safety: as Q4_0 strided f16, ncols mul of 256.
+    pub fn baracuda_kernels_mmvq_q2_K_actstrided_f16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q2_K_actstrided_f16_can_implement` (baracuda kernels mmvq q2 k actstrided f16 can implement).
+    pub fn baracuda_kernels_mmvq_q2_K_actstrided_f16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+    /// Strided MMVQ — Q2_K, bf16. # Safety: as Q2_K strided f16.
+    pub fn baracuda_kernels_mmvq_q2_K_actstrided_bf16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q2_K_actstrided_bf16_can_implement` (baracuda kernels mmvq q2 k actstrided bf16 can implement).
+    pub fn baracuda_kernels_mmvq_q2_K_actstrided_bf16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    /// Strided MMVQ — Q3_K, f16. # Safety: as Q2_K strided f16.
+    pub fn baracuda_kernels_mmvq_q3_K_actstrided_f16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q3_K_actstrided_f16_can_implement` (baracuda kernels mmvq q3 k actstrided f16 can implement).
+    pub fn baracuda_kernels_mmvq_q3_K_actstrided_f16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+    /// Strided MMVQ — Q3_K, bf16. # Safety: as Q2_K strided bf16.
+    pub fn baracuda_kernels_mmvq_q3_K_actstrided_bf16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q3_K_actstrided_bf16_can_implement` (baracuda kernels mmvq q3 k actstrided bf16 can implement).
+    pub fn baracuda_kernels_mmvq_q3_K_actstrided_bf16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    /// Strided MMVQ — Q4_K, f16. # Safety: as Q2_K strided f16.
+    pub fn baracuda_kernels_mmvq_q4_K_actstrided_f16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q4_K_actstrided_f16_can_implement` (baracuda kernels mmvq q4 k actstrided f16 can implement).
+    pub fn baracuda_kernels_mmvq_q4_K_actstrided_f16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+    /// Strided MMVQ — Q4_K, bf16. # Safety: as Q2_K strided bf16.
+    pub fn baracuda_kernels_mmvq_q4_K_actstrided_bf16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q4_K_actstrided_bf16_can_implement` (baracuda kernels mmvq q4 k actstrided bf16 can implement).
+    pub fn baracuda_kernels_mmvq_q4_K_actstrided_bf16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    /// Strided MMVQ — Q5_K, f16. # Safety: as Q2_K strided f16.
+    pub fn baracuda_kernels_mmvq_q5_K_actstrided_f16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q5_K_actstrided_f16_can_implement` (baracuda kernels mmvq q5 k actstrided f16 can implement).
+    pub fn baracuda_kernels_mmvq_q5_K_actstrided_f16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+    /// Strided MMVQ — Q5_K, bf16. # Safety: as Q2_K strided bf16.
+    pub fn baracuda_kernels_mmvq_q5_K_actstrided_bf16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q5_K_actstrided_bf16_can_implement` (baracuda kernels mmvq q5 k actstrided bf16 can implement).
+    pub fn baracuda_kernels_mmvq_q5_K_actstrided_bf16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    /// Strided MMVQ — Q6_K, f16. # Safety: as Q2_K strided f16.
+    pub fn baracuda_kernels_mmvq_q6_K_actstrided_f16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q6_K_actstrided_f16_can_implement` (baracuda kernels mmvq q6 k actstrided f16 can implement).
+    pub fn baracuda_kernels_mmvq_q6_K_actstrided_f16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+    /// Strided MMVQ — Q6_K, bf16. # Safety: as Q2_K strided bf16.
+    pub fn baracuda_kernels_mmvq_q6_K_actstrided_bf16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q6_K_actstrided_bf16_can_implement` (baracuda kernels mmvq q6 k actstrided bf16 can implement).
+    pub fn baracuda_kernels_mmvq_q6_K_actstrided_bf16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    /// Strided MMVQ — Q8_K, f16 (bespoke). # Safety: as Q2_K strided f16.
+    pub fn baracuda_kernels_mmvq_q8_K_actstrided_f16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q8_K_actstrided_f16_can_implement` (baracuda kernels mmvq q8 k actstrided f16 can implement).
+    pub fn baracuda_kernels_mmvq_q8_K_actstrided_f16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+    /// Strided MMVQ — Q8_K, bf16 (bespoke). # Safety: as Q2_K strided bf16.
+    pub fn baracuda_kernels_mmvq_q8_K_actstrided_bf16_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q8_K_actstrided_bf16_can_implement` (baracuda kernels mmvq q8 k actstrided bf16 can implement).
+    pub fn baracuda_kernels_mmvq_q8_K_actstrided_bf16_can_implement(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
+
+    // ===== Phase 20.1 — batched MMVQ × N-experts ==============================
+    //
+    // 11 block formats × 3 activation dtypes (f32 / f16 / bf16) = 33 quant
+    // symbols, plus 3 pure-FP symbols = 36 new FFI entry points.
+    //
+    // Op shape:
+    //   For each dispatch i ∈ [0, M_total):
+    //     token  = sorted_token_ids[i]
+    //     expert = find_e(expert_offsets, i)  // precomputed once via prelude
+    //     w      = topk_weights[i] (or 1.0 if topk_weights == nullptr)
+    //     for r ∈ [0, n_rows_per_expert):
+    //       output[token, r] (+)= w * dot(weights[expert, r, :], activations[token, :])
+    //
+    //   (+)= is a regular store when top_k == 1 (no output aliasing) and an
+    //   atomicAdd (via `baracuda::atomic::add<T>`) when top_k > 1. The caller
+    //   MUST zero-initialize `output` before the call when top_k > 1.
+    //
+    // Convention:
+    //   * `_batched_run`        — f32 activation + output (un-suffixed = canonical).
+    //   * `_batched_f16_run`    — f16 activation + output.
+    //   * `_batched_bf16_run`   — bf16 activation + output.
+    //   * `mmvq_batched_<dt>_run` — pure-FP (no quant) variants.
+    //
+    // Workspace: `m_total * sizeof(i32)` bytes. The launcher derives
+    // `m_total = workspace_bytes / sizeof(i32)` (caller's responsibility to
+    // size accurately). Buffer is used for the `dispatch_to_expert[]`
+    // prelude (avoids per-block binary search over `expert_offsets[]`).
+    //
+    // Status codes: 0 success, 2 invalid problem (nullptrs / non-positive
+    // dims), 4 workspace too small, 5 internal launch failure.
+
+    // ---- Quant: type-0/1 (f32 = un-suffixed canonical) -------------------
+
+    /// Batched MMVQ — Q4_0, f32 activation + output. # Safety: device-resident
+    /// pointers; valid stream; `workspace` ≥ `m_total * 4` bytes.
+    pub fn baracuda_kernels_mmvq_q4_0_batched_run(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *mut c_void,
+        top_k: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q4_0_batched_can_implement` (baracuda kernels mmvq q4 0 batched can implement).
+    pub fn baracuda_kernels_mmvq_q4_0_batched_can_implement(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *const c_void,
+        top_k: i32,
+    ) -> i32;
+
+    /// Batched MMVQ — Q4_0, f16. # Safety: as Q4_0 f32.
+    pub fn baracuda_kernels_mmvq_q4_0_batched_f16_run(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *mut c_void,
+        top_k: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q4_0_batched_f16_can_implement` (baracuda kernels mmvq q4 0 batched f16 can implement).
+    pub fn baracuda_kernels_mmvq_q4_0_batched_f16_can_implement(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *const c_void,
+        top_k: i32,
+    ) -> i32;
+
+    /// Batched MMVQ — Q4_0, bf16. # Safety: as Q4_0 f32.
+    pub fn baracuda_kernels_mmvq_q4_0_batched_bf16_run(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *mut c_void,
+        top_k: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q4_0_batched_bf16_can_implement` (baracuda kernels mmvq q4 0 batched bf16 can implement).
+    pub fn baracuda_kernels_mmvq_q4_0_batched_bf16_can_implement(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *const c_void,
+        top_k: i32,
+    ) -> i32;
+
+    /// Batched MMVQ — Q4_1, f32. # Safety: as Q4_0.
+    pub fn baracuda_kernels_mmvq_q4_1_batched_run(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *mut c_void,
+        top_k: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q4_1_batched_can_implement` (baracuda kernels mmvq q4 1 batched can implement).
+    pub fn baracuda_kernels_mmvq_q4_1_batched_can_implement(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *const c_void,
+        top_k: i32,
+    ) -> i32;
+
+    /// Batched MMVQ — Q4_1, f16. # Safety: as Q4_0.
+    pub fn baracuda_kernels_mmvq_q4_1_batched_f16_run(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *mut c_void,
+        top_k: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q4_1_batched_f16_can_implement` (baracuda kernels mmvq q4 1 batched f16 can implement).
+    pub fn baracuda_kernels_mmvq_q4_1_batched_f16_can_implement(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *const c_void,
+        top_k: i32,
+    ) -> i32;
+
+    /// Batched MMVQ — Q4_1, bf16. # Safety: as Q4_0.
+    pub fn baracuda_kernels_mmvq_q4_1_batched_bf16_run(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *mut c_void,
+        top_k: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q4_1_batched_bf16_can_implement` (baracuda kernels mmvq q4 1 batched bf16 can implement).
+    pub fn baracuda_kernels_mmvq_q4_1_batched_bf16_can_implement(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *const c_void,
+        top_k: i32,
+    ) -> i32;
+
+    /// Batched MMVQ — Q5_0, f32. # Safety: as Q4_0.
+    pub fn baracuda_kernels_mmvq_q5_0_batched_run(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *mut c_void,
+        top_k: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q5_0_batched_can_implement` (baracuda kernels mmvq q5 0 batched can implement).
+    pub fn baracuda_kernels_mmvq_q5_0_batched_can_implement(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *const c_void,
+        top_k: i32,
+    ) -> i32;
+
+    /// Batched MMVQ — Q5_0, f16. # Safety: as Q4_0.
+    pub fn baracuda_kernels_mmvq_q5_0_batched_f16_run(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *mut c_void,
+        top_k: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q5_0_batched_f16_can_implement` (baracuda kernels mmvq q5 0 batched f16 can implement).
+    pub fn baracuda_kernels_mmvq_q5_0_batched_f16_can_implement(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *const c_void,
+        top_k: i32,
+    ) -> i32;
+
+    /// Batched MMVQ — Q5_0, bf16. # Safety: as Q4_0.
+    pub fn baracuda_kernels_mmvq_q5_0_batched_bf16_run(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *mut c_void,
+        top_k: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q5_0_batched_bf16_can_implement` (baracuda kernels mmvq q5 0 batched bf16 can implement).
+    pub fn baracuda_kernels_mmvq_q5_0_batched_bf16_can_implement(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *const c_void,
+        top_k: i32,
+    ) -> i32;
+
+    /// Batched MMVQ — Q5_1, f32. # Safety: as Q4_0.
+    pub fn baracuda_kernels_mmvq_q5_1_batched_run(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *mut c_void,
+        top_k: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q5_1_batched_can_implement` (baracuda kernels mmvq q5 1 batched can implement).
+    pub fn baracuda_kernels_mmvq_q5_1_batched_can_implement(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *const c_void,
+        top_k: i32,
+    ) -> i32;
+
+    /// Batched MMVQ — Q5_1, f16. # Safety: as Q4_0.
+    pub fn baracuda_kernels_mmvq_q5_1_batched_f16_run(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *mut c_void,
+        top_k: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q5_1_batched_f16_can_implement` (baracuda kernels mmvq q5 1 batched f16 can implement).
+    pub fn baracuda_kernels_mmvq_q5_1_batched_f16_can_implement(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *const c_void,
+        top_k: i32,
+    ) -> i32;
+
+    /// Batched MMVQ — Q5_1, bf16. # Safety: as Q4_0.
+    pub fn baracuda_kernels_mmvq_q5_1_batched_bf16_run(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *mut c_void,
+        top_k: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q5_1_batched_bf16_can_implement` (baracuda kernels mmvq q5 1 batched bf16 can implement).
+    pub fn baracuda_kernels_mmvq_q5_1_batched_bf16_can_implement(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *const c_void,
+        top_k: i32,
+    ) -> i32;
+
+    /// Batched MMVQ — Q8_0, f32. # Safety: as Q4_0.
+    pub fn baracuda_kernels_mmvq_q8_0_batched_run(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *mut c_void,
+        top_k: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q8_0_batched_can_implement` (baracuda kernels mmvq q8 0 batched can implement).
+    pub fn baracuda_kernels_mmvq_q8_0_batched_can_implement(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *const c_void,
+        top_k: i32,
+    ) -> i32;
+
+    /// Batched MMVQ — Q8_0, f16. # Safety: as Q4_0.
+    pub fn baracuda_kernels_mmvq_q8_0_batched_f16_run(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *mut c_void,
+        top_k: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q8_0_batched_f16_can_implement` (baracuda kernels mmvq q8 0 batched f16 can implement).
+    pub fn baracuda_kernels_mmvq_q8_0_batched_f16_can_implement(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *const c_void,
+        top_k: i32,
+    ) -> i32;
+
+    /// Batched MMVQ — Q8_0, bf16. # Safety: as Q4_0.
+    pub fn baracuda_kernels_mmvq_q8_0_batched_bf16_run(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *mut c_void,
+        top_k: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q8_0_batched_bf16_can_implement` (baracuda kernels mmvq q8 0 batched bf16 can implement).
+    pub fn baracuda_kernels_mmvq_q8_0_batched_bf16_can_implement(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *const c_void,
+        top_k: i32,
+    ) -> i32;
+
+    // ---- Quant: k-quants (256-elt blocks) --------------------------------
+
+    /// Batched MMVQ — Q2_K, f32. # Safety: as Q4_0, ncols mul of 256.
+    pub fn baracuda_kernels_mmvq_q2_K_batched_run(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *mut c_void,
+        top_k: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q2_K_batched_can_implement` (baracuda kernels mmvq q2 k batched can implement).
+    pub fn baracuda_kernels_mmvq_q2_K_batched_can_implement(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *const c_void,
+        top_k: i32,
+    ) -> i32;
+
+    /// Batched MMVQ — Q2_K, f16. # Safety: as Q2_K f32.
+    pub fn baracuda_kernels_mmvq_q2_K_batched_f16_run(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *mut c_void,
+        top_k: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q2_K_batched_f16_can_implement` (baracuda kernels mmvq q2 k batched f16 can implement).
+    pub fn baracuda_kernels_mmvq_q2_K_batched_f16_can_implement(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *const c_void,
+        top_k: i32,
+    ) -> i32;
+
+    /// Batched MMVQ — Q2_K, bf16. # Safety: as Q2_K f32.
+    pub fn baracuda_kernels_mmvq_q2_K_batched_bf16_run(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *mut c_void,
+        top_k: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q2_K_batched_bf16_can_implement` (baracuda kernels mmvq q2 k batched bf16 can implement).
+    pub fn baracuda_kernels_mmvq_q2_K_batched_bf16_can_implement(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *const c_void,
+        top_k: i32,
+    ) -> i32;
+
+    /// Batched MMVQ — Q3_K, f32. # Safety: as Q2_K.
+    pub fn baracuda_kernels_mmvq_q3_K_batched_run(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *mut c_void,
+        top_k: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q3_K_batched_can_implement` (baracuda kernels mmvq q3 k batched can implement).
+    pub fn baracuda_kernels_mmvq_q3_K_batched_can_implement(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *const c_void,
+        top_k: i32,
+    ) -> i32;
+
+    /// Batched MMVQ — Q3_K, f16. # Safety: as Q2_K.
+    pub fn baracuda_kernels_mmvq_q3_K_batched_f16_run(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *mut c_void,
+        top_k: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q3_K_batched_f16_can_implement` (baracuda kernels mmvq q3 k batched f16 can implement).
+    pub fn baracuda_kernels_mmvq_q3_K_batched_f16_can_implement(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *const c_void,
+        top_k: i32,
+    ) -> i32;
+
+    /// Batched MMVQ — Q3_K, bf16. # Safety: as Q2_K.
+    pub fn baracuda_kernels_mmvq_q3_K_batched_bf16_run(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *mut c_void,
+        top_k: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q3_K_batched_bf16_can_implement` (baracuda kernels mmvq q3 k batched bf16 can implement).
+    pub fn baracuda_kernels_mmvq_q3_K_batched_bf16_can_implement(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *const c_void,
+        top_k: i32,
+    ) -> i32;
+
+    /// Batched MMVQ — Q4_K, f32. # Safety: as Q2_K.
+    pub fn baracuda_kernels_mmvq_q4_K_batched_run(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *mut c_void,
+        top_k: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q4_K_batched_can_implement` (baracuda kernels mmvq q4 k batched can implement).
+    pub fn baracuda_kernels_mmvq_q4_K_batched_can_implement(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *const c_void,
+        top_k: i32,
+    ) -> i32;
+
+    /// Batched MMVQ — Q4_K, f16. # Safety: as Q2_K.
+    pub fn baracuda_kernels_mmvq_q4_K_batched_f16_run(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *mut c_void,
+        top_k: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q4_K_batched_f16_can_implement` (baracuda kernels mmvq q4 k batched f16 can implement).
+    pub fn baracuda_kernels_mmvq_q4_K_batched_f16_can_implement(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *const c_void,
+        top_k: i32,
+    ) -> i32;
+
+    /// Batched MMVQ — Q4_K, bf16. # Safety: as Q2_K.
+    pub fn baracuda_kernels_mmvq_q4_K_batched_bf16_run(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *mut c_void,
+        top_k: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q4_K_batched_bf16_can_implement` (baracuda kernels mmvq q4 k batched bf16 can implement).
+    pub fn baracuda_kernels_mmvq_q4_K_batched_bf16_can_implement(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *const c_void,
+        top_k: i32,
+    ) -> i32;
+
+    /// Batched MMVQ — Q5_K, f32. # Safety: as Q2_K.
+    pub fn baracuda_kernels_mmvq_q5_K_batched_run(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *mut c_void,
+        top_k: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q5_K_batched_can_implement` (baracuda kernels mmvq q5 k batched can implement).
+    pub fn baracuda_kernels_mmvq_q5_K_batched_can_implement(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *const c_void,
+        top_k: i32,
+    ) -> i32;
+
+    /// Batched MMVQ — Q5_K, f16. # Safety: as Q2_K.
+    pub fn baracuda_kernels_mmvq_q5_K_batched_f16_run(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *mut c_void,
+        top_k: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q5_K_batched_f16_can_implement` (baracuda kernels mmvq q5 k batched f16 can implement).
+    pub fn baracuda_kernels_mmvq_q5_K_batched_f16_can_implement(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *const c_void,
+        top_k: i32,
+    ) -> i32;
+
+    /// Batched MMVQ — Q5_K, bf16. # Safety: as Q2_K.
+    pub fn baracuda_kernels_mmvq_q5_K_batched_bf16_run(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *mut c_void,
+        top_k: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q5_K_batched_bf16_can_implement` (baracuda kernels mmvq q5 k batched bf16 can implement).
+    pub fn baracuda_kernels_mmvq_q5_K_batched_bf16_can_implement(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *const c_void,
+        top_k: i32,
+    ) -> i32;
+
+    /// Batched MMVQ — Q6_K, f32. # Safety: as Q2_K.
+    pub fn baracuda_kernels_mmvq_q6_K_batched_run(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *mut c_void,
+        top_k: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q6_K_batched_can_implement` (baracuda kernels mmvq q6 k batched can implement).
+    pub fn baracuda_kernels_mmvq_q6_K_batched_can_implement(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *const c_void,
+        top_k: i32,
+    ) -> i32;
+
+    /// Batched MMVQ — Q6_K, f16. # Safety: as Q2_K.
+    pub fn baracuda_kernels_mmvq_q6_K_batched_f16_run(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *mut c_void,
+        top_k: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q6_K_batched_f16_can_implement` (baracuda kernels mmvq q6 k batched f16 can implement).
+    pub fn baracuda_kernels_mmvq_q6_K_batched_f16_can_implement(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *const c_void,
+        top_k: i32,
+    ) -> i32;
+
+    /// Batched MMVQ — Q6_K, bf16. # Safety: as Q2_K.
+    pub fn baracuda_kernels_mmvq_q6_K_batched_bf16_run(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *mut c_void,
+        top_k: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q6_K_batched_bf16_can_implement` (baracuda kernels mmvq q6 k batched bf16 can implement).
+    pub fn baracuda_kernels_mmvq_q6_K_batched_bf16_can_implement(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *const c_void,
+        top_k: i32,
+    ) -> i32;
+
+    /// Batched MMVQ — Q8_K (bespoke), f32. # Safety: as Q2_K.
+    pub fn baracuda_kernels_mmvq_q8_K_batched_run(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *mut c_void,
+        top_k: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q8_K_batched_can_implement` (baracuda kernels mmvq q8 k batched can implement).
+    pub fn baracuda_kernels_mmvq_q8_K_batched_can_implement(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *const c_void,
+        top_k: i32,
+    ) -> i32;
+
+    /// Batched MMVQ — Q8_K (bespoke), f16. # Safety: as Q2_K.
+    pub fn baracuda_kernels_mmvq_q8_K_batched_f16_run(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *mut c_void,
+        top_k: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q8_K_batched_f16_can_implement` (baracuda kernels mmvq q8 k batched f16 can implement).
+    pub fn baracuda_kernels_mmvq_q8_K_batched_f16_can_implement(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *const c_void,
+        top_k: i32,
+    ) -> i32;
+
+    /// Batched MMVQ — Q8_K (bespoke), bf16. # Safety: as Q2_K.
+    pub fn baracuda_kernels_mmvq_q8_K_batched_bf16_run(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *mut c_void,
+        top_k: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_q8_K_batched_bf16_can_implement` (baracuda kernels mmvq q8 k batched bf16 can implement).
+    pub fn baracuda_kernels_mmvq_q8_K_batched_bf16_can_implement(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *const c_void,
+        top_k: i32,
+    ) -> i32;
+
+    // ---- Pure FP (non-quant) batched MMVQ --------------------------------
+
+    /// Batched MMV (non-quant) — f32 weights + activation + output.
+    /// # Safety: device-resident pointers; valid stream; workspace ≥ m_total*4.
+    pub fn baracuda_kernels_mmvq_batched_f32_run(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *mut c_void,
+        top_k: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_batched_f32_can_implement` (baracuda kernels mmvq batched f32 can implement).
+    pub fn baracuda_kernels_mmvq_batched_f32_can_implement(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *const c_void,
+        top_k: i32,
+    ) -> i32;
+
+    /// Batched MMV (non-quant) — f16. # Safety: as f32.
+    pub fn baracuda_kernels_mmvq_batched_f16_run(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *mut c_void,
+        top_k: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_batched_f16_can_implement` (baracuda kernels mmvq batched f16 can implement).
+    pub fn baracuda_kernels_mmvq_batched_f16_can_implement(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *const c_void,
+        top_k: i32,
+    ) -> i32;
+
+    /// Batched MMV (non-quant) — bf16. # Safety: as f32.
+    pub fn baracuda_kernels_mmvq_batched_bf16_run(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *mut c_void,
+        top_k: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `baracuda_kernels_mmvq_batched_bf16_can_implement` (baracuda kernels mmvq batched bf16 can implement).
+    pub fn baracuda_kernels_mmvq_batched_bf16_can_implement(
+        n_experts: i32,
+        n_rows_per_expert: i32,
+        n_cols: i32,
+        weights: *const c_void,
+        activations: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_offsets: *const i32,
+        topk_weights: *const f32,
+        output: *const c_void,
+        top_k: i32,
+    ) -> i32;
 }
 
 // ============================================================================
