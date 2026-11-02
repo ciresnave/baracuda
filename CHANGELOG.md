@@ -16,6 +16,13 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.85 - 2026-11-02
+
+### Added
+
+- **SA-31 Tier 3: `HyperConnectionPlan<f16>` and `HyperConnectionPlan<bf16>` (activation dtype).** Pure Rust, no new CUDA and no ABI change: for `T = f16 / bf16` the plan widens `x_expanded` into f32 scratch it owns (`CastPlan<T, f32>`), runs the vendored f32 path unchanged, and narrows `out` back (`CastPlan<f32, T>`); a training plan does the same for `d_out` and the five gradients. The result equals the f32 path on the widened inputs rounded once to `T`; the cast is a scratch conversion, not a change to the numerics. The RMSNorm gamma stays bf16 and `h_pre` / `h_post` / `h_res` stay f32. Cost per call on top of the f32 path: `12 * E` bytes of cast traffic forward (`E = batch * n_streams * hidden_dim`; widen reads 2E and writes 4E, narrow reads 4E and writes 2E), the same again for backward, and `8 * E` bytes of plan-owned scratch forward (`HyperConnectionPlan::scratch_bytes` gives the exact figure, training included). Half plans need `E <= i32::MAX` (the cast kernels count in i32) and a run takes a lock on the scratch, so concurrent runs on one plan serialise. **Not device-run in this entry yet**: the device tests are `tests/hyper_connection_half_smoke.rs`; evidence goes in the PR.
+- Workspace 0.1.0-alpha.84 -> alpha.85.
+
 ## 0.1.0-alpha.84 - 2026-11-02
 
 ### Changed

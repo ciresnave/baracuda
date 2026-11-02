@@ -20,9 +20,14 @@
 //!   of an f64 reference on `n = 4`; the Sinkhorn adjoint is baracuda's own
 //!   because the vendored one is wrong (see `mhc_launcher.cu`). Limited to
 //!   `sinkhorn_iters <= 20`.
-//! - **bf16 weights / f32 activations**. The upstream `floatX` is
-//!   hardcoded to `nv_bfloat16`; f16 / f32 paths require additional
-//!   convert kernels in the launcher and ship in Tier 3.
+//! - **Activation dtype `T` in `{f32, f16, bf16}`** (Tier 3). The vendored
+//!   path is f32 activations with a bf16 RMSNorm gamma, and it is unchanged.
+//!   For `T = f16 / bf16` the plan widens `x_expanded` to an f32 scratch
+//!   buffer it owns, runs the f32 path, and narrows `out` back, using
+//!   [`CastPlan`]. The result equals the f32 path on the widened inputs,
+//!   rounded once to `T` on the way out; the cast is a scratch conversion,
+//!   not a change to the numerics. See [`HyperConnectionPlan::scratch_bytes`]
+//!   for the scratch size and the per-call traffic.
 //! - **n ≤ 32**. Above 32 the upstream switches to a cuBLAS-Lt
 //!   tensor-core mixing kernel that has not yet been validated in
 //!   the C-ABI shim.
@@ -39,13 +44,20 @@
 #[cfg(feature = "mhc")]
 use core::ffi::c_void;
 use core::marker::PhantomData;
+#[cfg(feature = "mhc")]
+use std::sync::Mutex;
 
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
+#[cfg(feature = "mhc")]
+use baracuda_driver::{Context, DeviceBuffer, DeviceSlice, DeviceSliceMut};
 use baracuda_kernels_types::{
     ArchSku, AttentionKind, BackendKind, Element, ElementKind, KernelSku, MathPrecision,
     OpCategory, PlanPreference, PrecisionGuarantee, TensorMut, TensorRef, Workspace,
 };
+
+#[cfg(feature = "mhc")]
+use crate::elementwise::{CastArgs, CastDescriptor, CastPlan};
 
 /// Descriptor for a `HyperConnectionPlan` (static-H FW).
 #[derive(Copy, Clone, Debug)]
@@ -63,7 +75,7 @@ pub struct HyperConnectionDescriptor {
     /// Epsilon added to the RMSNorm denominator and used as the
     /// Sinkhorn divide-by-zero guard. Paper uses `1e-5`.
     pub eps: f32,
-    /// Element type for `x_expanded` / `out` (f32 in Tier 1).
+    /// Element type for `x_expanded` / `out`: `F32`, `F16` or `Bf16`.
     pub element: ElementKind,
 }
 
@@ -124,8 +136,8 @@ pub struct HyperConnectionBackwardArgs<'a, T: Element> {
 /// improved training stability + downstream task scores in
 /// DeepSeek-AI's experiments.
 ///
-/// **Dtypes**: `f32` only in Tier 1. The `rmsnorm_weight` is always
-/// `bf16` regardless of `T`.
+/// **Dtypes**: `T` is `f32`, `f16` or `bf16`. The `rmsnorm_weight` is always
+/// `bf16` regardless of `T`; `h_pre` / `h_post` / `h_res` are always `f32`.
 ///
 /// **State**: this plan owns a native `MHCLayer*` handle with
 /// ~`B*n*C*sizeof(float)` bytes of GPU scratch. Reuse across many
@@ -138,7 +150,70 @@ pub struct HyperConnectionPlan<T: Element> {
     handle: *mut c_void,
     /// True when the handle was created with gradient buffers (`select_training`).
     training: bool,
+    /// f32 scratch plus cast plans; `Some` only for `T = f16 / bf16`. The lock
+    /// serialises runs on one plan, which the native handle needs anyway.
+    #[cfg(feature = "mhc")]
+    half: Option<Mutex<HalfPath<T>>>,
     _marker: PhantomData<T>,
+}
+
+/// Widen / narrow machinery for `T = f16 / bf16` (see the module docs).
+#[cfg(feature = "mhc")]
+#[derive(Debug)]
+struct HalfPath<T: Element> {
+    x32: DeviceBuffer<f32>,
+    out32: DeviceBuffer<f32>,
+    to_f32: CastPlan<T, f32>,
+    from_f32: CastPlan<f32, T>,
+    backward: Option<HalfBackward<T>>,
+}
+
+/// Extra f32 scratch for the gradients of a half-precision training plan.
+#[cfg(feature = "mhc")]
+#[derive(Debug)]
+struct HalfBackward<T: Element> {
+    d_out32: DeviceBuffer<f32>,
+    d_x32: DeviceBuffer<f32>,
+    d_gamma32: DeviceBuffer<f32>,
+    d_h_pre32: DeviceBuffer<f32>,
+    d_h_post32: DeviceBuffer<f32>,
+    d_h_res32: DeviceBuffer<f32>,
+    gamma_from_f32: CastPlan<f32, T>,
+    h_vec_from_f32: CastPlan<f32, T>,
+    h_res_from_f32: CastPlan<f32, T>,
+}
+
+/// Run one contiguous cast of `numel` elements through `plan`.
+#[cfg(feature = "mhc")]
+fn cast_run<A: Element, B: Element>(
+    plan: &CastPlan<A, B>,
+    stream: &Stream,
+    input: DeviceSlice<'_, A>,
+    output: DeviceSliceMut<'_, B>,
+    numel: i32,
+) -> Result<()> {
+    let input = crate::view_check::valid(TensorRef::contiguous(input, [numel]))?;
+    let output = crate::view_check::valid(TensorMut::contiguous(output, [numel]))?;
+    plan.run(stream, Workspace::None, CastArgs { input, output })
+}
+
+/// Select a cast plan over `numel` elements.
+#[cfg(feature = "mhc")]
+fn cast_plan<A: Element, B: Element>(stream: &Stream, numel: i32) -> Result<CastPlan<A, B>> {
+    let desc = CastDescriptor {
+        numel,
+        input_element: A::KIND,
+        output_element: B::KIND,
+    };
+    CastPlan::select(stream, &desc, PlanPreference::default())
+}
+
+/// Zero-initialised f32 scratch of `len` elements on `ctx`.
+#[cfg(feature = "mhc")]
+fn scratch_f32(ctx: &Context, len: usize) -> Result<DeviceBuffer<f32>> {
+    DeviceBuffer::zeros(ctx, len).map_err(|_| {
+        Error::InvalidProblem("baracuda-kernels::HyperConnectionPlan: f32 scratch alloc failed")
+    })
 }
 
 // The handle wraps device memory owned by the current process; safe
@@ -171,20 +246,68 @@ impl<T: Element> HyperConnectionPlan<T> {
         Self::select_impl(stream, desc, pref, true)
     }
 
+    fn is_half() -> bool {
+        matches!(T::KIND, ElementKind::F16 | ElementKind::Bf16)
+    }
+
+    /// `batch * n_streams * hidden_dim`, the element count of `x_expanded` / `out`.
+    fn stream_elems(desc: &HyperConnectionDescriptor) -> i64 {
+        i64::from(desc.batch) * i64::from(desc.n_streams) * i64::from(desc.hidden_dim)
+    }
+
+    /// Bytes of f32 scratch the plan allocates for `desc` (the `f16 / bf16`
+    /// widen / narrow path), host-side and device-free. `0` for `f32`, which
+    /// runs the vendored path in place.
+    ///
+    /// With `E = batch * n_streams * hidden_dim`, `C = hidden_dim`, `n = n_streams`:
+    /// the forward scratch is `2 * E` f32 (widened input, f32 output); a training
+    /// plan adds `2 * E + C + 2 * n + n * n` f32 (widened `d_out`, `d_x_expanded`,
+    /// and the gradients of gamma, `h_pre`, `h_post`, `h_res`).
+    ///
+    /// Extra device traffic per forward call, on top of the f32 path, with `T`
+    /// 2 bytes wide: widen reads `2 * E` and writes `4 * E` bytes, narrow reads
+    /// `4 * E` and writes `2 * E`; `12 * E` bytes in total. Backward adds the
+    /// same `12 * E` for `d_out` and `d_x_expanded`, plus `O(C + n^2)` for the
+    /// small gradients.
+    pub fn scratch_bytes(desc: &HyperConnectionDescriptor, training: bool) -> usize {
+        if !matches!(desc.element, ElementKind::F16 | ElementKind::Bf16) {
+            return 0;
+        }
+        let e = Self::stream_elems(desc).max(0) as usize;
+        let (c, n) = (
+            desc.hidden_dim.max(0) as usize,
+            desc.n_streams.max(0) as usize,
+        );
+        let forward = 2 * e;
+        let backward = if training {
+            2 * e + c + 2 * n + n * n
+        } else {
+            0
+        };
+        (forward + backward) * core::mem::size_of::<f32>()
+    }
+
     fn validate_descriptor(desc: &HyperConnectionDescriptor, training: bool) -> Result<()> {
         if desc.element != T::KIND {
             return Err(Error::Unsupported(
                 "baracuda-kernels::HyperConnectionPlan: descriptor element != T",
             ));
         }
-        // Tier 1: f32 only.
-        if !matches!(T::KIND, ElementKind::F32) {
+        if !matches!(
+            T::KIND,
+            ElementKind::F32 | ElementKind::F16 | ElementKind::Bf16
+        ) {
             return Err(Error::Unsupported(
-                "baracuda-kernels::HyperConnectionPlan: Tier 1 wired today: `{f32}` only \
-                 (f16 / bf16 deferred to Tier 3)",
+                "baracuda-kernels::HyperConnectionPlan: wired element types are `{f32, f16, bf16}`",
             ));
         }
         Self::validate_shape(desc)?;
+        if Self::is_half() && Self::stream_elems(desc) > i64::from(i32::MAX) {
+            return Err(Error::Unsupported(
+                "baracuda-kernels::HyperConnectionPlan: f16 / bf16 activations need \
+                 batch * n_streams * hidden_dim <= i32::MAX (the cast kernels count in i32)",
+            ));
+        }
         Self::validate_solver(desc, training)
     }
 
@@ -289,8 +412,45 @@ impl<T: Element> HyperConnectionPlan<T> {
         Ok(handle)
     }
 
+    /// f32 scratch and cast plans for `T = f16 / bf16`; `None` for `f32`.
+    #[cfg(feature = "mhc")]
+    fn build_half(
+        stream: &Stream,
+        desc: &HyperConnectionDescriptor,
+        training: bool,
+    ) -> Result<Option<Mutex<HalfPath<T>>>> {
+        if !Self::is_half() {
+            return Ok(None);
+        }
+        let ctx = stream.context();
+        let e = Self::stream_elems(desc);
+        let (c, n) = (desc.hidden_dim, desc.n_streams);
+        let backward = if training {
+            Some(HalfBackward {
+                d_out32: scratch_f32(ctx, e as usize)?,
+                d_x32: scratch_f32(ctx, e as usize)?,
+                d_gamma32: scratch_f32(ctx, c as usize)?,
+                d_h_pre32: scratch_f32(ctx, n as usize)?,
+                d_h_post32: scratch_f32(ctx, n as usize)?,
+                d_h_res32: scratch_f32(ctx, (n * n) as usize)?,
+                gamma_from_f32: cast_plan(stream, c)?,
+                h_vec_from_f32: cast_plan(stream, n)?,
+                h_res_from_f32: cast_plan(stream, n * n)?,
+            })
+        } else {
+            None
+        };
+        Ok(Some(Mutex::new(HalfPath {
+            x32: scratch_f32(ctx, e as usize)?,
+            out32: scratch_f32(ctx, e as usize)?,
+            to_f32: cast_plan(stream, e as i32)?,
+            from_f32: cast_plan(stream, e as i32)?,
+            backward,
+        })))
+    }
+
     fn select_impl(
-        _stream: &Stream,
+        stream: &Stream,
         desc: &HyperConnectionDescriptor,
         _pref: PlanPreference,
         training: bool,
@@ -301,18 +461,21 @@ impl<T: Element> HyperConnectionPlan<T> {
 
         #[cfg(feature = "mhc")]
         {
+            // Scratch first: a failure here must not leak the native handle.
+            let half = Self::build_half(stream, desc, training)?;
             let handle = Self::create_handle(desc, training)?;
             Ok(Self {
                 desc: *desc,
                 sku,
                 handle,
                 training,
+                half,
                 _marker: PhantomData,
             })
         }
         #[cfg(not(feature = "mhc"))]
         {
-            let _ = sku; // silence unused warning when feature is off
+            let _ = (sku, stream); // silence unused warnings when the feature is off
             Err(Error::Unsupported(
                 "baracuda-kernels::HyperConnectionPlan: build with the `mhc` cargo feature",
             ))
@@ -406,38 +569,89 @@ impl<T: Element> HyperConnectionPlan<T> {
         &self,
         stream: &Stream,
         _workspace: Workspace<'_>,
-        args: HyperConnectionArgs<'_, T>,
+        mut args: HyperConnectionArgs<'_, T>,
     ) -> Result<()> {
         self.can_implement(&args)?;
         #[cfg(feature = "mhc")]
         {
-            let stream_ptr = stream.as_raw();
-            let status = unsafe {
-                baracuda_kernels_sys::baracuda_kernels_mhc_layer_static_bf16_run(
-                    self.handle,
-                    args.x_expanded.data().as_raw().0 as *const c_void,
-                    args.rmsnorm_weight.data().as_raw().0 as *const c_void,
-                    args.h_pre.data().as_raw().0 as *const c_void,
-                    args.h_post.data().as_raw().0 as *const c_void,
-                    args.h_res.data().as_raw().0 as *const c_void,
-                    args.out.data().as_raw().0 as *mut c_void,
-                    self.desc.batch,
-                    self.desc.hidden_dim,
-                    self.desc.n_streams,
-                    core::ptr::null_mut(),
-                    0,
-                    stream_ptr,
-                )
-            };
-            super::map_status(status)
+            match &self.half {
+                None => {
+                    let x = args.x_expanded.data().as_raw().0 as *const c_void;
+                    let out = args.out.data().as_raw().0 as *mut c_void;
+                    self.native_run(stream, x, out, &args)
+                }
+                Some(half) => self.run_half(stream, half, &mut args),
+            }
         }
         #[cfg(not(feature = "mhc"))]
         {
-            let _ = stream;
+            let _ = (stream, &mut args);
             Err(Error::Unsupported(
                 "baracuda-kernels::HyperConnectionPlan: build with the `mhc` cargo feature",
             ))
         }
+    }
+
+    /// The vendored f32 forward on raw `x` / `out` pointers (`[B, n, C]` f32);
+    /// the weights are taken from `args`.
+    #[cfg(feature = "mhc")]
+    fn native_run(
+        &self,
+        stream: &Stream,
+        x: *const c_void,
+        out: *mut c_void,
+        args: &HyperConnectionArgs<'_, T>,
+    ) -> Result<()> {
+        // SAFETY: `x` / `out` are live f32 `[B, n, C]` device buffers (the caller's
+        // views, checked by `can_implement`, or this plan's scratch); the weights are
+        // checked views; the handle is owned by `self`.
+        let status = unsafe {
+            baracuda_kernels_sys::baracuda_kernels_mhc_layer_static_bf16_run(
+                self.handle,
+                x,
+                args.rmsnorm_weight.data().as_raw().0 as *const c_void,
+                args.h_pre.data().as_raw().0 as *const c_void,
+                args.h_post.data().as_raw().0 as *const c_void,
+                args.h_res.data().as_raw().0 as *const c_void,
+                out,
+                self.desc.batch,
+                self.desc.hidden_dim,
+                self.desc.n_streams,
+                core::ptr::null_mut(),
+                0,
+                stream.as_raw(),
+            )
+        };
+        super::map_status(status)
+    }
+
+    /// `T = f16 / bf16`: widen `x_expanded` into f32 scratch, run the f32 path,
+    /// narrow the result into `out`.
+    #[cfg(feature = "mhc")]
+    fn run_half(
+        &self,
+        stream: &Stream,
+        half: &Mutex<HalfPath<T>>,
+        args: &mut HyperConnectionArgs<'_, T>,
+    ) -> Result<()> {
+        let mut guard = half.lock().map_err(|_| {
+            Error::InvalidProblem("baracuda-kernels::HyperConnectionPlan: scratch lock poisoned")
+        })?;
+        let h = &mut *guard;
+        let e = Self::stream_elems(&self.desc) as usize;
+        let numel = e as i32;
+        cast_run(
+            &h.to_f32,
+            stream,
+            args.x_expanded.data(),
+            h.x32.as_slice_mut(),
+            numel,
+        )?;
+        let x = h.x32.as_slice().as_raw().0 as *const c_void;
+        let out = h.out32.as_slice_mut().as_raw().0 as *mut c_void;
+        self.native_run(stream, x, out, args)?;
+        let narrow_to = args.out.data_mut().slice_mut(0..e);
+        cast_run(&h.from_f32, stream, h.out32.as_slice(), narrow_to, numel)
     }
 }
 
@@ -475,7 +689,7 @@ impl<T: Element> HyperConnectionPlan<T> {
     pub fn run_backward(
         &self,
         stream: &Stream,
-        args: HyperConnectionBackwardArgs<'_, T>,
+        mut args: HyperConnectionBackwardArgs<'_, T>,
     ) -> Result<()> {
         if !self.training {
             return Err(Error::Unsupported(
@@ -485,33 +699,127 @@ impl<T: Element> HyperConnectionPlan<T> {
         self.check_backward_args(&args)?;
         #[cfg(feature = "mhc")]
         {
-            let (b, n, c) = (self.desc.batch, self.desc.n_streams, self.desc.hidden_dim);
-            // SAFETY: every pointer is a live device allocation of the checked shape and length; the handle is owned by `self`.
-            let status = unsafe {
-                baracuda_kernels_sys::baracuda_kernels_mhc_layer_static_bf16_backward(
-                    self.handle,
-                    args.d_out.data().as_raw().0 as *const c_void,
-                    args.d_x_expanded.data().as_raw().0 as *mut c_void,
-                    args.d_rmsnorm_weight.data().as_raw().0 as *mut c_void,
-                    args.d_h_pre.data().as_raw().0 as *mut c_void,
-                    args.d_h_post.data().as_raw().0 as *mut c_void,
-                    args.d_h_res.data().as_raw().0 as *mut c_void,
-                    b,
-                    c,
-                    n,
-                    stream.as_raw(),
-                )
-            };
-            super::map_status(status)
+            match &self.half {
+                None => {
+                    let ptrs = BackwardPtrs {
+                        d_out: args.d_out.data().as_raw().0 as *const c_void,
+                        d_x: args.d_x_expanded.data().as_raw().0 as *mut c_void,
+                        d_gamma: args.d_rmsnorm_weight.data().as_raw().0 as *mut c_void,
+                        d_h_pre: args.d_h_pre.data().as_raw().0 as *mut c_void,
+                        d_h_post: args.d_h_post.data().as_raw().0 as *mut c_void,
+                        d_h_res: args.d_h_res.data().as_raw().0 as *mut c_void,
+                    };
+                    self.native_backward(stream, &ptrs)
+                }
+                Some(half) => self.run_backward_half(stream, half, &mut args),
+            }
         }
         #[cfg(not(feature = "mhc"))]
         {
-            let _ = (stream, args);
+            let _ = (stream, &mut args);
             Err(Error::Unsupported(
                 "baracuda-kernels::HyperConnectionPlan: build with the `mhc` cargo feature",
             ))
         }
     }
+
+    /// The vendored f32 backward on raw pointers (all f32).
+    #[cfg(feature = "mhc")]
+    fn native_backward(&self, stream: &Stream, p: &BackwardPtrs) -> Result<()> {
+        let (b, n, c) = (self.desc.batch, self.desc.n_streams, self.desc.hidden_dim);
+        // SAFETY: every pointer is a live f32 device allocation of the checked shape and
+        // length (the caller's views, or this plan's scratch); the handle is owned by `self`.
+        let status = unsafe {
+            baracuda_kernels_sys::baracuda_kernels_mhc_layer_static_bf16_backward(
+                self.handle,
+                p.d_out,
+                p.d_x,
+                p.d_gamma,
+                p.d_h_pre,
+                p.d_h_post,
+                p.d_h_res,
+                b,
+                c,
+                n,
+                stream.as_raw(),
+            )
+        };
+        super::map_status(status)
+    }
+
+    /// `T = f16 / bf16` backward: widen `d_out`, run the f32 backward into f32
+    /// scratch, narrow each gradient into the caller's tensors.
+    #[cfg(feature = "mhc")]
+    fn run_backward_half(
+        &self,
+        stream: &Stream,
+        half: &Mutex<HalfPath<T>>,
+        args: &mut HyperConnectionBackwardArgs<'_, T>,
+    ) -> Result<()> {
+        let mut guard = half.lock().map_err(|_| {
+            Error::InvalidProblem("baracuda-kernels::HyperConnectionPlan: scratch lock poisoned")
+        })?;
+        let HalfPath {
+            to_f32,
+            from_f32,
+            backward,
+            ..
+        } = &mut *guard;
+        let hb = backward.as_mut().ok_or(Error::Unsupported(
+            "baracuda-kernels::HyperConnectionPlan: half backward scratch missing",
+        ))?;
+        let e = Self::stream_elems(&self.desc) as usize;
+        let (c, n) = (self.desc.hidden_dim, self.desc.n_streams);
+        cast_run(
+            to_f32,
+            stream,
+            args.d_out.data(),
+            hb.d_out32.as_slice_mut(),
+            e as i32,
+        )?;
+        let ptrs = BackwardPtrs {
+            d_out: hb.d_out32.as_slice().as_raw().0 as *const c_void,
+            d_x: hb.d_x32.as_slice_mut().as_raw().0 as *mut c_void,
+            d_gamma: hb.d_gamma32.as_slice_mut().as_raw().0 as *mut c_void,
+            d_h_pre: hb.d_h_pre32.as_slice_mut().as_raw().0 as *mut c_void,
+            d_h_post: hb.d_h_post32.as_slice_mut().as_raw().0 as *mut c_void,
+            d_h_res: hb.d_h_res32.as_slice_mut().as_raw().0 as *mut c_void,
+        };
+        self.native_backward(stream, &ptrs)?;
+        let dx = args.d_x_expanded.data_mut().slice_mut(0..e);
+        cast_run(from_f32, stream, hb.d_x32.as_slice(), dx, e as i32)?;
+        let dg = args.d_rmsnorm_weight.data_mut().slice_mut(0..c as usize);
+        cast_run(&hb.gamma_from_f32, stream, hb.d_gamma32.as_slice(), dg, c)?;
+        let dpre = args.d_h_pre.data_mut().slice_mut(0..n as usize);
+        cast_run(&hb.h_vec_from_f32, stream, hb.d_h_pre32.as_slice(), dpre, n)?;
+        let dpost = args.d_h_post.data_mut().slice_mut(0..n as usize);
+        cast_run(
+            &hb.h_vec_from_f32,
+            stream,
+            hb.d_h_post32.as_slice(),
+            dpost,
+            n,
+        )?;
+        let dres = args.d_h_res.data_mut().slice_mut(0..(n * n) as usize);
+        cast_run(
+            &hb.h_res_from_f32,
+            stream,
+            hb.d_h_res32.as_slice(),
+            dres,
+            n * n,
+        )
+    }
+}
+
+/// Raw device pointers for one native backward call (all f32).
+#[cfg(feature = "mhc")]
+struct BackwardPtrs {
+    d_out: *const c_void,
+    d_x: *mut c_void,
+    d_gamma: *mut c_void,
+    d_h_pre: *mut c_void,
+    d_h_post: *mut c_void,
+    d_h_res: *mut c_void,
 }
 
 impl<T: Element> Drop for HyperConnectionPlan<T> {
@@ -527,5 +835,98 @@ impl<T: Element> Drop for HyperConnectionPlan<T> {
                 self.handle = core::ptr::null_mut();
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! Device-free checks: element-type admission and the scratch-size arithmetic.
+    use super::*;
+    use half::{bf16, f16};
+
+    fn desc(element: ElementKind, batch: i32, n: i32, c: i32) -> HyperConnectionDescriptor {
+        HyperConnectionDescriptor {
+            batch,
+            hidden_dim: c,
+            n_streams: n,
+            sinkhorn_iters: 20,
+            eps: 1e-5,
+            element,
+        }
+    }
+
+    fn admits<T: Element>(d: &HyperConnectionDescriptor, training: bool) -> bool {
+        HyperConnectionPlan::<T>::validate_descriptor(d, training).is_ok()
+    }
+
+    #[test]
+    fn f32_f16_bf16_are_admitted() {
+        assert!(admits::<f32>(&desc(ElementKind::F32, 2, 4, 64), false));
+        assert!(admits::<f16>(&desc(ElementKind::F16, 2, 4, 64), false));
+        assert!(admits::<bf16>(&desc(ElementKind::Bf16, 2, 4, 64), false));
+        assert!(admits::<f16>(&desc(ElementKind::F16, 2, 4, 64), true));
+        assert!(admits::<bf16>(&desc(ElementKind::Bf16, 2, 4, 64), true));
+    }
+
+    #[test]
+    fn other_element_types_and_mismatches_are_rejected() {
+        // Control for the admissions above: the same shape with an unwired T fails.
+        assert!(!admits::<f64>(&desc(ElementKind::F64, 2, 4, 64), false));
+        // descriptor.element must equal T.
+        assert!(!admits::<f16>(&desc(ElementKind::Bf16, 2, 4, 64), false));
+        assert!(!admits::<f32>(&desc(ElementKind::F16, 2, 4, 64), false));
+    }
+
+    #[test]
+    fn half_stream_count_is_capped_at_i32_max() {
+        // 2^15 * 4 * 2^15 = 2^32 elements: over the i32 cast count.
+        let big = desc(ElementKind::F16, 1 << 15, 4, 1 << 15);
+        assert!(!admits::<f16>(&big, false));
+        // Control: the f32 path does not go through the i32 casts, and the same
+        // shape just under the cap is admitted for f16.
+        assert!(admits::<f32>(
+            &desc(ElementKind::F32, 1 << 15, 4, 1 << 15),
+            false
+        ));
+        assert!(admits::<f16>(
+            &desc(ElementKind::F16, 1 << 10, 4, 1 << 10),
+            false
+        ));
+    }
+
+    #[test]
+    fn scratch_bytes_matches_the_documented_formula() {
+        let (b, n, c) = (3, 4, 64);
+        let e = (b * n * c) as usize;
+        // f32 runs in place: no scratch.
+        assert_eq!(
+            HyperConnectionPlan::<f32>::scratch_bytes(&desc(ElementKind::F32, b, n, c), true),
+            0
+        );
+        for (kind, name) in [(ElementKind::F16, "f16"), (ElementKind::Bf16, "bf16")] {
+            let d = desc(kind, b, n, c);
+            let fwd = HyperConnectionPlan::<f16>::scratch_bytes(&d, false);
+            assert_eq!(fwd, 2 * e * 4, "{name} forward scratch");
+            let (cc, nn) = (c as usize, n as usize);
+            let train = HyperConnectionPlan::<f16>::scratch_bytes(&d, true);
+            assert_eq!(
+                train,
+                (4 * e + cc + 2 * nn + nn * nn) * 4,
+                "{name} training scratch"
+            );
+            assert!(train > fwd);
+        }
+    }
+
+    #[test]
+    fn scratch_bytes_known_value() {
+        // B=2, n=4, C=8: E = 64. Forward 2*64 f32 = 512 B. Training adds
+        // 2*64 + 8 + 2*4 + 16 = 160 f32 = 640 B.
+        let d = desc(ElementKind::Bf16, 2, 4, 8);
+        assert_eq!(HyperConnectionPlan::<bf16>::scratch_bytes(&d, false), 512);
+        assert_eq!(
+            HyperConnectionPlan::<bf16>::scratch_bytes(&d, true),
+            512 + 640
+        );
     }
 }
