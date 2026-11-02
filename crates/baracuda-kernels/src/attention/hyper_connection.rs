@@ -208,6 +208,116 @@ fn cast_plan<A: Element, B: Element>(stream: &Stream, numel: i32) -> Result<Cast
     CastPlan::select(stream, &desc, PlanPreference::default())
 }
 
+#[cfg(feature = "mhc")]
+impl<T: Element> HalfPath<T> {
+    /// Scratch and cast plans for a stream of `e` elements; the gradient scratch is
+    /// added when `training`.
+    fn new(
+        stream: &Stream,
+        desc: &HyperConnectionDescriptor,
+        e: usize,
+        training: bool,
+    ) -> Result<Self> {
+        let ctx = stream.context();
+        let backward = if training {
+            Some(HalfBackward::new(stream, desc, e)?)
+        } else {
+            None
+        };
+        Ok(Self {
+            x32: scratch_f32(ctx, e)?,
+            out32: scratch_f32(ctx, e)?,
+            to_f32: cast_plan(stream, e as i32)?,
+            from_f32: cast_plan(stream, e as i32)?,
+            backward,
+        })
+    }
+}
+
+#[cfg(feature = "mhc")]
+impl<T: Element> HalfBackward<T> {
+    fn new(stream: &Stream, desc: &HyperConnectionDescriptor, e: usize) -> Result<Self> {
+        let ctx = stream.context();
+        let (c, n) = (desc.hidden_dim, desc.n_streams);
+        Ok(Self {
+            d_out32: scratch_f32(ctx, e)?,
+            d_x32: scratch_f32(ctx, e)?,
+            d_gamma32: scratch_f32(ctx, c as usize)?,
+            d_h_pre32: scratch_f32(ctx, n as usize)?,
+            d_h_post32: scratch_f32(ctx, n as usize)?,
+            d_h_res32: scratch_f32(ctx, (n * n) as usize)?,
+            gamma_from_f32: cast_plan(stream, c)?,
+            h_vec_from_f32: cast_plan(stream, n)?,
+            h_res_from_f32: cast_plan(stream, n * n)?,
+        })
+    }
+
+    /// Raw f32 pointers for one native backward call over this scratch.
+    fn ptrs(&mut self) -> BackwardPtrs {
+        BackwardPtrs {
+            d_out: self.d_out32.as_slice().as_raw().0 as *const c_void,
+            d_x: self.d_x32.as_slice_mut().as_raw().0 as *mut c_void,
+            d_gamma: self.d_gamma32.as_slice_mut().as_raw().0 as *mut c_void,
+            d_h_pre: self.d_h_pre32.as_slice_mut().as_raw().0 as *mut c_void,
+            d_h_post: self.d_h_post32.as_slice_mut().as_raw().0 as *mut c_void,
+            d_h_res: self.d_h_res32.as_slice_mut().as_raw().0 as *mut c_void,
+        }
+    }
+
+    /// Narrow the four small gradients (gamma, `h_pre`, `h_post`, `h_res`) into the
+    /// caller's tensors.
+    fn narrow_small(
+        &self,
+        stream: &Stream,
+        c: i32,
+        n: i32,
+        args: &mut HyperConnectionBackwardArgs<'_, T>,
+    ) -> Result<()> {
+        let dg = args.d_rmsnorm_weight.data_mut().slice_mut(0..c as usize);
+        cast_run(
+            &self.gamma_from_f32,
+            stream,
+            self.d_gamma32.as_slice(),
+            dg,
+            c,
+        )?;
+        let dpre = args.d_h_pre.data_mut().slice_mut(0..n as usize);
+        cast_run(
+            &self.h_vec_from_f32,
+            stream,
+            self.d_h_pre32.as_slice(),
+            dpre,
+            n,
+        )?;
+        let dpost = args.d_h_post.data_mut().slice_mut(0..n as usize);
+        cast_run(
+            &self.h_vec_from_f32,
+            stream,
+            self.d_h_post32.as_slice(),
+            dpost,
+            n,
+        )?;
+        let dres = args.d_h_res.data_mut().slice_mut(0..(n * n) as usize);
+        cast_run(
+            &self.h_res_from_f32,
+            stream,
+            self.d_h_res32.as_slice(),
+            dres,
+            n * n,
+        )
+    }
+}
+
+/// Lock the plan-owned scratch (a poisoned lock means a prior run panicked mid-cast).
+#[cfg(feature = "mhc")]
+fn lock_scratch<T: Element>(
+    half: &Mutex<HalfPath<T>>,
+) -> Result<std::sync::MutexGuard<'_, HalfPath<T>>> {
+    half.lock().map_err(|_| {
+        Error::InvalidProblem("baracuda-kernels::HyperConnectionPlan: scratch lock poisoned")
+    })
+}
+
 /// Zero-initialised f32 scratch of `len` elements on `ctx`.
 #[cfg(feature = "mhc")]
 fn scratch_f32(ctx: &Context, len: usize) -> Result<DeviceBuffer<f32>> {
@@ -422,31 +532,8 @@ impl<T: Element> HyperConnectionPlan<T> {
         if !Self::is_half() {
             return Ok(None);
         }
-        let ctx = stream.context();
-        let e = Self::stream_elems(desc);
-        let (c, n) = (desc.hidden_dim, desc.n_streams);
-        let backward = if training {
-            Some(HalfBackward {
-                d_out32: scratch_f32(ctx, e as usize)?,
-                d_x32: scratch_f32(ctx, e as usize)?,
-                d_gamma32: scratch_f32(ctx, c as usize)?,
-                d_h_pre32: scratch_f32(ctx, n as usize)?,
-                d_h_post32: scratch_f32(ctx, n as usize)?,
-                d_h_res32: scratch_f32(ctx, (n * n) as usize)?,
-                gamma_from_f32: cast_plan(stream, c)?,
-                h_vec_from_f32: cast_plan(stream, n)?,
-                h_res_from_f32: cast_plan(stream, n * n)?,
-            })
-        } else {
-            None
-        };
-        Ok(Some(Mutex::new(HalfPath {
-            x32: scratch_f32(ctx, e as usize)?,
-            out32: scratch_f32(ctx, e as usize)?,
-            to_f32: cast_plan(stream, e as i32)?,
-            from_f32: cast_plan(stream, e as i32)?,
-            backward,
-        })))
+        let e = Self::stream_elems(desc) as usize;
+        Ok(Some(Mutex::new(HalfPath::new(stream, desc, e, training)?)))
     }
 
     fn select_impl(
@@ -634,9 +721,7 @@ impl<T: Element> HyperConnectionPlan<T> {
         half: &Mutex<HalfPath<T>>,
         args: &mut HyperConnectionArgs<'_, T>,
     ) -> Result<()> {
-        let mut guard = half.lock().map_err(|_| {
-            Error::InvalidProblem("baracuda-kernels::HyperConnectionPlan: scratch lock poisoned")
-        })?;
+        let mut guard = lock_scratch(half)?;
         let h = &mut *guard;
         let e = Self::stream_elems(&self.desc) as usize;
         let numel = e as i32;
@@ -756,9 +841,7 @@ impl<T: Element> HyperConnectionPlan<T> {
         half: &Mutex<HalfPath<T>>,
         args: &mut HyperConnectionBackwardArgs<'_, T>,
     ) -> Result<()> {
-        let mut guard = half.lock().map_err(|_| {
-            Error::InvalidProblem("baracuda-kernels::HyperConnectionPlan: scratch lock poisoned")
-        })?;
+        let mut guard = lock_scratch(half)?;
         let HalfPath {
             to_f32,
             from_f32,
@@ -777,37 +860,11 @@ impl<T: Element> HyperConnectionPlan<T> {
             hb.d_out32.as_slice_mut(),
             e as i32,
         )?;
-        let ptrs = BackwardPtrs {
-            d_out: hb.d_out32.as_slice().as_raw().0 as *const c_void,
-            d_x: hb.d_x32.as_slice_mut().as_raw().0 as *mut c_void,
-            d_gamma: hb.d_gamma32.as_slice_mut().as_raw().0 as *mut c_void,
-            d_h_pre: hb.d_h_pre32.as_slice_mut().as_raw().0 as *mut c_void,
-            d_h_post: hb.d_h_post32.as_slice_mut().as_raw().0 as *mut c_void,
-            d_h_res: hb.d_h_res32.as_slice_mut().as_raw().0 as *mut c_void,
-        };
+        let ptrs = hb.ptrs();
         self.native_backward(stream, &ptrs)?;
         let dx = args.d_x_expanded.data_mut().slice_mut(0..e);
         cast_run(from_f32, stream, hb.d_x32.as_slice(), dx, e as i32)?;
-        let dg = args.d_rmsnorm_weight.data_mut().slice_mut(0..c as usize);
-        cast_run(&hb.gamma_from_f32, stream, hb.d_gamma32.as_slice(), dg, c)?;
-        let dpre = args.d_h_pre.data_mut().slice_mut(0..n as usize);
-        cast_run(&hb.h_vec_from_f32, stream, hb.d_h_pre32.as_slice(), dpre, n)?;
-        let dpost = args.d_h_post.data_mut().slice_mut(0..n as usize);
-        cast_run(
-            &hb.h_vec_from_f32,
-            stream,
-            hb.d_h_post32.as_slice(),
-            dpost,
-            n,
-        )?;
-        let dres = args.d_h_res.data_mut().slice_mut(0..(n * n) as usize);
-        cast_run(
-            &hb.h_res_from_f32,
-            stream,
-            hb.d_h_res32.as_slice(),
-            dres,
-            n * n,
-        )
+        hb.narrow_small(stream, c, n, args)
     }
 }
 

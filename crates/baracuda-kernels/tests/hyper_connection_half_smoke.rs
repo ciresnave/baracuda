@@ -110,6 +110,26 @@ struct Outputs {
     d_h_res: Vec<f32>,
 }
 
+impl Outputs {
+    /// Download the forward output, `d_x_expanded`, and the four small gradients
+    /// (gamma, `h_pre`, `h_post`, `h_res`, in that order).
+    fn collect<T: Act>(
+        out: &DeviceBuffer<T>,
+        gx: &DeviceBuffer<T>,
+        small: [&DeviceBuffer<T>; 4],
+    ) -> Self {
+        let e = (B * N * C) as usize;
+        Self {
+            out: download(out, e),
+            d_x: download(gx, e),
+            d_gamma: download(small[0], C as usize),
+            d_h_pre: download(small[1], N as usize),
+            d_h_post: download(small[2], N as usize),
+            d_h_res: download(small[3], (N * N) as usize),
+        }
+    }
+}
+
 fn upload<T: Act>(ctx: &Context, v: &[f32]) -> DeviceBuffer<T> {
     let t: Vec<T> = v.iter().map(|&a| T::of(a)).collect();
     DeviceBuffer::from_slice(ctx, &t).expect("upload")
@@ -164,14 +184,7 @@ fn run_plan<T: Act>(ctx: &Context, stream: &Stream, i: &Inputs) -> Outputs {
     )
     .expect("backward");
     stream.synchronize().expect("sync");
-    Outputs {
-        out: download(&out, (B * N * C) as usize),
-        d_x: download(&gx, (B * N * C) as usize),
-        d_gamma: download(&gg, C as usize),
-        d_h_pre: download(&gpre, N as usize),
-        d_h_post: download(&gpost, N as usize),
-        d_h_res: download(&gres, (N * N) as usize),
-    }
+    Outputs::collect(&out, &gx, [&gg, &gpre, &gpost, &gres])
 }
 
 fn fnv(o: &Outputs) -> u64 {
