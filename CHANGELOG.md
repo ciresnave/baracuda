@@ -16,6 +16,13 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.84 - 2026-11-02
+
+### Changed
+
+- **SA-17: `histogram_f32_basic` tolerance tightened from +-5 to +-1 (test only).** Inputs are exactly `i/1000` over 10 bins, so each bin holds 100; a bin-boundary shift of up to five cells used to pass. Measured on the RTX 4070 Laptop (sm_89): bin counts `[100, 100, 100, 100, 100, 100, 101, 99, 101, 99]` (f32 rounding of `i/1000` at a bin edge moves one cell). `histogram_smoke` 2 ran, 2 passed under `gpu-run` with `--features device-tests`. The other 157 inline `.abs() < N` bounds in `crates/*/tests` were read: epsilon multiples, divisor-conditioning (`v.abs() < 0.05`) and RNG statistics, all sound.
+- Workspace 0.1.0-alpha.83 -> alpha.84. No library code changed.
+
 ## 0.1.0-alpha.83 - 2026-11-02
 
 ### Documentation

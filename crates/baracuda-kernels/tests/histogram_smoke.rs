@@ -72,10 +72,13 @@ fn histogram_f32_basic() {
     // bin getting the i = numel-1 == 0.999 cell).
     let total: i32 = got.iter().sum();
     assert_eq!(total, numel as i32, "histogram total != numel");
-    // Each bin should hold ~100 cells (allow ±5).
+    // Inputs are exactly i/1000 over 10 bins, so every bin holds 100 cells; f32 rounding
+    // of i/1000 at a bin edge moves at most one cell across it. Measured on sm_89:
+    // [100, 100, 100, 100, 100, 100, 101, 99, 101, 99]. Allow +-1 (was +-5, which a
+    // five-cell bin-boundary shift would have passed).
     for b in 0..num_bins as usize {
         assert!(
-            (got[b] - 100).abs() <= 5,
+            (got[b] - 100).abs() <= 1,
             "histogram bin {b} count {} too far from 100",
             got[b]
         );
