@@ -239,13 +239,14 @@ impl<T: Element> HalfBackward<T> {
     fn new(stream: &Stream, desc: &HyperConnectionDescriptor, e: usize) -> Result<Self> {
         let ctx = stream.context();
         let (c, n) = (desc.hidden_dim, desc.n_streams);
+        let [d_gamma32, d_h_pre32, d_h_post32, d_h_res32] = small_scratch(ctx, c, n)?;
         Ok(Self {
             d_out32: scratch_f32(ctx, e)?,
             d_x32: scratch_f32(ctx, e)?,
-            d_gamma32: scratch_f32(ctx, c as usize)?,
-            d_h_pre32: scratch_f32(ctx, n as usize)?,
-            d_h_post32: scratch_f32(ctx, n as usize)?,
-            d_h_res32: scratch_f32(ctx, (n * n) as usize)?,
+            d_gamma32,
+            d_h_pre32,
+            d_h_post32,
+            d_h_res32,
             gamma_from_f32: cast_plan(stream, c)?,
             h_vec_from_f32: cast_plan(stream, n)?,
             h_res_from_f32: cast_plan(stream, n * n)?,
@@ -316,6 +317,17 @@ fn lock_scratch<T: Element>(
     half.lock().map_err(|_| {
         Error::InvalidProblem("baracuda-kernels::HyperConnectionPlan: scratch lock poisoned")
     })
+}
+
+/// f32 scratch for the gamma, `h_pre`, `h_post` and `h_res` gradients.
+#[cfg(feature = "mhc")]
+fn small_scratch(ctx: &Context, c: i32, n: i32) -> Result<[DeviceBuffer<f32>; 4]> {
+    Ok([
+        scratch_f32(ctx, c as usize)?,
+        scratch_f32(ctx, n as usize)?,
+        scratch_f32(ctx, n as usize)?,
+        scratch_f32(ctx, (n * n) as usize)?,
+    ])
 }
 
 /// Zero-initialised f32 scratch of `len` elements on `ctx`.
