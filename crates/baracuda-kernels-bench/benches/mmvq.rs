@@ -48,6 +48,120 @@ fn block_label(fmt: GgufBlockFormat) -> &'static str {
     }
 }
 
+/// One benchmark cell: device buffers + selected plan for a (format, shape).
+struct Cell<T: GgufMmvqActivation> {
+    nrows: i32,
+    ncols: i32,
+    weight_bytes: usize,
+    dev_w: DeviceBuffer<U8>,
+    dev_act: DeviceBuffer<T>,
+    dev_out: DeviceBuffer<T>,
+    plan: GgufMmvqPlan<T>,
+}
+
+impl<T> Cell<T>
+where
+    T: GgufMmvqActivation + Copy + 'static + baracuda_kernels::Element,
+{
+    /// Allocate buffers and select the plan; `None` skips the cell (as the
+    /// original inline `continue`s did: non-tiling width, allocation or select failure).
+    fn build(
+        ctx: &baracuda_driver::Context,
+        stream: &baracuda_driver::Stream,
+        fmt: GgufBlockFormat,
+        (nrows, ncols): (i32, i32),
+        fill: T,
+    ) -> Option<Self> {
+        let bs = fmt.block_size() as i32;
+        if ncols % bs != 0 {
+            return None;
+        }
+        let weight_bytes = (nrows as usize) * ((ncols / bs) as usize) * fmt.type_size();
+        let host_w: Vec<U8> = vec![U8(0x10); weight_bytes];
+        let host_act: Vec<T> = vec![fill; ncols as usize];
+        let dev_w = DeviceBuffer::from_slice(ctx, &host_w).ok()?;
+        let dev_act = DeviceBuffer::from_slice(ctx, &host_act).ok()?;
+        let dev_out: DeviceBuffer<T> = DeviceBuffer::zeros(ctx, nrows as usize).ok()?;
+        let desc = GgufMmvqDescriptor::new(nrows, ncols, fmt);
+        let plan = GgufMmvqPlan::<T>::select(stream, &desc, PlanPreference::default()).ok()?;
+        Some(Self {
+            nrows,
+            ncols,
+            weight_bytes,
+            dev_w,
+            dev_act,
+            dev_out,
+            plan,
+        })
+    }
+
+    /// Launch the plan once on contiguous tensors.
+    fn run_once(&mut self, stream: &baracuda_driver::Stream, what: &str) {
+        let w_shape = [self.weight_bytes as i32];
+        let act_shape = [self.ncols];
+        let out_shape = [self.nrows];
+        let args = GgufMmvqArgs::<T> {
+            weight: TensorRef::new(self.dev_w.as_slice(), w_shape, contiguous_stride(w_shape))
+                .unwrap(),
+            activation: TensorRef::new(
+                self.dev_act.as_slice(),
+                act_shape,
+                contiguous_stride(act_shape),
+            )
+            .unwrap(),
+            output: TensorMut::new(
+                self.dev_out.as_slice_mut(),
+                out_shape,
+                contiguous_stride(out_shape),
+            )
+            .unwrap(),
+        };
+        self.plan.run(stream, Workspace::None, args).expect(what);
+    }
+}
+
+/// Measure one cell, record its CSV row, and register its criterion benchmark.
+fn bench_cell<T>(
+    group: &mut criterion::BenchmarkGroup<'_, criterion::measurement::WallTime>,
+    ctx: &baracuda_driver::Context,
+    stream: &baracuda_driver::Stream,
+    labels: (&str, &str),
+    mut cell: Cell<T>,
+) where
+    T: GgufMmvqActivation + Copy + 'static + baracuda_kernels::Element + LiveScalar,
+{
+    let (act_label, fmt_lbl) = labels;
+    let shape = format!("N{}_C{}", cell.nrows, cell.ncols);
+    warmup(stream, || cell.run_once(stream, "mmvq warmup"));
+
+    // Liveness (NOT a reference): warmup populated dev_out; assert live
+    // before timing — a bench over garbage output is fast and meaningless.
+    assert_cell_live(
+        &format!("mmvq/{act_label}/{fmt_lbl}/{shape}"),
+        &cell.dev_out,
+        cell.nrows as usize,
+    );
+    let baracuda_ns = measure_median_ns(ctx, stream, 11, 100, || cell.run_once(stream, "mmvq run"));
+    append_csv_row(
+        BENCH_NAME,
+        &PhaseTwentyNineRow {
+            op: "mmvq",
+            shape: format!("{fmt_lbl}_{shape}"),
+            dtype: leak_str(act_label),
+            baracuda_ns,
+            reference_ns: None,
+            reference: "",
+            pytorch_ns: None,
+        },
+    );
+
+    group.bench_with_input(BenchmarkId::from_parameter(&shape), &(), |bb, _| {
+        bb.iter_custom(|iters| {
+            time_with_events(ctx, stream, iters, || cell.run_once(stream, "mmvq run"))
+        })
+    });
+}
+
 /// Generic MMVQ bench body — one (block format × activation dtype) group.
 fn bench_mmvq<T>(c: &mut Criterion, act_label: &str, fill: T)
 where
@@ -58,94 +172,10 @@ where
     for &fmt in CROSS_MMVQ_FORMATS {
         let fmt_lbl = block_label(fmt);
         let mut group = c.benchmark_group(format!("mmvq/{act_label}/{fmt_lbl}"));
-
-        for &(nrows, ncols) in CROSS_MMVQ_SHAPES {
-            let bs = fmt.block_size() as i32;
-            if ncols % bs != 0 {
-                continue;
+        for &shape in CROSS_MMVQ_SHAPES {
+            if let Some(cell) = Cell::<T>::build(&ctx, &stream, fmt, shape, fill) {
+                bench_cell(&mut group, &ctx, &stream, (act_label, fmt_lbl), cell);
             }
-            let blocks_per_row = ncols / bs;
-            let weight_bytes = (nrows as usize) * (blocks_per_row as usize) * fmt.type_size();
-            let shape = format!("N{nrows}_C{ncols}");
-
-            let host_w: Vec<U8> = vec![U8(0x10); weight_bytes];
-            let host_act: Vec<T> = vec![fill; ncols as usize];
-            let dev_w = match DeviceBuffer::from_slice(&ctx, &host_w) {
-                Ok(b) => b,
-                Err(_) => continue,
-            };
-            let dev_act = match DeviceBuffer::from_slice(&ctx, &host_act) {
-                Ok(b) => b,
-                Err(_) => continue,
-            };
-            let mut dev_out: DeviceBuffer<T> = match DeviceBuffer::zeros(&ctx, nrows as usize) {
-                Ok(b) => b,
-                Err(_) => continue,
-            };
-
-            let desc = GgufMmvqDescriptor::new(nrows, ncols, fmt);
-            let plan = match GgufMmvqPlan::<T>::select(&stream, &desc, PlanPreference::default()) {
-                Ok(p) => p,
-                Err(_) => continue,
-            };
-
-            let w_shape = [weight_bytes as i32];
-            let act_shape = [ncols];
-            let out_shape = [nrows];
-            let stw = contiguous_stride(w_shape);
-            let sta = contiguous_stride(act_shape);
-            let sto = contiguous_stride(out_shape);
-
-            warmup(&stream, || {
-                let args = GgufMmvqArgs::<T> {
-                    weight: TensorRef::new(dev_w.as_slice(), w_shape, stw).unwrap(),
-                    activation: TensorRef::new(dev_act.as_slice(), act_shape, sta).unwrap(),
-                    output: TensorMut::new(dev_out.as_slice_mut(), out_shape, sto).unwrap(),
-                };
-                plan.run(&stream, Workspace::None, args)
-                    .expect("mmvq warmup");
-            });
-
-            // Liveness (NOT a reference): warmup populated dev_out; assert live
-            // before timing — a bench over garbage output is fast and meaningless.
-            assert_cell_live(
-                &format!("mmvq/{act_label}/{fmt_lbl}/{shape}"),
-                &dev_out,
-                nrows as usize,
-            );
-            let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 100, || {
-                let args = GgufMmvqArgs::<T> {
-                    weight: TensorRef::new(dev_w.as_slice(), w_shape, stw).unwrap(),
-                    activation: TensorRef::new(dev_act.as_slice(), act_shape, sta).unwrap(),
-                    output: TensorMut::new(dev_out.as_slice_mut(), out_shape, sto).unwrap(),
-                };
-                plan.run(&stream, Workspace::None, args).expect("mmvq run");
-            });
-            append_csv_row(
-                BENCH_NAME,
-                &PhaseTwentyNineRow {
-                    op: "mmvq",
-                    shape: format!("{}_{}", block_label(fmt), shape),
-                    dtype: leak_str(act_label),
-                    baracuda_ns,
-                    reference_ns: None,
-                    reference: "",
-                    pytorch_ns: None,
-                },
-            );
-
-            group.bench_with_input(BenchmarkId::from_parameter(&shape), &(), |bb, _| {
-                bb.iter_custom(|iters| {
-                    time_with_events(&ctx, &stream, iters, || {
-                        let args = GgufMmvqArgs::<T> {
-                            weight: TensorRef::new(dev_w.as_slice(), w_shape, stw).unwrap(),
-                            activation: TensorRef::new(dev_act.as_slice(), act_shape, sta).unwrap(),
-                            output: TensorMut::new(dev_out.as_slice_mut(), out_shape, sto).unwrap(),
-                        };
-                        plan.run(&stream, Workspace::None, args).expect("mmvq run");
-                    })
-                });
-            });
         }
         group.finish();
     }

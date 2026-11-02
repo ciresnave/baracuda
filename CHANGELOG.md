@@ -16,6 +16,13 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.82 - 2026-11-02
+
+### Changed
+
+- **Codacy complexity refactor of the restored GGUF MMVQ code; no behaviour change.** `quantize/gguf/mmvq.rs`: `select` split into `check_dmmv_width` (#127) and `check_w_offset_alignment` (debug-only, no-op in release); the six `dispatch_*` functions (9-10 parameters, up to 74 lines) replaced by a `Launch` struct plus six one-line-per-format `pick_*` tables returning FFI function pointers (the 66 variant->symbol pairs are identical to before, checked programmatically). `benches/mmvq.rs`: `bench_mmvq` split into `Cell::build` / `Cell::run_once` / `bench_cell`. Existing tests unchanged. No kernel, FFI or ABI change.
+- Workspace 0.1.0-alpha.81 -> alpha.82.
+
 ## 0.1.0-alpha.81 - 2026-11-02
 
 ### Fixed
