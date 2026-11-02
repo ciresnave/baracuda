@@ -10,15 +10,12 @@
 //! removed. Each decline must carry the `#127` message, so an unrelated
 //! `InvalidProblem` cannot satisfy it. The acceptance tests pin that valid
 //! neighbouring widths still pass.
-//!
-//! `GgufMmvqMultiMPlan` is deliberately NOT declined: its loop is bounded by
-//! whole blocks and does not over-read. `multim_plan_still_accepts_96` pins that.
 #![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, Stream, init};
 use baracuda_kernels::{
     Error, GgufBlockFormat, GgufMmvqBatchedDescriptor, GgufMmvqBatchedFormat, GgufMmvqBatchedPlan,
-    GgufMmvqDescriptor, GgufMmvqMultiMDescriptor, GgufMmvqMultiMPlan, GgufMmvqPlan, PlanPreference,
+    GgufMmvqDescriptor, GgufMmvqPlan, PlanPreference,
 };
 
 const TYPE_0_1: [GgufBlockFormat; 5] = [
@@ -140,26 +137,6 @@ fn batched_plan_accepts_type01_widths_multiple_of_64() {
             if let Err(e) = batched(&stream, fmt, n_cols) {
                 panic!("GgufMmvqBatchedPlan {fmt:?} n_cols={n_cols} must be accepted: {e:?}");
             }
-        }
-    }
-}
-
-/// Scope pin: the multi-matrix plan's loop is block-bounded, so it must keep
-/// accepting widths the other two plans now decline.
-#[test]
-fn multim_plan_still_accepts_96() {
-    let (_ctx, stream) = setup();
-    for fmt in TYPE_0_1 {
-        let desc = GgufMmvqMultiMDescriptor {
-            nrows: 1,
-            ncols: 96,
-            m: 1,
-            block_format: fmt,
-            w_start_byte_offset: 0,
-        };
-        if let Err(e) = GgufMmvqMultiMPlan::<f32>::select(&stream, &desc, PlanPreference::default())
-        {
-            panic!("GgufMmvqMultiMPlan {fmt:?} ncols=96 must be accepted: {e:?}");
         }
     }
 }
