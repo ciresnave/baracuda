@@ -297,214 +297,161 @@ struct Launch {
     stream_ptr: *mut c_void,
 }
 
-/// FFI signature of the contiguous (`w_off == 0`, `stride_y == 1`) entry points.
-type ContigFn = unsafe extern "C" fn(
-    i32,
-    i32,
-    *const c_void,
-    *const c_void,
-    *mut c_void,
-    *mut c_void,
-    usize,
-    *mut c_void,
-) -> i32;
-
-/// FFI signature of the activation-strided + W-offset entry points.
-type StridedFn = unsafe extern "C" fn(
-    i32,
-    i32,
-    *const c_void,
-    i64,
-    i64,
-    *const c_void,
-    *mut c_void,
-    *mut c_void,
-    usize,
-    *mut c_void,
-) -> i32;
+/// One table row: a block format and the FFI call that serves it.
+type Entry = (GgufBlockFormat, unsafe fn(&Launch) -> i32);
 
 /// Status `map_status` translates to `Error::Unsupported`.
 const STATUS_UNSUPPORTED: i32 = 3;
 
-impl Launch {
-    unsafe fn contig(&self, f: Option<ContigFn>) -> i32 {
-        match f {
-            Some(f) => unsafe {
-                f(
-                    self.ncols,
-                    self.nrows,
-                    self.w_ptr,
-                    self.y_ptr,
-                    self.dst_ptr,
-                    core::ptr::null_mut(),
-                    0,
-                    self.stream_ptr,
-                )
-            },
-            None => STATUS_UNSUPPORTED,
-        }
-    }
+/// Contiguous (`w_off == 0`, `stride_y == 1`) table rows: `Format => symbol`.
+macro_rules! contig_rows {
+    ($($fmt:ident => $sym:ident),* $(,)?) => {
+        &[$((
+            GgufBlockFormat::$fmt,
+            (|l: &Launch| unsafe {
+                sys::$sym(l.ncols, l.nrows, l.w_ptr, l.y_ptr, l.dst_ptr, core::ptr::null_mut(), 0, l.stream_ptr)
+            }) as unsafe fn(&Launch) -> i32,
+        )),*]
+    };
+}
 
-    unsafe fn strided(&self, f: Option<StridedFn>) -> i32 {
-        match f {
-            Some(f) => unsafe {
-                f(
-                    self.ncols,
-                    self.nrows,
-                    self.w_ptr,
-                    self.w_off,
-                    self.stride_y,
-                    self.y_ptr,
-                    self.dst_ptr,
+/// Activation-strided + W-offset table rows: `Format => symbol`.
+macro_rules! strided_rows {
+    ($($fmt:ident => $sym:ident),* $(,)?) => {
+        &[$((
+            GgufBlockFormat::$fmt,
+            (|l: &Launch| unsafe {
+                sys::$sym(
+                    l.ncols,
+                    l.nrows,
+                    l.w_ptr,
+                    l.w_off,
+                    l.stride_y,
+                    l.y_ptr,
+                    l.dst_ptr,
                     core::ptr::null_mut(),
                     0,
-                    self.stream_ptr,
+                    l.stream_ptr,
                 )
-            },
-            None => STATUS_UNSUPPORTED,
-        }
-    }
+            }) as unsafe fn(&Launch) -> i32,
+        )),*]
+    };
+}
+
+/// f32 (legacy) contig entry points, one row per format.
+static F32_CONTIG: &[Entry] = contig_rows! {
+    Q4_0 => baracuda_kernels_mmvq_q4_0_run,
+    Q4_1 => baracuda_kernels_mmvq_q4_1_run,
+    Q5_0 => baracuda_kernels_mmvq_q5_0_run,
+    Q5_1 => baracuda_kernels_mmvq_q5_1_run,
+    Q8_0 => baracuda_kernels_mmvq_q8_0_run,
+    Q2K => baracuda_kernels_mmvq_q2_K_run,
+    Q3K => baracuda_kernels_mmvq_q3_K_run,
+    Q4K => baracuda_kernels_mmvq_q4_K_run,
+    Q5K => baracuda_kernels_mmvq_q5_K_run,
+    Q6K => baracuda_kernels_mmvq_q6_K_run,
+    Q8K => baracuda_kernels_mmvq_q8_K_run,
+};
+
+/// f32 (legacy) strided entry points, one row per format.
+static F32_STRIDED: &[Entry] = strided_rows! {
+    Q4_0 => baracuda_kernels_mmvq_q4_0_actstrided_run,
+    Q4_1 => baracuda_kernels_mmvq_q4_1_actstrided_run,
+    Q5_0 => baracuda_kernels_mmvq_q5_0_actstrided_run,
+    Q5_1 => baracuda_kernels_mmvq_q5_1_actstrided_run,
+    Q8_0 => baracuda_kernels_mmvq_q8_0_actstrided_run,
+    Q2K => baracuda_kernels_mmvq_q2_K_actstrided_run,
+    Q3K => baracuda_kernels_mmvq_q3_K_actstrided_run,
+    Q4K => baracuda_kernels_mmvq_q4_K_actstrided_run,
+    Q5K => baracuda_kernels_mmvq_q5_K_actstrided_run,
+    Q6K => baracuda_kernels_mmvq_q6_K_actstrided_run,
+    Q8K => baracuda_kernels_mmvq_q8_K_actstrided_run,
+};
+
+/// f16 (Phase 18.1) contig entry points, one row per format.
+static F16_CONTIG: &[Entry] = contig_rows! {
+    Q4_0 => baracuda_kernels_mmvq_q4_0_f16_run,
+    Q4_1 => baracuda_kernels_mmvq_q4_1_f16_run,
+    Q5_0 => baracuda_kernels_mmvq_q5_0_f16_run,
+    Q5_1 => baracuda_kernels_mmvq_q5_1_f16_run,
+    Q8_0 => baracuda_kernels_mmvq_q8_0_f16_run,
+    Q2K => baracuda_kernels_mmvq_q2_K_f16_run,
+    Q3K => baracuda_kernels_mmvq_q3_K_f16_run,
+    Q4K => baracuda_kernels_mmvq_q4_K_f16_run,
+    Q5K => baracuda_kernels_mmvq_q5_K_f16_run,
+    Q6K => baracuda_kernels_mmvq_q6_K_f16_run,
+    Q8K => baracuda_kernels_mmvq_q8_K_f16_run,
+};
+
+/// f16 (Phase 18.1) strided entry points, one row per format.
+static F16_STRIDED: &[Entry] = strided_rows! {
+    Q4_0 => baracuda_kernels_mmvq_q4_0_actstrided_f16_run,
+    Q4_1 => baracuda_kernels_mmvq_q4_1_actstrided_f16_run,
+    Q5_0 => baracuda_kernels_mmvq_q5_0_actstrided_f16_run,
+    Q5_1 => baracuda_kernels_mmvq_q5_1_actstrided_f16_run,
+    Q8_0 => baracuda_kernels_mmvq_q8_0_actstrided_f16_run,
+    Q2K => baracuda_kernels_mmvq_q2_K_actstrided_f16_run,
+    Q3K => baracuda_kernels_mmvq_q3_K_actstrided_f16_run,
+    Q4K => baracuda_kernels_mmvq_q4_K_actstrided_f16_run,
+    Q5K => baracuda_kernels_mmvq_q5_K_actstrided_f16_run,
+    Q6K => baracuda_kernels_mmvq_q6_K_actstrided_f16_run,
+    Q8K => baracuda_kernels_mmvq_q8_K_actstrided_f16_run,
+};
+
+/// bf16 (Phase 18.1) contig entry points, one row per format.
+static BF16_CONTIG: &[Entry] = contig_rows! {
+    Q4_0 => baracuda_kernels_mmvq_q4_0_bf16_run,
+    Q4_1 => baracuda_kernels_mmvq_q4_1_bf16_run,
+    Q5_0 => baracuda_kernels_mmvq_q5_0_bf16_run,
+    Q5_1 => baracuda_kernels_mmvq_q5_1_bf16_run,
+    Q8_0 => baracuda_kernels_mmvq_q8_0_bf16_run,
+    Q2K => baracuda_kernels_mmvq_q2_K_bf16_run,
+    Q3K => baracuda_kernels_mmvq_q3_K_bf16_run,
+    Q4K => baracuda_kernels_mmvq_q4_K_bf16_run,
+    Q5K => baracuda_kernels_mmvq_q5_K_bf16_run,
+    Q6K => baracuda_kernels_mmvq_q6_K_bf16_run,
+    Q8K => baracuda_kernels_mmvq_q8_K_bf16_run,
+};
+
+/// bf16 (Phase 18.1) strided entry points, one row per format.
+static BF16_STRIDED: &[Entry] = strided_rows! {
+    Q4_0 => baracuda_kernels_mmvq_q4_0_actstrided_bf16_run,
+    Q4_1 => baracuda_kernels_mmvq_q4_1_actstrided_bf16_run,
+    Q5_0 => baracuda_kernels_mmvq_q5_0_actstrided_bf16_run,
+    Q5_1 => baracuda_kernels_mmvq_q5_1_actstrided_bf16_run,
+    Q8_0 => baracuda_kernels_mmvq_q8_0_actstrided_bf16_run,
+    Q2K => baracuda_kernels_mmvq_q2_K_actstrided_bf16_run,
+    Q3K => baracuda_kernels_mmvq_q3_K_actstrided_bf16_run,
+    Q4K => baracuda_kernels_mmvq_q4_K_actstrided_bf16_run,
+    Q5K => baracuda_kernels_mmvq_q5_K_actstrided_bf16_run,
+    Q6K => baracuda_kernels_mmvq_q6_K_actstrided_bf16_run,
+    Q8K => baracuda_kernels_mmvq_q8_K_actstrided_bf16_run,
+};
+
+/// The table row for `fmt`; `None` for a format with no MMVQ kernel (the enum is
+/// `#[non_exhaustive]`), which the caller reports as `Error::Unsupported`.
+fn lookup(table: &[Entry], fmt: GgufBlockFormat) -> Option<unsafe fn(&Launch) -> i32> {
+    table.iter().find(|(f, _)| *f == fmt).map(|&(_, call)| call)
 }
 
 /// Dispatch to the right FFI symbol given (block format, dtype, contig/strided).
-///
-/// One picker per (dtype, strided) quadrant, each a one-line-per-format table.
-/// Factored out of `run()` to keep the launch path readable.
 unsafe fn dispatch_ffi<T: GgufMmvqActivation>(
     fmt: GgufBlockFormat,
     use_strided: bool,
     l: &Launch,
 ) -> i32 {
-    unsafe {
-        match (T::KIND, use_strided) {
-            (ElementKind::F32, false) => l.contig(pick_f32_contig(fmt)),
-            (ElementKind::F32, true) => l.strided(pick_f32_strided(fmt)),
-            (ElementKind::F16, false) => l.contig(pick_f16_contig(fmt)),
-            (ElementKind::F16, true) => l.strided(pick_f16_strided(fmt)),
-            (ElementKind::Bf16, false) => l.contig(pick_bf16_contig(fmt)),
-            (ElementKind::Bf16, true) => l.strided(pick_bf16_strided(fmt)),
-            _ => unreachable!("GgufMmvqActivation is sealed to f32 / f16 / bf16"),
-        }
-    }
-}
-
-/// f32 (legacy) contig entry point for `fmt`.
-fn pick_f32_contig(fmt: GgufBlockFormat) -> Option<ContigFn> {
-    match fmt {
-        GgufBlockFormat::Q4_0 => Some(sys::baracuda_kernels_mmvq_q4_0_run),
-        GgufBlockFormat::Q4_1 => Some(sys::baracuda_kernels_mmvq_q4_1_run),
-        GgufBlockFormat::Q5_0 => Some(sys::baracuda_kernels_mmvq_q5_0_run),
-        GgufBlockFormat::Q5_1 => Some(sys::baracuda_kernels_mmvq_q5_1_run),
-        GgufBlockFormat::Q8_0 => Some(sys::baracuda_kernels_mmvq_q8_0_run),
-        GgufBlockFormat::Q2K => Some(sys::baracuda_kernels_mmvq_q2_K_run),
-        GgufBlockFormat::Q3K => Some(sys::baracuda_kernels_mmvq_q3_K_run),
-        GgufBlockFormat::Q4K => Some(sys::baracuda_kernels_mmvq_q4_K_run),
-        GgufBlockFormat::Q5K => Some(sys::baracuda_kernels_mmvq_q5_K_run),
-        GgufBlockFormat::Q6K => Some(sys::baracuda_kernels_mmvq_q6_K_run),
-        GgufBlockFormat::Q8K => Some(sys::baracuda_kernels_mmvq_q8_K_run),
-        // Defensive arm — `GgufBlockFormat` is `#[non_exhaustive]`; `None` maps to status 3
-        // (`Error::Unsupported`) via the shared `map_status` translator in `quantize::mod`.
-        _ => None,
-    }
-}
-
-/// f32 (legacy) strided entry point for `fmt`.
-fn pick_f32_strided(fmt: GgufBlockFormat) -> Option<StridedFn> {
-    match fmt {
-        GgufBlockFormat::Q4_0 => Some(sys::baracuda_kernels_mmvq_q4_0_actstrided_run),
-        GgufBlockFormat::Q4_1 => Some(sys::baracuda_kernels_mmvq_q4_1_actstrided_run),
-        GgufBlockFormat::Q5_0 => Some(sys::baracuda_kernels_mmvq_q5_0_actstrided_run),
-        GgufBlockFormat::Q5_1 => Some(sys::baracuda_kernels_mmvq_q5_1_actstrided_run),
-        GgufBlockFormat::Q8_0 => Some(sys::baracuda_kernels_mmvq_q8_0_actstrided_run),
-        GgufBlockFormat::Q2K => Some(sys::baracuda_kernels_mmvq_q2_K_actstrided_run),
-        GgufBlockFormat::Q3K => Some(sys::baracuda_kernels_mmvq_q3_K_actstrided_run),
-        GgufBlockFormat::Q4K => Some(sys::baracuda_kernels_mmvq_q4_K_actstrided_run),
-        GgufBlockFormat::Q5K => Some(sys::baracuda_kernels_mmvq_q5_K_actstrided_run),
-        GgufBlockFormat::Q6K => Some(sys::baracuda_kernels_mmvq_q6_K_actstrided_run),
-        GgufBlockFormat::Q8K => Some(sys::baracuda_kernels_mmvq_q8_K_actstrided_run),
-        // Defensive arm — `GgufBlockFormat` is `#[non_exhaustive]`; `None` maps to status 3
-        // (`Error::Unsupported`) via the shared `map_status` translator in `quantize::mod`.
-        _ => None,
-    }
-}
-
-/// f16 (Phase 18.1) contig entry point for `fmt`.
-fn pick_f16_contig(fmt: GgufBlockFormat) -> Option<ContigFn> {
-    match fmt {
-        GgufBlockFormat::Q4_0 => Some(sys::baracuda_kernels_mmvq_q4_0_f16_run),
-        GgufBlockFormat::Q4_1 => Some(sys::baracuda_kernels_mmvq_q4_1_f16_run),
-        GgufBlockFormat::Q5_0 => Some(sys::baracuda_kernels_mmvq_q5_0_f16_run),
-        GgufBlockFormat::Q5_1 => Some(sys::baracuda_kernels_mmvq_q5_1_f16_run),
-        GgufBlockFormat::Q8_0 => Some(sys::baracuda_kernels_mmvq_q8_0_f16_run),
-        GgufBlockFormat::Q2K => Some(sys::baracuda_kernels_mmvq_q2_K_f16_run),
-        GgufBlockFormat::Q3K => Some(sys::baracuda_kernels_mmvq_q3_K_f16_run),
-        GgufBlockFormat::Q4K => Some(sys::baracuda_kernels_mmvq_q4_K_f16_run),
-        GgufBlockFormat::Q5K => Some(sys::baracuda_kernels_mmvq_q5_K_f16_run),
-        GgufBlockFormat::Q6K => Some(sys::baracuda_kernels_mmvq_q6_K_f16_run),
-        GgufBlockFormat::Q8K => Some(sys::baracuda_kernels_mmvq_q8_K_f16_run),
-        // Defensive arm — `GgufBlockFormat` is `#[non_exhaustive]`; `None` maps to status 3
-        // (`Error::Unsupported`) via the shared `map_status` translator in `quantize::mod`.
-        _ => None,
-    }
-}
-
-/// f16 (Phase 18.1) strided entry point for `fmt`.
-fn pick_f16_strided(fmt: GgufBlockFormat) -> Option<StridedFn> {
-    match fmt {
-        GgufBlockFormat::Q4_0 => Some(sys::baracuda_kernels_mmvq_q4_0_actstrided_f16_run),
-        GgufBlockFormat::Q4_1 => Some(sys::baracuda_kernels_mmvq_q4_1_actstrided_f16_run),
-        GgufBlockFormat::Q5_0 => Some(sys::baracuda_kernels_mmvq_q5_0_actstrided_f16_run),
-        GgufBlockFormat::Q5_1 => Some(sys::baracuda_kernels_mmvq_q5_1_actstrided_f16_run),
-        GgufBlockFormat::Q8_0 => Some(sys::baracuda_kernels_mmvq_q8_0_actstrided_f16_run),
-        GgufBlockFormat::Q2K => Some(sys::baracuda_kernels_mmvq_q2_K_actstrided_f16_run),
-        GgufBlockFormat::Q3K => Some(sys::baracuda_kernels_mmvq_q3_K_actstrided_f16_run),
-        GgufBlockFormat::Q4K => Some(sys::baracuda_kernels_mmvq_q4_K_actstrided_f16_run),
-        GgufBlockFormat::Q5K => Some(sys::baracuda_kernels_mmvq_q5_K_actstrided_f16_run),
-        GgufBlockFormat::Q6K => Some(sys::baracuda_kernels_mmvq_q6_K_actstrided_f16_run),
-        GgufBlockFormat::Q8K => Some(sys::baracuda_kernels_mmvq_q8_K_actstrided_f16_run),
-        // Defensive arm — `GgufBlockFormat` is `#[non_exhaustive]`; `None` maps to status 3
-        // (`Error::Unsupported`) via the shared `map_status` translator in `quantize::mod`.
-        _ => None,
-    }
-}
-
-/// bf16 (Phase 18.1) contig entry point for `fmt`.
-fn pick_bf16_contig(fmt: GgufBlockFormat) -> Option<ContigFn> {
-    match fmt {
-        GgufBlockFormat::Q4_0 => Some(sys::baracuda_kernels_mmvq_q4_0_bf16_run),
-        GgufBlockFormat::Q4_1 => Some(sys::baracuda_kernels_mmvq_q4_1_bf16_run),
-        GgufBlockFormat::Q5_0 => Some(sys::baracuda_kernels_mmvq_q5_0_bf16_run),
-        GgufBlockFormat::Q5_1 => Some(sys::baracuda_kernels_mmvq_q5_1_bf16_run),
-        GgufBlockFormat::Q8_0 => Some(sys::baracuda_kernels_mmvq_q8_0_bf16_run),
-        GgufBlockFormat::Q2K => Some(sys::baracuda_kernels_mmvq_q2_K_bf16_run),
-        GgufBlockFormat::Q3K => Some(sys::baracuda_kernels_mmvq_q3_K_bf16_run),
-        GgufBlockFormat::Q4K => Some(sys::baracuda_kernels_mmvq_q4_K_bf16_run),
-        GgufBlockFormat::Q5K => Some(sys::baracuda_kernels_mmvq_q5_K_bf16_run),
-        GgufBlockFormat::Q6K => Some(sys::baracuda_kernels_mmvq_q6_K_bf16_run),
-        GgufBlockFormat::Q8K => Some(sys::baracuda_kernels_mmvq_q8_K_bf16_run),
-        // Defensive arm — `GgufBlockFormat` is `#[non_exhaustive]`; `None` maps to status 3
-        // (`Error::Unsupported`) via the shared `map_status` translator in `quantize::mod`.
-        _ => None,
-    }
-}
-
-/// bf16 (Phase 18.1) strided entry point for `fmt`.
-fn pick_bf16_strided(fmt: GgufBlockFormat) -> Option<StridedFn> {
-    match fmt {
-        GgufBlockFormat::Q4_0 => Some(sys::baracuda_kernels_mmvq_q4_0_actstrided_bf16_run),
-        GgufBlockFormat::Q4_1 => Some(sys::baracuda_kernels_mmvq_q4_1_actstrided_bf16_run),
-        GgufBlockFormat::Q5_0 => Some(sys::baracuda_kernels_mmvq_q5_0_actstrided_bf16_run),
-        GgufBlockFormat::Q5_1 => Some(sys::baracuda_kernels_mmvq_q5_1_actstrided_bf16_run),
-        GgufBlockFormat::Q8_0 => Some(sys::baracuda_kernels_mmvq_q8_0_actstrided_bf16_run),
-        GgufBlockFormat::Q2K => Some(sys::baracuda_kernels_mmvq_q2_K_actstrided_bf16_run),
-        GgufBlockFormat::Q3K => Some(sys::baracuda_kernels_mmvq_q3_K_actstrided_bf16_run),
-        GgufBlockFormat::Q4K => Some(sys::baracuda_kernels_mmvq_q4_K_actstrided_bf16_run),
-        GgufBlockFormat::Q5K => Some(sys::baracuda_kernels_mmvq_q5_K_actstrided_bf16_run),
-        GgufBlockFormat::Q6K => Some(sys::baracuda_kernels_mmvq_q6_K_actstrided_bf16_run),
-        GgufBlockFormat::Q8K => Some(sys::baracuda_kernels_mmvq_q8_K_actstrided_bf16_run),
-        // Defensive arm — `GgufBlockFormat` is `#[non_exhaustive]`; `None` maps to status 3
-        // (`Error::Unsupported`) via the shared `map_status` translator in `quantize::mod`.
-        _ => None,
+    let table = match (T::KIND, use_strided) {
+        (ElementKind::F32, false) => F32_CONTIG,
+        (ElementKind::F32, true) => F32_STRIDED,
+        (ElementKind::F16, false) => F16_CONTIG,
+        (ElementKind::F16, true) => F16_STRIDED,
+        (ElementKind::Bf16, false) => BF16_CONTIG,
+        (ElementKind::Bf16, true) => BF16_STRIDED,
+        _ => unreachable!("GgufMmvqActivation is sealed to f32 / f16 / bf16"),
+    };
+    match lookup(table, fmt) {
+        Some(call) => unsafe { call(l) },
+        None => STATUS_UNSUPPORTED,
     }
 }
 
