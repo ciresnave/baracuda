@@ -50,26 +50,40 @@ def main(argv):
         print(__doc__)
         return 2
     old, new = argv[1], argv[2]
-    git = shutil.which("git")
-    if git is None:
-        print("git not found on PATH")
+    try:
+        files = tracked_files()
+    except FileNotFoundError as err:
+        print(err)
         return 1
-    # Absolute git path, fixed argument list, no shell; no user input reaches argv.
-    result = subprocess.run([git, "ls-files", "-z"], capture_output=True, check=True)  # nosec B603
-    files = result.stdout.decode().split("\0")
-    changed = 0
-    for path in filter(None, files):
-        if not (path.endswith(("Cargo.toml", "Cargo.lock")) or path in dict(CURRENT_STATEMENTS)):
-            continue
-        with open(path, "rb") as fh:
-            before = fh.read().decode("latin-1")
-        after = bump_file(path, before, old, new)
-        if after != before:
-            with open(path, "wb") as fh:
-                fh.write(after.encode("latin-1"))
-            changed += 1
+    changed = sum(bump_path(p, old, new) for p in files if is_target(p))
     print(f"bumped alpha.{old} -> alpha.{new} in {changed} files (enumerated via git ls-files)")
     return 0
+
+
+def is_target(path):
+    return path.endswith(("Cargo.toml", "Cargo.lock")) or path in dict(CURRENT_STATEMENTS)
+
+
+def tracked_files():
+    """Paths from `git ls-files` (the index), never a disk walk."""
+    git = shutil.which("git")
+    if git is None:
+        raise FileNotFoundError("git not found on PATH")
+    # Absolute git path, fixed argument list, no shell; no user input reaches argv.
+    result = subprocess.run([git, "ls-files", "-z"], capture_output=True, check=True)  # nosec B603  # nosemgrep
+    return [p for p in result.stdout.decode().split("\0") if p]
+
+
+def bump_path(path, old, new):
+    """Rewrite one file in place; returns 1 if it changed."""
+    with open(path, "rb") as fh:
+        before = fh.read().decode("latin-1")
+    after = bump_file(path, before, old, new)
+    if after == before:
+        return 0
+    with open(path, "wb") as fh:
+        fh.write(after.encode("latin-1"))
+    return 1
 
 
 if __name__ == "__main__":

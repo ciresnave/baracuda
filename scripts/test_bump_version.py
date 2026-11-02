@@ -4,8 +4,6 @@ The blind-replace test is the point: it fails for a naive `alpha.OLD -> alpha.NE
 """
 import importlib.util
 import pathlib
-import shutil
-import subprocess  # nosec B404 - test runs only `git ls-files` with fixed arguments, no shell
 import unittest
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -62,12 +60,8 @@ class BumpTests(unittest.TestCase):
             "crates/baracuda-kernels-bench/tests/max_nan_propagation.rs": ["shape as the alpha.78 all-zero"],
             "OP-MATRIX.md": ["The body reflects the alpha.77 line"],
         }
-        git = shutil.which("git")
-        self.assertIsNotNone(git, "git not found on PATH")
-        # Absolute git path, fixed argv, no shell.
-        tracked = set(subprocess.run([git, "ls-files"], cwd=root, capture_output=True, text=True).stdout.split())  # nosec B603
         for rel, needles in sentinels.items():
-            if rel not in tracked:
+            if not (root / rel).is_file():
                 continue
             text = (root / rel).read_bytes().decode("latin-1")
             for needle in needles:
