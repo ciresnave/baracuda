@@ -16,12 +16,18 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.83 - 2026-11-02
+
+### Documentation
+
+- **Device evidence for the restored float MMVQ (RTX 4070 Laptop, sm_89, main `173d1a71`, 2026-11-02).** `cargo test --locked -p baracuda-kernels --features device-tests`, each test binary run directly under `scripts/gpu-run.ps1`: `gguf_mmvq_smoke` 2/2, `mmvq_f16_bf16_smoke` 6/6, `mmvq_strided_smoke` 10/10, `mmvq_ncols64_decline` 5/5, `mmvq_launcher_width_decline` 2/2; 25 ran, 25 passed, 0 failed, 0 ignored. Without `--features device-tests` these binaries report `ok. 0 passed` (vacuous), so the ran count matters.
+- Workspace 0.1.0-alpha.82 -> alpha.83. Docs only; no code change.
+
 ## 0.1.0-alpha.82 - 2026-11-02
 
 ### Changed
 
 - **Codacy complexity refactor of the restored GGUF MMVQ code; no behaviour change.** `quantize/gguf/mmvq.rs`: `select` split into `check_dmmv_width` (#127) and `check_w_offset_alignment` (debug-only, no-op in release); the six `dispatch_*` functions (9-10 parameters, up to 74 lines) replaced by a `Launch` struct plus six one-line-per-format `pick_*` tables returning FFI function pointers (the 66 variant->symbol pairs are identical to before, checked programmatically). `benches/mmvq.rs`: `bench_mmvq` split into `Cell::build` / `Cell::run_once` / `bench_cell`. Existing tests unchanged. No kernel, FFI or ABI change.
-- **Device evidence for the restored float MMVQ (RTX 4070 Laptop, sm_89, main `173d1a71`, 2026-11-02).** `cargo test --locked -p baracuda-kernels --features device-tests`, each test binary run directly under `scripts/gpu-run.ps1`: `gguf_mmvq_smoke` 2/2, `mmvq_f16_bf16_smoke` 6/6, `mmvq_strided_smoke` 10/10, `mmvq_ncols64_decline` 5/5, `mmvq_launcher_width_decline` 2/2; 25 ran, 25 passed, 0 failed, 0 ignored. Without `--features device-tests` these binaries report `ok. 0 passed` (vacuous), so the ran count matters.
 - Workspace 0.1.0-alpha.81 -> alpha.82.
 
 ## 0.1.0-alpha.81 - 2026-11-02
