@@ -16,6 +16,13 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.83 - 2026-11-02
+
+### Documentation
+
+- **Device evidence for the restored float MMVQ (RTX 4070 Laptop, sm_89, main `173d1a71`, 2026-11-02).** `cargo test --locked -p baracuda-kernels --features device-tests`, each test binary run directly under `scripts/gpu-run.ps1`: `gguf_mmvq_smoke` 2/2, `mmvq_f16_bf16_smoke` 6/6, `mmvq_strided_smoke` 10/10, `mmvq_ncols64_decline` 5/5, `mmvq_launcher_width_decline` 2/2; 25 ran, 25 passed, 0 failed, 0 ignored. Without `--features device-tests` these binaries report `ok. 0 passed` (vacuous), so the ran count matters.
+- Workspace 0.1.0-alpha.82 -> alpha.83. Docs only; no code change.
+
 ## 0.1.0-alpha.82 - 2026-11-02
 
 ### Changed
