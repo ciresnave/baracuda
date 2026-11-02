@@ -16,6 +16,14 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.81 - 2026-11-02
+
+### Fixed
+
+- **Version-bump collateral repaired.** The alpha.77->78 and alpha.78->79 bumps used a blind `alpha.OLD -> alpha.NEW` replace and rewrote historical text: Fuel's bisect and pin records (`docs/gap-001-emitter-exoneration.md`, `docs/design/2026-08-06-unpopped-extraction-plan.md`), `alpha.78 all-zero` comments in five emitter/bench test and example files, and two lines of `OP-MATRIX.md`. All restored to their pre-bump text (taken from git, `git show c7a659ae`). Docs/comments only; no code, kernel or ABI change.
+- New `scripts/bump-version.py OLD NEW` replaces only exact `version = "0.1.0-alpha.OLD"` lines in tracked `Cargo.toml`/`Cargo.lock` and the three present-tense current-version statements; `scripts/test_bump_version.py` (run in CI) fails on a blind replace.
+- Workspace 0.1.0-alpha.80 -> alpha.81.
+
 ## 0.1.0-alpha.80 - 2026-11-02
 
 ### Added

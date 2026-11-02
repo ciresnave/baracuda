@@ -113,6 +113,13 @@ jobs:
           PY="$(command -v python3 || command -v python)"
           "$PY" --version
           "$PY" scripts/check-crate-licences.py
+      # Version-bump guard: scripts/bump-version.py must replace only the exact current version;
+      # the test fails on a blind `alpha.OLD -> alpha.NEW` replace (alpha.76-79 corrupted history that way).
+      - name: version-bump script tests
+        shell: bash
+        run: |
+          PY="$(command -v python3 || command -v python)"
+          "$PY" -m unittest discover -s scripts -p 'test_*.py'
       # C-ABI guard (API-freeze R4): ABI_VERSION (lib.rs) == BARACUDA_KERNELS_ABI_VERSION (header),
       # abi/abi-manifest.tsv == the exported symbols in the sources, and no symbol removed or changed
       # against the base commit without bumping ABI_VERSION. See the script header for what it cannot see.

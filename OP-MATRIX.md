@@ -3,11 +3,11 @@
 Baseline generated for **baracuda-kernels** on **RTX 4070 (sm_89)**; the body
 has since been re-annotated with the **baracuda-kernelgen op-matrix audit**
 (rounds through **2026-07-03**). The workspace was at **0.1.0-alpha.28**
-(2026-10-25; the workspace is now at 0.1.0-alpha.80). The body reflects the alpha.79 line, with these items re-checked
+(2026-10-25; the workspace is now at 0.1.0-alpha.81). The body reflects the alpha.77 line, with these items re-checked
 against the code at `origin/main` on 2026-10-25 (ROADMAP SA-37): the
 `RepeatPlan` / `InterpolatePlan` dtypes, the `ArgsortPlan` row length, adaptive
 pool, and strided siblings. The other rows have **not** been re-audited for
-alpha.79 onward, except that the Plans with no row at all are listed
+alpha.78 onward, except that the Plans with no row at all are listed
 in the last section (SA-37 coverage pass, alpha.65). `baracuda-kernelgen` has since left this repo (it lives in
 `unpopped` / `unpopped-vocab`), so read its "Kernelgen audit" notes below as
 historical.

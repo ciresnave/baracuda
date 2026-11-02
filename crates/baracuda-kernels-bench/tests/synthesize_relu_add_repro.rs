@@ -1,4 +1,4 @@
-//! ROOT-CAUSE repro for the alpha.79 synthesized-relu(add) all-zero (Fuel bisect:
+//! ROOT-CAUSE repro for the alpha.78 synthesized-relu(add) all-zero (Fuel bisect:
 //! 76/77 PASS, 78 FAIL). Unlike alpha78_relu_add_ondevice.rs (which drives the
 //! `generate` path), this drives the ACTUAL path Fuel uses — `synthesize`
 //! (region → region_to_op → build_plan → generate) — and launches each result
@@ -42,7 +42,7 @@ enum Outcome {
     /// `synthesize` returned Err — no kernel produced.
     Declined,
     /// Synthesized a non-`_scalar` (vectorized) kernel — Fuel's scalar-only
-    /// launcher declines it (this is the alpha.79 launch-path case).
+    /// launcher declines it (this is the alpha.78 launch-path case).
     NonScalar,
     /// Launched a `_scalar` kernel AND asserted it byte-correct below.
     Launched,
@@ -167,7 +167,7 @@ fn run_case(
 
     // THE CORRECTNESS GUARANTEE (previously only PRINTED — the defect this guard
     // carried): a _scalar kernel that launches MUST write relu(a+b) exactly. The
-    // alpha.79 all-zero was Fuel's scalar-only launcher DECLINING a vectorized
+    // alpha.78 all-zero was Fuel's scalar-only launcher DECLINING a vectorized
     // kernel — a launch-path bug, not the emitter. A _scalar kernel that launches
     // here has no such excuse: never-written lanes or byte-wrongness = an emitter
     // regression, and the test must FAIL, not print "WRONG" and report ok.

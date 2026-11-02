@@ -6,7 +6,7 @@
 //! NaN-propagation, the precision-first reduction). Integer emission is covered
 //! only by SOURCE-STRING goldens — the exact same "bytes are pinned, but nothing
 //! proved the LAUNCHED kernel writes the right answer" shape that let the
-//! alpha.79 all-zero ship. No emitter-generated *integer* kernel has ever been
+//! alpha.78 all-zero ship. No emitter-generated *integer* kernel has ever been
 //! run end-to-end on real hardware. This closes that.
 //!
 //! Scope (deliberately narrow — the recon that motivated this test showed the
