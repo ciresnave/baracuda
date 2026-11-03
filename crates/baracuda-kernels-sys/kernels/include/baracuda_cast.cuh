@@ -82,8 +82,15 @@ template <> __device__ __forceinline__ __nv_bfloat16   cast_value<__nv_bfloat16,
 
 // Arithmetic source -> __half (any TIn except __half itself, which is
 // handled above).
+//
+// double -> half/bf16 and the 32/64-bit integer -> bf16 casts use the direct
+// single-rounding intrinsics. Going through float first rounds TWICE (double or
+// a >24-bit integer is rounded to float, then float to half/bf16), and when the
+// float lands exactly on a half/bf16 tie, ties-to-even can pick the wrong
+// neighbour (1 + 2^-11 + 2^-40 -> 1.0, correct 1.0009765625). Integer -> half
+// is exact in float for every value that is finite in half (<= 65504).
 template <> __device__ __forceinline__ __half cast_value<float, __half>(float x)        { return __float2half(x); }
-template <> __device__ __forceinline__ __half cast_value<double, __half>(double x)      { return __float2half(static_cast<float>(x)); }
+template <> __device__ __forceinline__ __half cast_value<double, __half>(double x)      { return __double2half(x); }
 template <> __device__ __forceinline__ __half cast_value<int8_t, __half>(int8_t x)      { return __float2half(static_cast<float>(x)); }
 template <> __device__ __forceinline__ __half cast_value<int16_t, __half>(int16_t x)    { return __float2half(static_cast<float>(x)); }
 template <> __device__ __forceinline__ __half cast_value<int32_t, __half>(int32_t x)    { return __float2half(static_cast<float>(x)); }
@@ -93,13 +100,13 @@ template <> __device__ __forceinline__ __half cast_value<uint32_t, __half>(uint3
 
 // Arithmetic source -> __nv_bfloat16.
 template <> __device__ __forceinline__ __nv_bfloat16 cast_value<float, __nv_bfloat16>(float x)        { return __float2bfloat16(x); }
-template <> __device__ __forceinline__ __nv_bfloat16 cast_value<double, __nv_bfloat16>(double x)      { return __float2bfloat16(static_cast<float>(x)); }
+template <> __device__ __forceinline__ __nv_bfloat16 cast_value<double, __nv_bfloat16>(double x)      { return __double2bfloat16(x); }
 template <> __device__ __forceinline__ __nv_bfloat16 cast_value<int8_t, __nv_bfloat16>(int8_t x)      { return __float2bfloat16(static_cast<float>(x)); }
 template <> __device__ __forceinline__ __nv_bfloat16 cast_value<int16_t, __nv_bfloat16>(int16_t x)    { return __float2bfloat16(static_cast<float>(x)); }
-template <> __device__ __forceinline__ __nv_bfloat16 cast_value<int32_t, __nv_bfloat16>(int32_t x)    { return __float2bfloat16(static_cast<float>(x)); }
-template <> __device__ __forceinline__ __nv_bfloat16 cast_value<int64_t, __nv_bfloat16>(int64_t x)    { return __float2bfloat16(static_cast<float>(x)); }
+template <> __device__ __forceinline__ __nv_bfloat16 cast_value<int32_t, __nv_bfloat16>(int32_t x)    { return __int2bfloat16_rn(x); }
+template <> __device__ __forceinline__ __nv_bfloat16 cast_value<int64_t, __nv_bfloat16>(int64_t x)    { return __ll2bfloat16_rn(static_cast<long long>(x)); }
 template <> __device__ __forceinline__ __nv_bfloat16 cast_value<uint8_t, __nv_bfloat16>(uint8_t x)    { return __float2bfloat16(static_cast<float>(x)); }
-template <> __device__ __forceinline__ __nv_bfloat16 cast_value<uint32_t, __nv_bfloat16>(uint32_t x)  { return __float2bfloat16(static_cast<float>(x)); }
+template <> __device__ __forceinline__ __nv_bfloat16 cast_value<uint32_t, __nv_bfloat16>(uint32_t x)  { return __uint2bfloat16_rn(x); }
 
 // Contig cast kernel. One thread per element, grid-cap loop to handle
 // arbitrarily large numel.

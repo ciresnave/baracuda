@@ -7569,16 +7569,21 @@ pub fn emit_dtype_promote_helper() -> String {
             "__device__ __forceinline__ {cty} store_from_f32_{tag}(float v) {{ return {}; }}\n",
             demote_store_f32(kind, "v")
         ));
-        // f64 lane — round-trips through f32 (no direct double↔half intrinsic;
-        // the extra f32 hop is lossless relative to the half mantissa), matching
-        // the hand-written helper.
+        // f64 lane — loads widen through f32 (exact); stores narrow with the
+        // direct single-rounding intrinsic. Narrowing through f32 first rounds
+        // twice and picks the wrong neighbour when the f32 value lands on a
+        // half / bf16 tie (alpha.88 fix; the old comment called the hop lossless).
         s.push_str(&format!(
             "__device__ __forceinline__ double load_as_f64_{tag}({cty} x) {{ return (double){}; }}\n",
             promote_load_f32(kind, "x")
         ));
         s.push_str(&format!(
             "__device__ __forceinline__ {cty} store_from_f64_{tag}(double v) {{ return {}; }}\n\n",
-            demote_store_f32(kind, "(float)v")
+            if kind == ElementKind::F16 {
+                "__double2half(v)"
+            } else {
+                "__double2bfloat16(v)"
+            }
         ));
     }
     s.push_str("}}}  // namespace baracuda::dtype::gen\n");
@@ -8368,9 +8373,7 @@ mod tests {
         assert!(
             src.contains("double load_as_f64_f16(__half x) { return (double)__half2float(x); }")
         );
-        assert!(
-            src.contains("__half store_from_f64_f16(double v) { return __float2half((float)v); }")
-        );
+        assert!(src.contains("__half store_from_f64_f16(double v) { return __double2half(v); }"));
     }
 
     /// Regenerate the generated dtype-promote helper for the on-device validator.
