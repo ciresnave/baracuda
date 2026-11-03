@@ -16,6 +16,13 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.86 - 2026-11-03
+
+### Changed
+
+- **SA-31 Tier 3 device evidence (docs only; no code change).** `HyperConnectionPlan<f16>` / `HyperConnectionPlan<bf16>` (alpha.85) are now device-verified on an RTX 4070 (sm_89), run under `scripts/gpu-run.ps1` from `main` at d98a0d0b, built with `cargo test --locked -p baracuda-kernels --features mhc,device-tests --test hyper_connection_half_smoke --test hyper_connection_smoke --no-run` (CARGO_BUILD_JOBS=4; cold CUDA forge 114m15s). `tests/hyper_connection_half_smoke.rs`: 3 ran, 3 passed (f16 and bf16 match the f32 path on the widened inputs; a forward-only plan has no backward). `tests/hyper_connection_smoke.rs` (f32 control: f64 reference and central-difference backward): 5 ran, 5 passed. `cargo test --locked -p baracuda-kernels --features mhc,device-tests --lib hyper_connection` (device-free): 5 ran, 5 passed. This closes the alpha.85 entry's "Not device-run in this entry yet".
+- Workspace 0.1.0-alpha.85 -> alpha.86.
+
 ## 0.1.0-alpha.85 - 2026-11-02
 
 ### Added
