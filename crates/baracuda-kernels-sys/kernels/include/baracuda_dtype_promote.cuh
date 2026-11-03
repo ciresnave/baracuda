@@ -85,9 +85,12 @@ __device__ __forceinline__ __nv_bfloat16 store_from_f32<__nv_bfloat16>(float v) 
 // =============================================================================
 //
 // Used by kernels that accumulate in double (f32 inputs needing extra
-// headroom, or f64 storage). half / bf16 round-trip through f32
-// intrinsics — there is no direct double↔half device intrinsic, and the
-// extra f32 hop is lossless relative to the half mantissa anyway.
+// headroom, or f64 storage). Loads widen half / bf16 through f32 (exact).
+// Stores narrow with the direct single-rounding `__double2half` /
+// `__double2bfloat16`: narrowing through f32 first would round twice and can
+// pick the wrong neighbour when the f32 value lands on a half / bf16 tie
+// (1 + 2^-11 + 2^-40 -> 1.0, correct 1.0009765625). Fixed in alpha.88; the
+// earlier comment here claiming the f32 hop was lossless was wrong.
 
 template <typename T>
 __device__ __forceinline__ double load_as_f64(T x) { return static_cast<double>(x); }
@@ -107,12 +110,12 @@ __device__ __forceinline__ T store_from_f64(double v) { return static_cast<T>(v)
 
 template <>
 __device__ __forceinline__ __half store_from_f64<__half>(double v) {
-    return __float2half(static_cast<float>(v));
+    return __double2half(v);
 }
 
 template <>
 __device__ __forceinline__ __nv_bfloat16 store_from_f64<__nv_bfloat16>(double v) {
-    return __float2bfloat16(static_cast<float>(v));
+    return __double2bfloat16(v);
 }
 
 // =============================================================================
