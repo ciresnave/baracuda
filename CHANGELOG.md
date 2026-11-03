@@ -16,6 +16,13 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.87 - 2026-11-03
+
+### Documentation
+
+- **Patent claim charts, part 2 (`docs/PATENT-SWEEP.md`; docs only, no code, no device run; PM [TASK] patent-claim-charts).** Independent claims read in FULL and charted element by element against `origin/main` 0603c483 for 11 patents: the three Hits rows that had been read only as tool summaries (US 8,539,204, US 10,067,910, US 9,183,001) and eight of the PeakStream / Google family (US 8,108,844, 8,136,104, 8,443,349, 8,136,102, 8,443,348, 8,745,603, plus 8,458,680 re-checked and 8,375,368 charted for baracuda). Verdicts: design-around for 8,539,204 and the Google patents except 8,375,368; clear for 10,067,910, 9,183,001 and 8,375,368. Also a delta read of the alpha.43-86 changelog: two mechanisms are new and unswept (the cuDNN algorithm picker, and the mHC Sinkhorn adjoint with its half-precision cast wrapper). The integer-kernel patents (board 307) are excluded. **Expiry corrected from each patent's own Google page:** US 8,458,680, 8,584,106 (heading error in this file), 8,443,349 and 8,745,603 expire 2027-03-05; the claims tool prints the parent's date under a continuation. Not legal advice.
+- Workspace 0.1.0-alpha.86 -> alpha.87.
+
 ## 0.1.0-alpha.86 - 2026-11-03
 
 ### Changed
