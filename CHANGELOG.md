@@ -16,6 +16,11 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.89 - 2026-11-04
+
+### Docs
+- `docs/PATENT-SWEEP.md`: searches for the two mechanisms the alpha.43-86 delta left unswept (cuDNN forward-algorithm picker; mHC Sinkhorn adjoint and half widen/run/narrow wrapper). No patent found for either; one family (Intel US10467795B2) flagged needs-review because its claims could not be read. Weak nulls from a general web search. Docs only; not legal advice.
+
 ## 0.1.0-alpha.88 - 2026-11-03
 
 ### Fixed
