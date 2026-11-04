@@ -16,7 +16,7 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
-## Unreleased (version to be allocated by the PM)
+## 0.1.0-alpha.90 - 2026-11-04
 
 ### Tests / Docs
 - `baracuda-kernels`: `tests/conv2d_picker_measure.rs` now covers 13 shapes (adds four 1x1 shapes, grouped, depthwise and dilation 2 / 4) and repeats each 5 times, printing min / median (ROADMAP SA-49 items 4 and 5). Results, command and caveats: `docs/conv2d-picker-measurements.md`. f32 reproduces alpha.62 (the 1x1 256->64 56x56 regression is 0.20x, but the other four 1x1 shapes win 1.5x to 2.0x); the half-precision numbers do not reproduce alpha.64 and run 4x to 7x slower in absolute terms, so they are unresolved; the picker stays opt-in. No library code change.
