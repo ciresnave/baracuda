@@ -16,10 +16,16 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.91 - 2026-11-04
+
+### Tests / Docs
+- `baracuda-kernels`: `tests/conv2d_picker_measure.rs` now runs a 500 ms untimed busy warm-up before each timed loop and repeats each (shape, dtype, mode) 3 times. The test's host side (debug-build data fill, upload, download) left the GPU idle long enough to drop to P8 (210 to 390 MHz in a sampled run), and the 20-run timed loop (about 12 ms) finished before the clocks ramped, so every timing in the alpha.90 / #323 tables was taken at a low and varying clock. baracuda#324's half-precision slowdown (f16 3x3 64ch pinned 3.8 ms vs alpha.64's 0.59 ms) was this, not a device change: the 5 alpha.64 shapes alone reproduced alpha.64 (0.599 ms), and with the warm-up the same row reads 0.371 ms.
+- **Reversed: the picker claims of alpha.90 (#323).** With the clock held (P0, 2550 MHz for 22 of 37 samples, other samples P0 1170 to 2565 MHz and P3 to P5), the picker wins f32 on 9 of 13 shapes (3x3 1.18x to 1.85x, dilated 3x3 1.3x to 1.4x) and loses 4 (1x1 256->64 0.18x, 64->256 0.80x, 512->128 0.57x, 1024->256 0.65x): three of the four 1x1 shapes alpha.90 called 1.5x to 2.0x wins lose, and dilated 3x3 wins 1.3x to 1.4x, not 2.1x to 2.3x. Half precision is at or above 1.0x on 1 of 13 shapes in each of f16 and bf16 (most 0.3x to 0.99x; dilated bf16 0.21x and 0.33x), which is what alpha.64 found, not the "mostly at or above 1.0x" of alpha.90. Absolute times are lower than alpha.62 / alpha.64 for the same shapes (f32 3x3 64ch pinned 0.263 ms vs 0.40 ms), so those entries' absolute numbers were also low-clock. The picker stays opt-in and nothing supports a default flip. One device, one run of 3 samples; min / median differ by up to 1.6x on some rows. Command, conditions and tables: `docs/conv2d-picker-measurements.md`. ROADMAP SA-49 (1), (4), (5) updated. No library code change.
+
 ## 0.1.0-alpha.90 - 2026-11-04
 
 ### Tests / Docs
-- `baracuda-kernels`: `tests/conv2d_picker_measure.rs` now covers 13 shapes (adds four 1x1 shapes, grouped, depthwise and dilation 2 / 4) and repeats each 5 times, printing min / median (ROADMAP SA-49 items 4 and 5). Results, command and caveats: `docs/conv2d-picker-measurements.md`. f32 reproduces alpha.62 (the 1x1 256->64 56x56 regression is 0.20x, but the other four 1x1 shapes win 1.5x to 2.0x); the half-precision numbers do not reproduce alpha.64 and run 4x to 7x slower in absolute terms, so they are unresolved; the picker stays opt-in. No library code change.
+- `baracuda-kernels`: `tests/conv2d_picker_measure.rs` now covers 13 shapes (adds four 1x1 shapes, grouped, depthwise and dilation 2 / 4) and repeats each 3 times (alpha.91; 5 here), printing min / median (ROADMAP SA-49 items 4 and 5). The timings this entry first reported were taken with the GPU at a low clock and are replaced by alpha.91's: see `docs/conv2d-picker-measurements.md`. No library code change.
 
 ## 0.1.0-alpha.89 - 2026-11-04
 
