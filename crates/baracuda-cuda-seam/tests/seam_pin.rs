@@ -20,29 +20,41 @@ fn requirement(dep: &str) -> String {
         .unwrap_or_else(|| panic!("no `{dep} = \"...\"` line in Cargo.toml"))
 }
 
+/// A caret requirement: an explicit `^` or a bare version, never `=`, `~`, `<`, `>` or `*`.
+fn is_caret(req: &str) -> bool {
+    let rest = req.strip_prefix('^').unwrap_or(req);
+    rest.chars().next().is_some_and(|c| c.is_ascii_digit())
+}
+
 #[test]
 fn seam_crates_use_caret_requirements() {
     for dep in ["fuel-kernel-seam-types", "fuel-kernel-seam"] {
         let req = requirement(dep);
         assert!(
-            req.chars().next().is_some_and(|c| c.is_ascii_digit()),
-            "{dep} must use a caret requirement (a bare version), found `{req}`"
+            is_caret(&req),
+            "{dep} must use a caret requirement, found `{req}`"
+        );
+        assert_eq!(
+            req, "^0.43",
+            "{dep} must follow Fuel's 0.43 seam line (the PM's pin for alpha.94)"
         );
     }
 }
 
 #[test]
 fn the_requirement_parser_sees_an_exact_pin() {
-    // Control: the helper would catch `=0.26.12` (so the test above is not vacuous).
-    let manifest = "fuel-kernel-seam = \"=0.26.12\"";
+    // Control: the helper would catch `=0.43.0` (so the test above is not vacuous).
+    let manifest = "fuel-kernel-seam = \"=0.43.0\"";
     let line = manifest.trim();
     let rest = line
         .strip_prefix("fuel-kernel-seam")
         .and_then(|r| r.trim_start().strip_prefix('='))
         .map(|r| r.trim().trim_matches('"').to_owned())
         .unwrap();
-    assert_eq!(rest, "=0.26.12");
-    assert!(!rest.chars().next().unwrap().is_ascii_digit());
+    assert_eq!(rest, "=0.43.0");
+    assert!(!is_caret(&rest));
+    assert!(is_caret("^0.43") && is_caret("0.43.0"));
+    assert!(!is_caret("~0.43") && !is_caret("*"));
 }
 
 /// `BaracudaSynthesizer` implements the `Synthesizer` trait of the `fuel-kernel-seam` this
