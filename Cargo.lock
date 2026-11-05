@@ -1161,9 +1161,9 @@ dependencies = [
 
 [[package]]
 name = "fuel-kernel-seam"
-version = "0.42.0"
+version = "0.43.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c3e0682afab25031e8917e4ed4e4e95ff8d46b6cf41ce57e179082dfe9f68d93"
+checksum = "0d756619ad6d98c0bbfe824a62c3bb966a81812904997853c337d42829a6ff3b"
 dependencies = [
  "fuel-kernel-seam-types",
  "unpopped-vocab",
@@ -1171,9 +1171,9 @@ dependencies = [
 
 [[package]]
 name = "fuel-kernel-seam-types"
-version = "0.42.0"
+version = "0.43.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "58b586770f1347a3a13b26ff80a1a1cc7c4aedcc9860e75aa6f14a56d85954c2"
+checksum = "559b22e88d9634f6a72dea87177f5e7ad4e84b4e64b20349697d572464dc1e59"
 
 [[package]]
 name = "futures-core"
