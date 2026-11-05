@@ -24,6 +24,12 @@ pub use cuda::{Cuda, emit_cast_helper, emit_coord_unravel_helper, emit_dtype_pro
 /// module doc comment for why.
 pub mod cfamily_shadow;
 
+/// Spells one `cuda-ptx` inline-asm `ExternDecl` body as a CUDA statement (U11). Default-off feature.
+#[cfg(feature = "extern_asm_cuda")]
+pub mod extern_asm;
+#[cfg(feature = "extern_asm_cuda")]
+pub use extern_asm::{ExternError, extern_asm_cuda};
+
 /// The CUDA spellings of `Fma`, `Cast` and `Bitcast` (unpopped 0.24.0).
 mod typed;
 
