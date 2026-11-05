@@ -21,6 +21,9 @@ use half::{bf16, f16};
 
 const ITERS: u32 = 20;
 
+/// Untimed busy warm-up before each measurement, long enough for the GPU to leave its idle P-state.
+const WARMUP: std::time::Duration = std::time::Duration::from_millis(500);
+
 /// `(label, n, c_in, h, w, c_out, kernel, pad, stride, dilation, groups)`.
 type Shape = (
     &'static str,
@@ -37,7 +40,7 @@ type Shape = (
 );
 
 /// Repeat runs per (shape, dtype); the table reports min and median over them (SA-49 item 5).
-const REPEATS: usize = 5;
+const REPEATS: usize = 3;
 
 const SHAPES: [Shape; 13] = [
     ("3x3 s1 64ch 56x56", 8, 64, 56, 56, 64, 3, 1, 1, 1, 1),
@@ -152,8 +155,13 @@ fn run<T: Element + 'static>(
         };
         p.run_fw(stream, workspace, args).expect("run_fw");
     };
-    once();
-    stream.synchronize().expect("warm-up sync");
+    // Busy warm-up: the host side of this test (debug-build data fill, upload, download) leaves the GPU idle long
+    // enough between runs to drop to a low P-state, and a 20-iteration timed loop is too short to ramp the clocks back.
+    let warm = Instant::now();
+    while warm.elapsed() < WARMUP {
+        once();
+        stream.synchronize().expect("warm-up sync");
+    }
     let t = Instant::now();
     for _ in 0..ITERS {
         once();
