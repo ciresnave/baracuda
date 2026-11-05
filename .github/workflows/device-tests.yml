@@ -77,7 +77,7 @@ jobs:
         shell: bash
         env:
           BARACUDA_RESULTS_FILE: device-test-results-cuda-emit.json
-        run: cargo gpu-test -p baracuda-cuda-emit --features nvrtc,device-tests
+        run: cargo gpu-test -p baracuda-cuda-emit --features nvrtc,device-tests,extern_asm_cuda
       - name: cargo gpu-test (baracuda-cuda-seam, device-tests)
         shell: bash
         env:
