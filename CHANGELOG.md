@@ -16,6 +16,15 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.93 - 2026-11-05
+
+### Changed (**breaking** for `baracuda-cuda-emit` / `baracuda-cuda-parse`: they move to 0.43.0 with `unpopped` 0.43)
+- The `unpopped` family moves 0.40.0 -> 0.43.2 (`unpopped`, `unpopped-vocab`, `unpopped-cpu-c`), `baracuda-cuda-emit` and `baracuda-cuda-parse` 0.40.0 -> 0.43.0 (MAJOR.MINOR follow Unpopped), `fuel-kernel-seam` and `fuel-kernel-seam-types` 0.35.2 -> 0.42.0 (the first Fuel seam on `unpopped-vocab ^0.43.2`), and the `vulkane-slang-emit` / `-parse` dev-dependencies 0.20.2 -> 0.21.0. The graph holds one copy of `unpopped-vocab` (`cargo tree -d --workspace -e normal,dev,build`: no duplicates). `baracuda-cuda-seam` needed no source change against Fuel's 0.42.0.
+- **Behavioural change (panic -> error):** a `RowReduce` plan with a `Prod` stage used to panic (`unpopped` 0.40's plan gate panicked; with 0.43.2 the gate admits it and the emitter's own backstop `panic!` would have fired). `baracuda-cuda-emit` now returns a typed `LowerError::UnsupportedOp` naming the stage. No emitted output changes for valid inputs.
+- **Declined, not supported:** `unpopped` 0.43 made `ReduceOp` `#[non_exhaustive]` and added seven variants, `And`, `Or`, `Xor`, `MaxNum`, `MinNum`, `ArgMax` and `ArgMin`. The CUDA backend has no spelling for any of them; a plan that carries one is declined with a typed `LowerError::UnsupportedOp` ("no CUDA spelling for ReduceOp::...") from each of the 13 `ReduceOp` matches in `src/cuda.rs` (reduction, row-reduce, scan, window), never a panic. A new test covers each of the seven at the dtypes the plan gate admits. `scan_identity` and `emit_block_scanners` (private) now return `Result` to carry the decline; a new `sum_identity` holds the additive identity literal.
+- Test expectation updated for `unpopped` 0.43.2's wording of the integer-`Mean` refusal ("an integer Mean reduction has no defined semantics").
+- Evidence (debug build, `DOCS_RS=1`): `baracuda-cuda-emit` lib 333 passed; `backend_declines` 3, `fuzz` 5, `contract` 50, `jit` 22, `kernelgen_cli` 3, `lift` 2, `link` 2, `new_node_declines` 1; `baracuda-cuda-parse` `convert` 14; `baracuda-cuda-seam` lib 17 and `seam_pin` 3. The feature-gated device targets were not run.
+
 ## 0.1.0-alpha.92 - 2026-11-05
 
 Docs only. No code, no device run.
