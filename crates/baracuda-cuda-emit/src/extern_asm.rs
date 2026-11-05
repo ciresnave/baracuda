@@ -136,6 +136,18 @@ fn cuda_operand(decl: &ExternDecl, n: usize) -> Result<usize, ExternError> {
     }
 }
 
+/// Appends `c` escaped for a C string literal (`%` doubles; a carriage return is dropped).
+fn push_escaped(out: &mut String, c: char) {
+    match c {
+        '%' => out.push_str("%%"),
+        '\\' => out.push_str("\\\\"),
+        '"' => out.push_str("\\\""),
+        '\n' => out.push_str("\\n\\t"),
+        '\r' => {}
+        _ => out.push(c),
+    }
+}
+
 /// Rewrites Unpopped's operand numbering (`{i}` params first, then results) to CUDA's (`%j` outputs first), and escapes
 /// the text for a C string literal. `%` doubles; `{` not followed by digits and `}` is left as it is (PTX scope braces).
 fn renumber(decl: &ExternDecl, template: &str) -> Result<String, ExternError> {
@@ -147,14 +159,7 @@ fn renumber(decl: &ExternDecl, template: &str) -> Result<String, ExternError> {
             rest = &rest[len..];
             continue;
         }
-        match c {
-            '%' => out.push_str("%%"),
-            '\\' => out.push_str("\\\\"),
-            '"' => out.push_str("\\\""),
-            '\n' => out.push_str("\\n\\t"),
-            '\r' => {}
-            _ => out.push(c),
-        }
+        push_escaped(&mut out, c);
         rest = &rest[c.len_utf8()..];
     }
     Ok(out)
@@ -178,61 +183,75 @@ pub fn extern_asm_cuda(
     args: &[String],
     results: &[String],
 ) -> Result<String, ExternError> {
-    let body = decl
-        .bodies
-        .iter()
-        .find(|b| b.target == CUDA_PTX_TARGET)
-        .ok_or_else(|| ExternError::NoBody {
-            decl: decl.name.clone(),
-        })?;
-    let BodyText::Asm {
-        template,
-        constraints,
-    } = &body.body
-    else {
-        return Err(ExternError::NotAsm {
-            decl: decl.name.clone(),
-        });
-    };
-    if !decl.effects.reads.is_empty()
-        || !decl.effects.writes.is_empty()
-        || decl.effects.sync.is_some()
-    {
-        return Err(ExternError::UnsupportedEffect {
-            decl: decl.name.clone(),
-        });
-    }
-    if args.len() != decl.params.len() || results.len() != decl.results.len() {
-        return Err(ExternError::BadOperands {
-            decl: decl.name.clone(),
-            why: format!(
-                "{} args and {} results given, {} params and {} results declared",
-                args.len(),
-                results.len(),
-                decl.params.len(),
-                decl.results.len()
-            ),
-        });
-    }
+    let (template, constraints) = asm_body(decl)?;
+    check_operands(decl, args, results)?;
     let (outs, ins) = split_constraints(decl, constraints)?;
     let text = renumber(decl, template)?;
-    let list = |cs: &[String], xs: &[String]| {
-        cs.iter()
-            .zip(xs)
-            .map(|(c, x)| format!("\"{c}\"({x})"))
-            .collect::<Vec<_>>()
-            .join(", ")
-    };
     let kw = if decl.effects.volatile || !decl.effects.pure {
         "asm volatile"
     } else {
         "asm"
     };
-    let outs = list(
+    let outs = operand_list(
         &outs.iter().map(|c| format!("={c}")).collect::<Vec<_>>(),
         results,
     );
-    Ok(format!("{kw}(\"{text}\" : {outs} : {});", list(&ins, args)))
+    Ok(format!(
+        "{kw}(\"{text}\" : {outs} : {});",
+        operand_list(&ins, args)
+    ))
+}
+
+/// The `cuda-ptx` asm `(template, constraints)` of `decl`, refusing a missing, non-asm or effectful body.
+fn asm_body(decl: &ExternDecl) -> Result<(&str, &str), ExternError> {
+    let name = || decl.name.clone();
+    let body = decl
+        .bodies
+        .iter()
+        .find(|b| b.target == CUDA_PTX_TARGET)
+        .ok_or_else(|| ExternError::NoBody { decl: name() })?;
+    let BodyText::Asm {
+        template,
+        constraints,
+    } = &body.body
+    else {
+        return Err(ExternError::NotAsm { decl: name() });
+    };
+    let e = &decl.effects;
+    if !e.reads.is_empty() || !e.writes.is_empty() || e.sync.is_some() {
+        return Err(ExternError::UnsupportedEffect { decl: name() });
+    }
+    Ok((template, constraints))
+}
+
+/// Refuses an `args`/`results` count that does not match the declaration's signature.
+fn check_operands(
+    decl: &ExternDecl,
+    args: &[String],
+    results: &[String],
+) -> Result<(), ExternError> {
+    if args.len() == decl.params.len() && results.len() == decl.results.len() {
+        return Ok(());
+    }
+    Err(ExternError::BadOperands {
+        decl: decl.name.clone(),
+        why: format!(
+            "{} args and {} results given, {} params and {} results declared",
+            args.len(),
+            results.len(),
+            decl.params.len(),
+            decl.results.len()
+        ),
+    })
+}
+
+/// `"c"(x), "c"(x)` for paired constraints and C expressions.
+fn operand_list(cs: &[String], xs: &[String]) -> String {
+    cs.iter()
+        .zip(xs)
+        .map(|(c, x)| format!("\"{c}\"({x})"))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 #[cfg(test)]
@@ -375,6 +394,11 @@ mod tests {
             extern_asm_cuda(&popc(), &a, &[]),
             Err(ExternError::BadOperands { .. })
         ));
+    }
+
+    #[test]
+    fn bad_constraints_and_template_refused() {
+        let (a, r) = (s(&["x"]), s(&["r"]));
         for bad in ["=r", "r,=r", "=r,r,r", "=r,+r", "=r,"] {
             let mut d = popc();
             d.bodies[0].body = BodyText::Asm {
