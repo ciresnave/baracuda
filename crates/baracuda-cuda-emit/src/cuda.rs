@@ -2495,6 +2495,7 @@ fn emit_reduction(
         ReduceOp::Max => "max",
         ReduceOp::Min => "min",
         ReduceOp::Prod => "prod",
+        _ => return Err(unsupported_reduce_op(rop, "Reduction")),
     };
     // Precision-first (`MorePrecise` variant): force a `double` accumulator and
     // route through the serial per-output general nest (below), NOT the InnerContig
@@ -3059,6 +3060,7 @@ fn emit_reduction(
                     "        {acc} r = block_{suf}_{stem}(acc, has);\n"
                 ));
             }
+            _ => return Err(unsupported_reduce_op(rop, "Reduction")),
         }
         // The block_* helpers broadcast the result to all threads; thread 0 applies
         // the 0e post-expr (identity ⇒ byte-identical) and writes.
@@ -3293,6 +3295,7 @@ fn emit_reduction(
                 ],
             );
         }
+        _ => return Err(unsupported_reduce_op(rop, "Reduction")),
     }
     let finalized = if matches!(rop, ReduceOp::Mean) {
         // Mean divisor = product of the reduced extents (not just the last axis).
@@ -4760,13 +4763,14 @@ fn emit_row_reduce_impl(
         let pre = lower(&st.pre)?;
         s.push_str(&format!("        // stage {i}: {:?}\n", st.op));
         match st.op {
-            // Prod stages are rejected at the plan gate (`validate_row_reduce`);
-            // this is the independent emitter backstop (the 0a lesson: gate every
-            // layer). The fused row path has no block_prod cooperative reducer.
-            ReduceOp::Prod => panic!(
-                "cuda backend: RowReduce Prod stage is unsupported (0e adds Prod to \
-                 Access::Reduction only) — the plan gate should have refused this op"
-            ),
+            // The fused row path has no block_prod cooperative reducer. `unpopped` 0.43.2's plan gate
+            // admits a Prod stage (0.40 refused it), so this is now the refusal: a typed decline, not a panic.
+            ReduceOp::Prod => {
+                return Err(LowerError::UnsupportedOp {
+                    detail: "cuda backend: RowReduce Prod stage is unsupported (Prod is an                              Access::Reduction combiner only; the fused row path has no block_prod)"
+                        .to_string(),
+                });
+            }
             ReduceOp::Sum | ReduceOp::Mean => {
                 s.push_str(&format!("        {acc} acc{i} = {zero};\n"));
                 s.push_str(fold_open);
@@ -4832,6 +4836,7 @@ fn emit_row_reduce_impl(
                 };
                 s.push_str(&format!("        {acc} r{i} = {rfin};\n"));
             }
+            _ => return Err(unsupported_reduce_op(st.op, "RowReduce stage")),
         }
     }
 
@@ -5004,18 +5009,34 @@ fn narrow_extreme_lit(dt: ElementKind, is_max: bool) -> Option<String> {
     Some(format!("{from_bits}((unsigned short){bits})"))
 }
 
-fn scan_identity(sop: ReduceOp, dt: ElementKind) -> String {
+/// The typed decline for a [`ReduceOp`] this backend has no CUDA spelling for. `unpopped` 0.43 made the enum
+/// `#[non_exhaustive]` and added `And`, `Or`, `Xor`, `MaxNum`, `MinNum`, `ArgMax` and `ArgMin`; a plan that carries one
+/// must be declined, never panic and never emit a wrong reduction.
+fn unsupported_reduce_op(op: ReduceOp, ctx: &str) -> LowerError {
+    LowerError::UnsupportedOp {
+        detail: format!("cuda backend: {ctx} has no CUDA spelling for ReduceOp::{op:?}"),
+    }
+}
+
+/// The additive identity literal for `dt` (`0` / `0.0` / `0.0f`).
+fn sum_identity(dt: ElementKind) -> String {
     let int_acc = unpopped::plan::is_int_dtype(dt);
     let dbl = matches!(dt, ElementKind::F64 | ElementKind::F32Strict);
-    match sop {
-        ReduceOp::Sum => if int_acc {
-            "0"
-        } else if dbl {
-            "0.0"
-        } else {
-            "0.0f"
-        }
-        .to_string(),
+    if int_acc {
+        "0"
+    } else if dbl {
+        "0.0"
+    } else {
+        "0.0f"
+    }
+    .to_string()
+}
+
+fn scan_identity(sop: ReduceOp, dt: ElementKind) -> Result<String, LowerError> {
+    let int_acc = unpopped::plan::is_int_dtype(dt);
+    let dbl = matches!(dt, ElementKind::F64 | ElementKind::F32Strict);
+    Ok(match sop {
+        ReduceOp::Sum => sum_identity(dt),
         ReduceOp::Prod => if int_acc {
             "1"
         } else if dbl {
@@ -5028,7 +5049,8 @@ fn scan_identity(sop: ReduceOp, dt: ElementKind) -> String {
         ReduceOp::Max => type_extreme_lit(dt, true),
         ReduceOp::Min => type_extreme_lit(dt, false),
         ReduceOp::Mean => unreachable!("Scan rejects Mean at validate_scan"),
-    }
+        _ => return Err(unsupported_reduce_op(sop, "Scan identity")),
+    })
 }
 
 /// The type's extreme literal: `most_negative=true` → the minimum, else the
@@ -5097,16 +5119,23 @@ fn emit_scan(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKernel, Lowe
 /// LEFT = `a`) into `v` (own = LATER = RIGHT = `b`). `Sum`/`Prod` are commutative,
 /// so the shipped `v {assign} t` is UNCHANGED (byte-identical). `Max`/`Min` are
 /// NON-commutative: emit `v = comb(a = t, b = v)` — take RIGHT (`v`) iff it is NaN
-/// or STRICTLY beats LEFT (`t`); writing `comb(v, t)` here would flip the
+/// or STRICTLY beats LEFT (`t`); writing `comb(v, t)?` here would flip the
 /// signed-zero tie sign and let an earlier NaN win a later one. `is_int` drops the
 /// dead `v != v` NaN test for I32/I64 (no integer NaN; ties are bit-equal).
-fn emit_block_scanners(s: &mut String, acc: &str, sop: ReduceOp, stem: &str, is_int: bool) {
+fn emit_block_scanners(
+    s: &mut String,
+    acc: &str,
+    sop: ReduceOp,
+    stem: &str,
+    is_int: bool,
+) -> Result<(), LowerError> {
     let tag = match sop {
         ReduceOp::Sum => "sum",
         ReduceOp::Prod => "prod",
         ReduceOp::Max => "max",
         ReduceOp::Min => "min",
         ReduceOp::Mean => unreachable!("emit_block_scanners: Scan rejects Mean"),
+        _ => return Err(unsupported_reduce_op(sop, "Scan block scanner")),
     };
     let step = match sop {
         ReduceOp::Sum => "v += t;".to_string(),
@@ -5116,6 +5145,7 @@ fn emit_block_scanners(s: &mut String, acc: &str, sop: ReduceOp, stem: &str, is_
         ReduceOp::Max => "v = (v != v || v > t) ? v : t;".to_string(),
         ReduceOp::Min => "v = (v != v || v < t) ? v : t;".to_string(),
         ReduceOp::Mean => unreachable!("emit_block_scanners: Scan rejects Mean"),
+        _ => return Err(unsupported_reduce_op(sop, "Scan block scanner")),
     };
     s.push_str(&format!(
         "__device__ __forceinline__ {acc} warpscan_{tag}_{stem}({acc} v) {{\n\
@@ -5127,6 +5157,7 @@ fn emit_block_scanners(s: &mut String, acc: &str, sop: ReduceOp, stem: &str, is_
          \x20   return v;\n\
          }}\n\n"
     ));
+    Ok(())
 }
 
 /// Emit a scan kernel — the serial-fold BASE (`block = false`) or the cooperative
@@ -5256,7 +5287,7 @@ fn emit_scan_impl(
         .flatten()
     {
         Some(lit) => lit,
-        None => scan_identity(sop, plan.dtype),
+        None => scan_identity(sop, plan.dtype)?,
     };
 
     let combine_tag = match sop {
@@ -5265,6 +5296,7 @@ fn emit_scan_impl(
         ReduceOp::Max => "max",
         ReduceOp::Min => "min",
         ReduceOp::Mean => unreachable!("Scan rejects Mean at validate_scan"),
+        _ => return Err(unsupported_reduce_op(sop, "Scan")),
     };
     let dtag = dtype_tag(plan.dtype);
     let rev_suf = if reverse { "_rev" } else { "" };
@@ -5467,7 +5499,7 @@ fn emit_scan_impl(
     }
     s.push('\n');
     if block {
-        emit_block_scanners(&mut s, acc, sop, &stem, int_acc);
+        emit_block_scanners(&mut s, acc, sop, &stem, int_acc)?;
     }
     s.push_str(&format!("extern \"C\" __global__ void {name}(\n"));
     for i in 0..plan.n_inputs {
@@ -5565,6 +5597,7 @@ fn emit_scan_impl(
                 s.push_str("            }\n");
             }
             ReduceOp::Mean => unreachable!("Scan rejects Mean"),
+            _ => return Err(unsupported_reduce_op(sop, "Scan")),
         }
         s.push_str("        }\n"); // if threadIdx.x == 0
     } else {
@@ -5579,8 +5612,8 @@ fn emit_scan_impl(
         // take b iff b is NaN or STRICTLY beats a — the same rule as the warp step,
         // fully parenthesized so a nested comb (b = a ternary) stays atomic; int
         // drops the dead `v != v` NaN test.
-        let comb = |a: &str, b: &str| -> String {
-            match sop {
+        let comb = |a: &str, b: &str| -> Result<String, LowerError> {
+            Ok(match sop {
                 ReduceOp::Sum => format!("({a} + {b})"),
                 ReduceOp::Prod => format!("({a} * {b})"),
                 ReduceOp::Max if int_acc => format!("(({b} > {a}) ? {b} : {a})"),
@@ -5588,7 +5621,8 @@ fn emit_scan_impl(
                 ReduceOp::Max => format!("(({b} != {b} || {b} > {a}) ? {b} : {a})"),
                 ReduceOp::Min => format!("(({b} != {b} || {b} < {a}) ? {b} : {a})"),
                 ReduceOp::Mean => unreachable!("Scan rejects Mean"),
-            }
+                _ => return Err(unsupported_reduce_op(sop, "Scan")),
+            })
         };
         let tag = match sop {
             ReduceOp::Sum => "sum",
@@ -5596,6 +5630,7 @@ fn emit_scan_impl(
             ReduceOp::Max => "max",
             ReduceOp::Min => "min",
             ReduceOp::Mean => unreachable!("Scan rejects Mean"),
+            _ => return Err(unsupported_reduce_op(sop, "Scan")),
         };
         s.push_str(&format!("        __shared__ {acc} warp_buf[32];\n"));
         s.push_str(&format!("        __shared__ {acc} warp_off[32];\n"));
@@ -5640,29 +5675,29 @@ fn emit_scan_impl(
         s.push_str("                    warp_off[w] = run;\n");
         s.push_str(&format!(
             "                    run = {};\n",
-            comb("run", "warp_buf[w]")
+            comb("run", "warp_buf[w]")?
         ));
         s.push_str("                }\n");
         s.push_str("                chunk_tot = run;\n");
         s.push_str("            }\n");
         s.push_str("            __syncthreads();\n");
-        let chunk_incl = comb("warp_off[wid]", "winc");
-        let chunk_excl = comb("warp_off[wid]", "wexc");
+        let chunk_incl = comb("warp_off[wid]", "winc")?;
+        let chunk_excl = comb("warp_off[wid]", "wexc")?;
         if exclusive {
             s.push_str(&format!(
                 "            {acc} prefix = {};\n",
-                comb("carry", &chunk_excl)
+                comb("carry", &chunk_excl)?
             ));
         } else {
             s.push_str(&format!(
                 "            {acc} prefix = {};\n",
-                comb("carry", &chunk_incl)
+                comb("carry", &chunk_incl)?
             ));
         }
         s.push_str(&format!("            if (p < k) out[idx] = {stored};\n"));
         s.push_str(&format!(
             "            carry = {};\n",
-            comb("carry", "chunk_tot")
+            comb("carry", "chunk_tot")?
         ));
         s.push_str("            __syncthreads();\n");
         s.push_str("        }\n");
@@ -5928,6 +5963,7 @@ fn emit_window(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKernel, Lo
         ReduceOp::Max => "max",
         ReduceOp::Min => "min",
         ReduceOp::Prod => unreachable!("Window rejects Prod at validate_window"),
+        _ => return Err(unsupported_reduce_op(wop, "Window")),
     };
     let dtag = dtype_tag(plan.dtype);
     // count_include_pad only affects Mean; suffix it there so the two avg_pool
@@ -6167,7 +6203,7 @@ fn emit_window(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKernel, Lo
 
     match wop {
         ReduceOp::Sum | ReduceOp::Mean => {
-            let zero = scan_identity(ReduceOp::Sum, plan.dtype); // "0" / "0.0" / "0.0f"
+            let zero = sum_identity(plan.dtype); // "0" / "0.0" / "0.0f"
             s.push_str(&format!("        {acc} acc = {zero};\n"));
             s.push_str("        long long cnt = 0;\n");
             s.push_str(&format!("        for (int kk = 0; kk < {sz}; ++kk) {{\n"));
@@ -6225,7 +6261,7 @@ fn emit_window(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKernel, Lo
                 .flatten()
             {
                 Some(lit) => lit,
-                None => scan_identity(wop, plan.dtype),
+                None => scan_identity(wop, plan.dtype)?,
             };
             s.push_str(&format!("        {acc} best = {ident}; int have = 0;\n"));
             s.push_str(&format!("        for (int kk = 0; kk < {sz}; ++kk) {{\n"));
@@ -6250,6 +6286,7 @@ fn emit_window(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKernel, Lo
             s.push_str(&format!("        out[t] = {stored};\n"));
         }
         ReduceOp::Prod => unreachable!("Window rejects Prod"),
+        _ => return Err(unsupported_reduce_op(wop, "Window")),
     }
 
     s.push_str("    }\n}\n");
@@ -6348,7 +6385,7 @@ fn emit_im2col(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     let typed_zero = match plan.dtype {
         ElementKind::F16 => "__float2half(0.0f)".to_string(),
         ElementKind::Bf16 => "__float2bfloat16(0.0f)".to_string(),
-        _ => scan_identity(ReduceOp::Sum, plan.dtype),
+        _ => sum_identity(plan.dtype),
     };
 
     // ---- Preamble + signature. ----
@@ -11035,12 +11072,46 @@ got:
     }
 
     #[test]
-    #[should_panic(expected = "integer Mean is out of scope")]
+    #[should_panic(expected = "an integer Mean reduction has no defined semantics")]
     fn reduction_int_mean_is_rejected() {
         use unpopped::ir::ReduceOp;
         // int Mean is float-output (mixed-dtype) — rejected, not silently mis-typed.
         let op = OpDef::reduction("m", 1, &[ElementKind::I32], input(0), ReduceOp::Mean);
         let _ = generate(&op, &reduce_key(ElementKind::I32), &Cuda);
+    }
+
+    #[test]
+    fn reduce_ops_added_in_unpopped_0_43_are_declined_not_panicked() {
+        use ElementKind::{F32, I32, I64};
+        use unpopped::ir::ReduceOp;
+        // `unpopped` 0.43 added these seven; this backend has no CUDA spelling for any, so a plan carrying one
+        // must come back as an error, never a panic and never a kernel. Each op is given the dtypes the plan
+        // gate admits (bitwise folds on I32, index results as I64) so that it reaches this emitter's own decline.
+        let cases = [
+            (ReduceOp::And, I32, None),
+            (ReduceOp::Or, I32, None),
+            (ReduceOp::Xor, I32, None),
+            (ReduceOp::MaxNum, F32, None),
+            (ReduceOp::MinNum, F32, None),
+            (ReduceOp::ArgMax, F32, Some(I64)),
+            (ReduceOp::ArgMin, F32, Some(I64)),
+        ];
+        for (rop, dt, out_dt) in cases {
+            let mut op = OpDef::reduction("r", 1, &[dt], input(0), rop);
+            op.out_dtype = out_dt;
+            let a = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
+            let o = OperandDesc::new(1, &[256], &[1], out_dt.unwrap_or(dt), 256);
+            let key = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
+            let r = unpopped::try_generate(&op, &key, &Cuda);
+            // The emitter's own decline (not a plan-gate refusal): the typed `UnsupportedOp` naming the op.
+            let declined = matches!(&r, Err(unpopped::backend::LowerError::UnsupportedOp { detail })
+                if detail.contains("no CUDA spelling for ReduceOp::"));
+            assert!(
+                declined,
+                "{rop:?} must be declined by the emitter, got {:?}",
+                r.map(|k| k.name)
+            );
+        }
     }
 
     // ---- item 03: general (outer/middle/multi/keepdim/strided) reduction path ----
@@ -11669,11 +11740,11 @@ got:
     }
 
     #[test]
-    #[should_panic(expected = "Prod combiner is not supported in the fused")]
-    fn rowreduce_prod_stage_is_rejected_at_the_plan_gate() {
+    fn rowreduce_prod_stage_is_declined_with_a_typed_error() {
         use unpopped::ir::{ReduceOp, ReduceStage, reduced};
         // Prod is a 0e Access::Reduction combiner only; the fused row path has no
-        // block_prod, so a Prod stage misses honestly at the gate.
+        // block_prod, so a Prod stage must miss honestly: unpopped 0.40's plan gate panicked, 0.43.2's admits
+        // it, and the emitter now returns a typed `UnsupportedOp` (never a panic).
         let op = OpDef::row_reduce(
             "gp",
             1,
@@ -11684,7 +11755,13 @@ got:
             }],
             reduced(0),
         );
-        let _ = unpopped::build_plan(&op, &rr_key(ElementKind::F32, OpCategory::Softmax));
+        let err =
+            unpopped::try_generate(&op, &rr_key(ElementKind::F32, OpCategory::Softmax), &Cuda)
+                .expect_err("a RowReduce Prod stage must be declined");
+        assert!(
+            matches!(&err, unpopped::backend::LowerError::UnsupportedOp { detail } if detail.contains("RowReduce Prod stage")),
+            "{err}"
+        );
     }
 
     fn rr_key(dt: ElementKind, cat: OpCategory) -> unpopped_vocab::StructureKey {
