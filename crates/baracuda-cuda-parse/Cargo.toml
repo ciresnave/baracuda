@@ -45,7 +45,7 @@ tree-sitter-cuda = "0.21"
 # code depends on it.
 unpopped-vocab = { workspace = true }
 # The `SLANG` Frontend (left unpopped core in 0.36; Vulkane owns Slang) for the cross-language lift test.
-vulkane-slang-parse = "0.20.2"
+vulkane-slang-parse = "0.21.0"
 
 [lints]
 workspace = true
