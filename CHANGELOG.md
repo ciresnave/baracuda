@@ -27,6 +27,8 @@ at alpha.82.
   `gpu-run.ps1`, 2 passed: `fma.rn.f32` (6096 elements) and `popc.b32` (1009) bit-exact against the oracle running the
   reference kernels (NaNs compared as one value). Mutants caught on the device: `fma.rz`, popc reference off by a bit,
   swapped template, swapped operand numbering. The runner command and CI now enable the feature.
+- **`baracuda-cuda-seam`**: pins `fuel-kernel-seam` and `fuel-kernel-seam-types` to `^0.43` (was `0.42.0`) so Fuel's
+  0.43.0 resolves against it (Fuel adopts unpopped-vocab 0.43.2). The lockfile moves both to 0.43.0.
 
 ## 0.1.0-alpha.93 - 2026-11-05
 
