@@ -16,6 +16,13 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.92 - 2026-11-05
+
+Docs only. No code, no device run.
+
+### Docs
+- `docs/u11-ptx-leg-design.md`: design note for the PTX leg of Unpopped's typed `Extern` (ROADMAP U11 step 3): spell one `cuda-ptx` asm body (`extern_asm_cuda`, a new default-off feature of `baracuda-cuda-emit`) and compare `fma.rn.f32` and `popc.b32` with their reference kernels on the device, exact. Records that Unpopped 0.43.2 (published 2026-11-05) has `ExternDecl` and that `baracuda-cuda-emit` has no kernel-layer emitter; the build is blocked on the unpopped 0.43 family move, which waits on Fuel's seam crates and Vulkane's dev-dependencies. PM rulings of 2026-11-05 (the seam hold does not cover the narrow feature) are in the note. Nothing built.
+
 ## 0.1.0-alpha.91 - 2026-11-04
 
 ### Tests / Docs
