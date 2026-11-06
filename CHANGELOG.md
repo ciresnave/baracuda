@@ -16,7 +16,7 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
-## Unreleased (version allocated at the gate)
+## 0.1.0-alpha.95 - 2026-11-06
 
 - **Fix: concurrent plan creation failed with `KernelInternal(-1)`.** `cublasCreate_v2` and `cusolverDnCreate` return
   `NOT_INITIALIZED` when threads create handles at once (cold-start library init; cuSOLVER initialises cuBLAS internally, so
