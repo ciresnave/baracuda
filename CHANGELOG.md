@@ -16,6 +16,18 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## Unreleased (alpha number allocated at the gate)
+
+- **Diagnostics: a failed CUTLASS `cudaFuncSetAttribute` now names its CUDA error.** CUTLASS maps every CUDA runtime failure in `initialize` / `run` to
+  `Status::kErrorInternal`, which the 22 wrappers returned as the bare status `5`. They now return `1000 + cudaError_t` (the encoding the flash-SDPA launchers already
+  use) when the runtime still has an error pending, and `5` when it has none. Surfaces as `Error::KernelInternal(1000 + n)`. Read from CUTLASS 4.2.0 `gemm.h` `run()`:
+  a failed `cudaFuncSetAttribute` returns with its error still pending, so it is named; a failed launch is read by CUTLASS's own `cudaGetLastError()` first, which clears
+  it, so a launch failure still reports `5`. A destroyed-stream launch confirmed that: it returned `5` with this change. So the next red tells the two apart: `1000 + n`
+  is the attribute call, `5` is the launch or CUTLASS itself. Motivation: device-tests run 42223264937 on 094932d1 failed `tf32_gemm_rcr_sm80_64_64_32` with
+  `KernelInternal(5)`; 340 local runs (RTX 4070 Laptop, `gemm_alpha9_smoke`, fresh processes, up to 4 loops at once) did not reproduce it, so the cause is not established
+  and no mutex is added. No test forces an attribute failure, so the `1000 + n` path itself is unexercised. A caller that matched `KernelInternal(5)` on these paths can now
+  see `KernelInternal(1000 + n)`.
+
 ## 0.1.0-alpha.96 - 2026-11-06
 
 - **Docs: Conv2d picker re-measured in the release profile** (ROADMAP SA-49 item 5; `docs/conv2d-picker-measurements.md`, last section). Two back-to-back

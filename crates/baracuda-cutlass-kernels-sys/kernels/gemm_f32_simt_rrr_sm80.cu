@@ -93,10 +93,10 @@ static int run_impl(
     if (workspace_bytes < needed) return 4;
 
     status = op.initialize(args, workspace, stream);
-    if (status != cutlass::Status::kSuccess) return 5;
+    if (status != cutlass::Status::kSuccess) return baracuda_cutlass::cuda_failure_code();
 
     status = op(stream);
-    if (status != cutlass::Status::kSuccess) return 5;
+    if (status != cutlass::Status::kSuccess) return baracuda_cutlass::cuda_failure_code();
 
     return 0;
 }

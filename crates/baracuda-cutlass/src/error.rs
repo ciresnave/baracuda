@@ -7,7 +7,11 @@ pub use baracuda_kernels_types::{Error, Result};
 /// Convert a status code returned by a `*_run` / `*_can_implement` extern
 /// "C" function into a typed [`Error`].
 ///
-/// Handles status 1, 2, 3, and 5 (and any other non-zero) only. Status 4
+/// Handles status 1, 2, 3, and 5 (and any other non-zero) only. A status of
+/// `1000 + n` means a `cudaFuncSetAttribute` call failed with CUDA error `n` (see
+/// `cuda_failure_code` in `baracuda_smem_cap.h`); it surfaces as
+/// `KernelInternal(1000 + n)`. A bare 5 means the launch failed or CUTLASS failed
+/// internally: CUTLASS clears the launch error before returning. Status 4
 /// (workspace too small) is intentionally omitted: by the time the safe
 /// layer launches the kernel it has already pre-checked workspace size
 /// against the plan's reported requirement and returned a typed

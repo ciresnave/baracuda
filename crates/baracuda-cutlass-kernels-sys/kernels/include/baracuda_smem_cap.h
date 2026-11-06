@@ -29,6 +29,8 @@
 
 #pragma once
 
+#include <cuda_runtime.h>
+
 namespace baracuda_cutlass {
 
 /// The SMALLEST opt-in shared-memory capacity among the architectures that
@@ -55,6 +57,27 @@ struct SmemFitsSmallestSupportedArch {
       sizeof(typename GemmT::GemmKernel::SharedStorage)
           <= kMinSupportedSmemOptinBytes;
 };
+
+/// Status for a CUTLASS `initialize` / `run` that did not return kSuccess.
+///
+/// CUTLASS maps every CUDA runtime failure there to the same
+/// `Status::kErrorInternal`, so the bare status 5 does not say which call
+/// failed. This returns `1000 + cudaError_t` (the encoding the flash-SDPA
+/// launchers use) when the CUDA runtime still has an error pending, and 5
+/// when it has none.
+///
+/// What each result means, read from `cutlass/gemm/device/gemm.h` `run()`:
+///   * `1000 + n`: a `cudaFuncSetAttribute` call failed. CUTLASS returns right
+///     after it, so the error is still pending here.
+///   * `5`: the launch itself failed, or CUTLASS failed internally. CUTLASS reads
+///     the launch error with `cudaGetLastError()` before returning, which clears
+///     it, so it cannot be recovered here.
+/// Reading the last error also clears it, so it cannot leak into the next call
+/// on this thread.
+inline int cuda_failure_code() {
+  cudaError_t err = cudaGetLastError();
+  return err == cudaSuccess ? 5 : 1000 + static_cast<int>(err);
+}
 
 }  // namespace baracuda_cutlass
 
