@@ -98,7 +98,7 @@ use core::ptr;
 use super::{
     CUBLAS_FILL_MODE_LOWER, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N, CUDA_C_32F, CUDA_C_64F,
     CUDA_R_32F, CUDA_R_64F, CUSOLVER_EIG_MODE_NOVECTOR, CUSOLVER_EIG_MODE_VECTOR, cuComplex,
-    cuDoubleComplex, cudaDataType, cusolverDnCheevd, cusolverDnCheevd_bufferSize, cusolverDnCreate,
+    cuDoubleComplex, cudaDataType, cusolverDnCheevd, cusolverDnCheevd_bufferSize,
     cusolverDnCreateGesvdjInfo, cusolverDnCreateParams, cusolverDnDDgels,
     cusolverDnDDgels_bufferSize, cusolverDnDestroy, cusolverDnDestroyGesvdjInfo,
     cusolverDnDestroyParams, cusolverDnDgeqrf, cusolverDnDgeqrf_bufferSize, cusolverDnDgesvd,
@@ -163,9 +163,9 @@ impl Drop for Handle {
 /// `INTERNAL`).
 #[inline]
 unsafe fn setup_handle(g: &mut Handle, stream: *mut c_void) -> i32 {
-    let s = unsafe { cusolverDnCreate(&mut g.h as *mut _) };
-    if s != 0 {
-        return INTERNAL;
+    match crate::handle_init::create_cusolver_dn() {
+        Ok(h) => g.h = h,
+        Err(_) => return INTERNAL,
     }
     let s = unsafe { cusolverDnSetStream(g.h, stream) };
     if s != 0 {

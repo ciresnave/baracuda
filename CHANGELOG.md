@@ -16,6 +16,18 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.95 - 2026-11-06
+
+- **Fix: concurrent plan creation failed with `KernelInternal(-1)`.** `cublasCreate_v2` and `cusolverDnCreate` return
+  `NOT_INITIALIZED` when threads create handles at once (cold-start library init; cuSOLVER initialises cuBLAS internally, so
+  the two race each other). Measured on `main` at 15075cd1: 6 of 40 runs of `linalg_ormqr_batched_smoke` at 32 threads failed,
+  every failure printing `cublasCreate_v2 status=1`. All handle creation (14 plan sites in `baracuda-kernels`, the
+  `fused_linear_cross_entropy` plan, and the `cusolver_facade` / `gemm_dense_cublas_facade` C entry points Fuel calls) now
+  goes through one process-wide lock, `baracuda_kernels_sys::handle_init`. The two retry loops that masked the race
+  (`fused_linear_cross_entropy`, `gemm_dense_cublas_facade`) are removed. No API change. New test
+  `linalg_handle_init_concurrency` (32 racing threads in each of 40 fresh processes; 7 of 40 failed with the lock disabled,
+  0 of 40 with it), and `linalg_ormqr_batched_smoke` creates its reference handles through the same helper.
+
 ## 0.1.0-alpha.94 - 2026-11-05
 
 - **`baracuda-cuda-emit`: `extern_asm_cuda`** (ROADMAP U11 step 3; design `docs/u11-ptx-leg-design.md`). New default-off

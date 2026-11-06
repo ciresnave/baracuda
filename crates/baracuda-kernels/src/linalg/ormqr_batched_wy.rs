@@ -77,8 +77,8 @@ use baracuda_kernels_sys::{
     baracuda_kernels_batched_ormqr_wy_extract_v_complex64_run,
     baracuda_kernels_batched_ormqr_wy_extract_v_f32_run,
     baracuda_kernels_batched_ormqr_wy_extract_v_f64_run, cuComplex, cuDoubleComplex,
-    cublasCgemmStridedBatched, cublasCreate_v2, cublasDestroy_v2, cublasDgemmStridedBatched,
-    cublasHandle_t, cublasSetStream_v2, cublasSgemmStridedBatched, cublasZgemmStridedBatched,
+    cublasCgemmStridedBatched, cublasDestroy_v2, cublasDgemmStridedBatched, cublasHandle_t,
+    cublasSetStream_v2, cublasSgemmStridedBatched, cublasZgemmStridedBatched,
 };
 use baracuda_kernels_types::{
     ArchSku, BackendKind, Complex64, Complex128, Element, ElementKind, KernelSku, LinalgKind,
@@ -323,11 +323,7 @@ impl<T: Element> BatchedOrmqrWyPlan<T> {
         if !h.is_null() {
             return Ok(h);
         }
-        let mut handle: cublasHandle_t = core::ptr::null_mut();
-        let status = unsafe { cublasCreate_v2(&mut handle as *mut _) };
-        if status != 0 {
-            return Err(Error::KernelInternal(-status));
-        }
+        let handle = super::handle_init::create_cublas_handle()?;
         self.handle.set(handle);
         Ok(handle)
     }

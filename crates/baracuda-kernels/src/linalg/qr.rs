@@ -38,7 +38,7 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_sys::{
-    CUBLAS_OP_N, CUBLAS_SIDE_LEFT, cusolverDnCreate, cusolverDnDestroy, cusolverDnDgeqrf,
+    CUBLAS_OP_N, CUBLAS_SIDE_LEFT, cusolverDnDestroy, cusolverDnDgeqrf,
     cusolverDnDgeqrf_bufferSize, cusolverDnDormqr, cusolverDnDormqr_bufferSize, cusolverDnHandle_t,
     cusolverDnSetStream, cusolverDnSgeqrf, cusolverDnSgeqrf_bufferSize, cusolverDnSormqr,
     cusolverDnSormqr_bufferSize,
@@ -271,11 +271,7 @@ impl<T: Element> QrPlan<T> {
         if !h.is_null() {
             return Ok(h);
         }
-        let mut handle: cusolverDnHandle_t = core::ptr::null_mut();
-        let status = unsafe { cusolverDnCreate(&mut handle as *mut _) };
-        if status != 0 {
-            return Err(Error::KernelInternal(-status));
-        }
+        let handle = super::handle_init::create_cusolver_dn_handle()?;
         self.handle.set(handle);
         Ok(handle)
     }

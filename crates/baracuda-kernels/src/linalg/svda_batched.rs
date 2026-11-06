@@ -33,7 +33,7 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_sys::{
-    CUSOLVER_EIG_MODE_NOVECTOR, CUSOLVER_EIG_MODE_VECTOR, cusolverDnCreate, cusolverDnDestroy,
+    CUSOLVER_EIG_MODE_NOVECTOR, CUSOLVER_EIG_MODE_VECTOR, cusolverDnDestroy,
     cusolverDnDgesvdaStridedBatched, cusolverDnDgesvdaStridedBatched_bufferSize,
     cusolverDnHandle_t, cusolverDnSetStream, cusolverDnSgesvdaStridedBatched,
     cusolverDnSgesvdaStridedBatched_bufferSize,
@@ -223,11 +223,7 @@ impl<T: Element> BatchedSvdaPlan<T> {
         if !h.is_null() {
             return Ok(h);
         }
-        let mut handle: cusolverDnHandle_t = core::ptr::null_mut();
-        let status = unsafe { cusolverDnCreate(&mut handle as *mut _) };
-        if status != 0 {
-            return Err(Error::KernelInternal(-status));
-        }
+        let handle = super::handle_init::create_cusolver_dn_handle()?;
         self.handle.set(handle);
         Ok(handle)
     }
