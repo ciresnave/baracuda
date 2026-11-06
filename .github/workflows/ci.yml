@@ -270,6 +270,8 @@ jobs:
         run: cargo clippy --locked -p baracuda-cuda-emit --features convert -- -D warnings
       - name: clippy cuda-emit convert (feature-gated, tests)
         run: cargo clippy --locked -p baracuda-cuda-emit --features convert --tests -- -D warnings
+      - name: clippy + test cuda-emit extern_asm_cuda (feature-gated)
+        run: cargo clippy --locked -p baracuda-cuda-emit --features extern_asm_cuda --tests -- -D warnings && cargo test --locked -p baracuda-cuda-emit --features extern_asm_cuda --lib extern_asm
       - name: test cuda-emit convert (feature-gated)
         run: cargo test --locked -p baracuda-cuda-emit --features convert
       # `tools/kiss-ref-diff` is not a workspace member and declares its OWN

@@ -16,6 +16,20 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.94 - 2026-11-05
+
+- **`baracuda-cuda-emit`: `extern_asm_cuda`** (ROADMAP U11 step 3; design `docs/u11-ptx-leg-design.md`). New default-off
+  feature `extern_asm_cuda`: `extern_asm_cuda(decl, args, results)` spells the `cuda-ptx` inline-asm body of an Unpopped
+  `ExternDecl` as one CUDA `asm` statement, renumbering operands (Unpopped: params then results; CUDA: outputs first) and
+  refusing with a typed `ExternError` (no body, symbol body, memory/sync effects, bad constraints/operands/template). It
+  never uses the `reference`. No existing emitted output or Fuel-facing surface changes.
+- Evidence: 6 unit tests (clippy `-D warnings` clean); `tests/extern_ptx.rs` ran on an RTX 4070 Laptop (sm_89) under
+  `gpu-run.ps1`, 2 passed: `fma.rn.f32` (6096 elements) and `popc.b32` (1009) bit-exact against the oracle running the
+  reference kernels (NaNs compared as one value). Mutants caught on the device: `fma.rz`, popc reference off by a bit,
+  swapped template, swapped operand numbering. The runner command and CI now enable the feature.
+- **`baracuda-cuda-seam`**: pins `fuel-kernel-seam` and `fuel-kernel-seam-types` to `^0.43` (was `0.42.0`) so Fuel's
+  0.43.0 resolves against it (Fuel adopts unpopped-vocab 0.43.2). The lockfile moves both to 0.43.0.
+
 ## 0.1.0-alpha.93 - 2026-11-05
 
 ### Changed (**breaking** for `baracuda-cuda-emit` / `baracuda-cuda-parse`: they move to 0.43.0 with `unpopped` 0.43)

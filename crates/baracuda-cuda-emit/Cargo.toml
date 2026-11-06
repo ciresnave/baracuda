@@ -31,6 +31,9 @@ nvrtc = ["dep:baracuda-nvrtc"]
 # self-hosted device runner builds and RUNS them (`cargo gpu-test -p baracuda-cuda-emit --features nvrtc,device-tests ...`).
 # See docs/DEVICE-TESTS.md.
 device-tests = []
+# Spells one `cuda-ptx` inline-asm body of an Unpopped `ExternDecl` as a CUDA statement (`extern_asm_cuda`; ROADMAP U11).
+# Default off; adds a module only and changes no existing emitted output.
+extern_asm_cuda = []
 # Enable the neutral generator's `convert` feature (tree-sitter CUDA/Slang lifters)
 # so the relocated lifter round-trip tests (`tests/convert.rs`) can reach
 # `unpopped::convert::*`. Test-only passthrough; no cuda-emit lib code

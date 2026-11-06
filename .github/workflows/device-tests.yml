@@ -29,7 +29,7 @@ jobs:
     name: baracuda-driver on-device tests
     if: vars.DEVICE_RUNNER_ENABLED == 'true'
     runs-on: [self-hosted, windows, gpu, baracuda]
-    timeout-minutes: 120
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
@@ -77,7 +77,7 @@ jobs:
         shell: bash
         env:
           BARACUDA_RESULTS_FILE: device-test-results-cuda-emit.json
-        run: cargo gpu-test -p baracuda-cuda-emit --features nvrtc,device-tests
+        run: cargo gpu-test -p baracuda-cuda-emit --features nvrtc,device-tests,extern_asm_cuda
       - name: cargo gpu-test (baracuda-cuda-seam, device-tests)
         shell: bash
         env:
