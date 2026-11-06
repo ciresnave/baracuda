@@ -16,6 +16,10 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.98 - 2026-11-06
+
+- **Docs: the upstream mHC.cu backward report is replaced and now points at the filed issue.** AndreSlavescu/mHC.cu#11 was opened (2026-11-06) for two backward defects at upstream a426939c. `docs/mhc-upstream-backward-defects.md` and `docs/repro/` (from #303) are rewritten: the repro is now a pass/fail finite-difference test (four checks, fails on unmodified upstream, passes with the included patch), the derivation is folded in, and the dL/dx defect is stated correctly: the C++ `MHCLayer::backward` leaves the two path gradients in `d_x_expanded` and `d_x_mixed` unsummed (the Python binding sums them); it is not a missing sum over a dimension. Measured on RTX 4070 Laptop only; the batched n=4 backward, the dynamic-H path and the Python binding were not run. `vendor/mhc/VENDOR.md` records the report. No code change.
+
 ## 0.1.0-alpha.97 - 2026-11-06
 
 - **Diagnostics: a failed CUTLASS `cudaFuncSetAttribute` now names its CUDA error.** CUTLASS maps every CUDA runtime failure in `initialize` / `run` to

@@ -1,0 +1,179 @@
+diff --git a/src/csrc/kernels/mhc_layer.cuh b/src/csrc/kernels/mhc_layer.cuh
+index cc14226..9bc638e 100644
+--- a/src/csrc/kernels/mhc_layer.cuh
++++ b/src/csrc/kernels/mhc_layer.cuh
+@@ -798,6 +798,13 @@ struct MHCLayer {
+ 
+         sigmoid_backward(grads.d_H_pre, grads.d_H_pre_activated, buffers.H_pre_activated, n,
+                          stream);
++
++        // dL/dx reaches x_expanded through two paths: the aggregate path (d_x_expanded) and
++        // the mix path (d_x_mixed). Their sum is the gradient; leave it in d_x_expanded.
++        constexpr int ADD_BLOCK = 256;
++        int total = B * n * C;
++        stream_add_kernel<ADD_BLOCK><<<(total + ADD_BLOCK - 1) / ADD_BLOCK, ADD_BLOCK, 0, stream>>>(
++            grads.d_x_expanded, grads.d_x_expanded, grads.d_x_mixed, total);
+     }
+ 
+     void sync() { CHECK_CUDA(cudaStreamSynchronize(stream)); }
+diff --git a/src/csrc/kernels/sinkhorn_knopp.cuh b/src/csrc/kernels/sinkhorn_knopp.cuh
+index 4570ad7..f21c9d0 100644
+--- a/src/csrc/kernels/sinkhorn_knopp.cuh
++++ b/src/csrc/kernels/sinkhorn_knopp.cuh
+@@ -639,6 +639,9 @@ __global__ __launch_bounds__(BLOCK_SIZE, 2) void sinkhorn_knopp_backward_checkpo
+     float* row_buffer = d_tile + N_COMPILE * N_COMPILE;
+     float* col_buffer = row_buffer + N_COMPILE;
+     float* tile_work = col_buffer + N_COMPILE;
++    // Inverse row / column sums of every forward iteration (0 = normalisation skipped).
++    float* row_inv = tile_work + N_COMPILE * N_COMPILE;
++    float* col_inv = row_inv + MAX_ITERS * N_COMPILE;
+ 
+     int total = N * N;
+ 
+@@ -655,6 +658,7 @@ __global__ __launch_bounds__(BLOCK_SIZE, 2) void sinkhorn_knopp_backward_checkpo
+                 sum += tile_work[r * N + c];
+             }
+             row_buffer[r] = (sum > eps) ? __frcp_rn(sum) : 0.0f;
++            row_inv[iter * N + r] = row_buffer[r];
+         }
+         __syncthreads();
+ 
+@@ -676,6 +680,7 @@ __global__ __launch_bounds__(BLOCK_SIZE, 2) void sinkhorn_knopp_backward_checkpo
+                 sum += tile_work[r * N + c];
+             }
+             col_buffer[c] = (sum > eps) ? __frcp_rn(sum) : 0.0f;
++            col_inv[iter * N + c] = col_buffer[c];
+         }
+         __syncthreads();
+ 
+@@ -697,33 +702,45 @@ __global__ __launch_bounds__(BLOCK_SIZE, 2) void sinkhorn_knopp_backward_checkpo
+         }
+         __syncthreads();
+ 
++        // Column step: B = A * c, so dA = c * (dB - colsum(dB * B)), where B = tile_work * c.
+         for (int c = threadIdx.x; c < N; c += BLOCK_SIZE) {
++            const float f = col_inv[iter * N + c];
+             float dot = 0.0f;
+-            for (int r = 0; r < N; r++) {
+-                dot += d_tile[r * N + c] * tile_work[r * N + c];
++            if (f != 0.0f) {
++                for (int r = 0; r < N; r++) {
++                    dot += d_tile[r * N + c] * (tile_work[r * N + c] * f);
++                }
+             }
+             col_buffer[c] = dot;
+         }
+         __syncthreads();
+ 
+         for (int i = threadIdx.x; i < total; i += BLOCK_SIZE) {
+-            int c = i % N;
+-            d_tile[i] = d_tile[i] - tile_work[i] * col_buffer[c];
++            const float f = col_inv[iter * N + i % N];
++            if (f != 0.0f) {
++                d_tile[i] = f * (d_tile[i] - col_buffer[i % N]);
++            }
+         }
+         __syncthreads();
+ 
++        // Row step: A = K * r, so dK = r * (dA - rowsum(dA * A)), where A = tile_work.
+         for (int r = threadIdx.x; r < N; r += BLOCK_SIZE) {
++            const float f = row_inv[iter * N + r];
+             float dot = 0.0f;
+-            for (int c = 0; c < N; c++) {
+-                dot += d_tile[r * N + c] * tile_work[r * N + c];
++            if (f != 0.0f) {
++                for (int c = 0; c < N; c++) {
++                    dot += d_tile[r * N + c] * tile_work[r * N + c];
++                }
+             }
+             row_buffer[r] = dot;
+         }
+         __syncthreads();
+ 
+         for (int i = threadIdx.x; i < total; i += BLOCK_SIZE) {
+-            int r = i / N;
+-            d_tile[i] = d_tile[i] - tile_work[i] * row_buffer[r];
++            const float f = row_inv[iter * N + i / N];
++            if (f != 0.0f) {
++                d_tile[i] = f * (d_tile[i] - row_buffer[i / N]);
++            }
+         }
+         __syncthreads();
+     }
+@@ -811,33 +828,56 @@ __global__ __launch_bounds__(BLOCK_SIZE, 2) void sinkhorn_knopp_backward_kernel(
+         }
+         __syncthreads();
+ 
++        // tile_fwd is now the row-normalised tile A and row_sums holds its inverse row sums.
++        // Inverse column sums of A (the column step's scale):
+         for (int c = threadIdx.x; c < N; c += BLOCK_SIZE) {
+-            float dot = 0.0f;
++            float sum = 0.0f;
+             for (int r = 0; r < N; r++) {
+-                dot += d_tile[r * N + c] * tile_fwd[r * N + c];
++                sum += tile_fwd[r * N + c];
++            }
++            col_sums[c] = (sum > eps) ? __frcp_rn(sum) : 0.0f;
++        }
++        __syncthreads();
++
++        // Column step: B = A * c, so dA = c * (dB - colsum(dB * B)), where B = A * c.
++        for (int c = threadIdx.x; c < N; c += BLOCK_SIZE) {
++            const float f = col_sums[c];
++            float dot = 0.0f;
++            if (f != 0.0f) {
++                for (int r = 0; r < N; r++) {
++                    dot += d_tile[r * N + c] * (tile_fwd[r * N + c] * f);
++                }
+             }
+             col_buffer[c] = dot;
+         }
+         __syncthreads();
+ 
+         for (int i = threadIdx.x; i < total; i += BLOCK_SIZE) {
+-            int c = i % N;
+-            d_tile[i] = d_tile[i] - tile_fwd[i] * col_buffer[c];
++            const float f = col_sums[i % N];
++            if (f != 0.0f) {
++                d_tile[i] = f * (d_tile[i] - col_buffer[i % N]);
++            }
+         }
+         __syncthreads();
+ 
++        // Row step: A = K * r, so dK = r * (dA - rowsum(dA * A)).
+         for (int r = threadIdx.x; r < N; r += BLOCK_SIZE) {
++            const float f = row_sums[r];
+             float dot = 0.0f;
+-            for (int c = 0; c < N; c++) {
+-                dot += d_tile[r * N + c] * tile_fwd[r * N + c];
++            if (f != 0.0f) {
++                for (int c = 0; c < N; c++) {
++                    dot += d_tile[r * N + c] * tile_fwd[r * N + c];
++                }
+             }
+             row_buffer[r] = dot;
+         }
+         __syncthreads();
+ 
+         for (int i = threadIdx.x; i < total; i += BLOCK_SIZE) {
+-            int r = i / N;
+-            d_tile[i] = d_tile[i] - tile_fwd[i] * row_buffer[r];
++            const float f = row_sums[i / N];
++            if (f != 0.0f) {
++                d_tile[i] = f * (d_tile[i] - row_buffer[i / N]);
++            }
+         }
+         __syncthreads();
+     }
+@@ -872,8 +912,9 @@ inline void sinkhorn_knopp_backward(float* d_inp, const float* grad, const float
+     if (N <= 32 && num_iters <= 20) {
+         constexpr int N_COMPILE = 32;
+         constexpr int MAX_ITERS = 20;
+-        size_t smem_size =
+-            (MAX_ITERS + 3) * N_COMPILE * N_COMPILE * sizeof(float) + 2 * N_COMPILE * sizeof(float);
++        // + 2 * MAX_ITERS * N_COMPILE floats for the saved inverse row / column sums.
++        size_t smem_size = (MAX_ITERS + 3) * N_COMPILE * N_COMPILE * sizeof(float) +
++                           2 * N_COMPILE * sizeof(float) + 2 * MAX_ITERS * N_COMPILE * sizeof(float);
+ 
+         auto kernel = sinkhorn_knopp_backward_checkpointed_kernel<N_COMPILE, MAX_ITERS, BLOCK_SIZE>;
+         cudaFuncSetAttribute(kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, smem_size);
