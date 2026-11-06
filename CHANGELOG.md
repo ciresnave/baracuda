@@ -16,6 +16,13 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.96 - 2026-11-06
+
+- **Docs: Conv2d picker re-measured in the release profile** (ROADMAP SA-49 item 5; `docs/conv2d-picker-measurements.md`, last section). Two back-to-back
+  release-profile runs of `tests/conv2d_picker_measure.rs` on `main` 094932d1 (RTX 4070 Laptop, sm_89): 29 of 39 rows reproduce within 25%; f16 / bf16 still lose on
+  most shapes; the f32 3x3 and dilated wins hold; three f32 1x1 rows flip between runs. Pinned times differ from the debug-profile tables for a reason not established,
+  so the warm-up result is neither confirmed nor shown to be an artefact. The picker stays opt-in. No library code change.
+
 ## 0.1.0-alpha.95 - 2026-11-06
 
 - **Fix: concurrent plan creation failed with `KernelInternal(-1)`.** `cublasCreate_v2` and `cusolverDnCreate` return
