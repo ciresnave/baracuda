@@ -16,7 +16,7 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
-## Unreleased (alpha number allocated at the gate)
+## 0.1.0-alpha.97 - 2026-11-06
 
 - **Diagnostics: a failed CUTLASS `cudaFuncSetAttribute` now names its CUDA error.** CUTLASS maps every CUDA runtime failure in `initialize` / `run` to
   `Status::kErrorInternal`, which the 22 wrappers returned as the bare status `5`. They now return `1000 + cudaError_t` (the encoding the flash-SDPA launchers already
