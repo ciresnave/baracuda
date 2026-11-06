@@ -29,6 +29,10 @@ at alpha.82.
   swapped template, swapped operand numbering. The runner command and CI now enable the feature.
 - **`baracuda-cuda-seam`**: pins `fuel-kernel-seam` and `fuel-kernel-seam-types` to `^0.43` (was `0.42.0`) so Fuel's
   0.43.0 resolves against it (Fuel adopts unpopped-vocab 0.43.2). The lockfile moves both to 0.43.0.
+- **`baracuda-cuda-emit` 0.43.1** (PM-allocated; `baracuda-cuda-parse` stays 0.43.0, unchanged). alpha.94's `extern_asm_cuda` (a new
+  public module, +425 lines) changed the crate after 0.43.0 was published from alpha.93, and crates.io cannot take a changed
+  0.43.0. The number follows the Unpopped 0.43 line (versioning exception above), so this is a patch bump: 0.43.1 is the
+  first release that carries `extern_asm_cuda`. The workspace pin and the lockfiles move to 0.43.1; nothing else changes.
 
 ## 0.1.0-alpha.93 - 2026-11-05
 
