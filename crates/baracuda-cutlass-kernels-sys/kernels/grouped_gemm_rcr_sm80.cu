@@ -194,10 +194,10 @@ static int run_impl(
     if (scratch_bytes < needed) return 4;
 
     status = op.initialize(args, scratch, stream);
-    if (status != cutlass::Status::kSuccess) return 5;
+    if (status != cutlass::Status::kSuccess) return baracuda_cutlass::cuda_failure_code();
 
     status = op.run(stream);
-    if (status != cutlass::Status::kSuccess) return 5;
+    if (status != cutlass::Status::kSuccess) return baracuda_cutlass::cuda_failure_code();
 
     return 0;
 }
