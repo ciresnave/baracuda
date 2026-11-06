@@ -167,9 +167,8 @@ use core::sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering};
 
 use super::{
     CUBLAS_COMPUTE_32F, CUBLAS_COMPUTE_64F, CUBLAS_GEMM_DEFAULT, CUBLAS_OP_N, CUBLAS_OP_T,
-    CUDA_R_16BF, CUDA_R_16F, CUDA_R_32F, CUDA_R_64F, cublasCreate_v2, cublasDestroy_v2,
-    cublasGemmEx, cublasGemmStridedBatchedEx, cublasHandle_t, cublasSetMathMode,
-    cublasSetStream_v2,
+    CUDA_R_16BF, CUDA_R_16F, CUDA_R_32F, CUDA_R_64F, cublasDestroy_v2, cublasGemmEx,
+    cublasGemmStridedBatchedEx, cublasHandle_t, cublasSetMathMode, cublasSetStream_v2,
 };
 
 unsafe extern "C" {
@@ -288,12 +287,9 @@ fn current_ctx_key() -> usize {
 
 /// Take a pooled handle for `key`, or create a fresh one.
 ///
-/// Creation retries up to 5× with a spin backoff: `cublasCreate_v2`
-/// races on a shared driver-init resource when many processes start
-/// concurrently (the `cargo test --workspace` harness) and returns a
-/// transient ALLOC_FAILED / NOT_INITIALIZED — observed empirically in
-/// Phase 30 and cleared reliably by a short backoff. `no_std` has no
-/// sleep, so the backoff is a bounded spin.
+/// Creation goes through [`crate::handle_init`], which serialises it with every
+/// other cuBLAS/cuSOLVER handle creation in the process (concurrent creation
+/// returns NOT_INITIALIZED; a retry loop used to mask that).
 unsafe fn take_handle(key: usize) -> Result<cublasHandle_t, i32> {
     for slot in POOL.iter() {
         if slot.ctx.load(Ordering::Acquire) == key {
@@ -303,24 +299,7 @@ unsafe fn take_handle(key: usize) -> Result<cublasHandle_t, i32> {
             }
         }
     }
-    let mut handle: cublasHandle_t = ptr::null_mut();
-    for attempt in 0..5u64 {
-        // Backoff BETWEEN attempts only — a permanently-failing host
-        // (no driver / no device) shouldn't pay a trailing spin after
-        // the final attempt.
-        if attempt > 0 {
-            let spins = 4_000_000 * attempt;
-            for _ in 0..spins {
-                core::hint::spin_loop();
-            }
-        }
-        let st = unsafe { cublasCreate_v2(&mut handle as *mut _) };
-        if st == 0 && !handle.is_null() {
-            return Ok(handle);
-        }
-        handle = ptr::null_mut();
-    }
-    Err(INTERNAL)
+    crate::handle_init::create_cublas().map_err(|_| INTERNAL)
 }
 
 /// Return a handle to the pool, or destroy it if no slot is available.

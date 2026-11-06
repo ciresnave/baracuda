@@ -31,8 +31,8 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_sys::{
-    cublasCgeqrfBatched, cublasCreate_v2, cublasDestroy_v2, cublasDgeqrfBatched, cublasHandle_t,
-    cublasSetStream_v2, cublasSgeqrfBatched, cublasZgeqrfBatched,
+    cublasCgeqrfBatched, cublasDestroy_v2, cublasDgeqrfBatched, cublasHandle_t, cublasSetStream_v2,
+    cublasSgeqrfBatched, cublasZgeqrfBatched,
 };
 use baracuda_kernels_types::{
     ArchSku, BackendKind, Element, ElementKind, KernelSku, LinalgKind, MathPrecision, OpCategory,
@@ -210,11 +210,7 @@ impl<T: Element> BatchedQrPlan<T> {
         if !h.is_null() {
             return Ok(h);
         }
-        let mut handle: cublasHandle_t = core::ptr::null_mut();
-        let status = unsafe { cublasCreate_v2(&mut handle as *mut _) };
-        if status != 0 {
-            return Err(Error::KernelInternal(-status));
-        }
+        let handle = super::handle_init::create_cublas_handle()?;
         self.handle.set(handle);
         Ok(handle)
     }

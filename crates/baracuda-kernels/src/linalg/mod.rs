@@ -101,6 +101,8 @@
 pub mod cholesky;
 pub mod eig;
 pub mod eigh;
+#[doc(hidden)]
+pub mod handle_init;
 pub mod inverse;
 pub mod lstsq;
 pub mod lu;

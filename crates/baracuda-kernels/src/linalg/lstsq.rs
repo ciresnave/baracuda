@@ -53,12 +53,11 @@ use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_sys::{
     CUBLAS_DIAG_NON_UNIT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N, CUBLAS_OP_T, CUBLAS_SIDE_LEFT,
-    cublasCreate_v2, cublasDestroy_v2, cublasDtrsm, cublasHandle_t, cublasSetStream_v2,
-    cublasStrsm, cusolverDnCreate, cusolverDnDDgels, cusolverDnDDgels_bufferSize,
-    cusolverDnDestroy, cusolverDnDgeqrf, cusolverDnDgeqrf_bufferSize, cusolverDnDormqr,
-    cusolverDnDormqr_bufferSize, cusolverDnHandle_t, cusolverDnSSgels, cusolverDnSSgels_bufferSize,
-    cusolverDnSetStream, cusolverDnSgeqrf, cusolverDnSgeqrf_bufferSize, cusolverDnSormqr,
-    cusolverDnSormqr_bufferSize,
+    cublasDestroy_v2, cublasDtrsm, cublasHandle_t, cublasSetStream_v2, cublasStrsm,
+    cusolverDnDDgels, cusolverDnDDgels_bufferSize, cusolverDnDestroy, cusolverDnDgeqrf,
+    cusolverDnDgeqrf_bufferSize, cusolverDnDormqr, cusolverDnDormqr_bufferSize, cusolverDnHandle_t,
+    cusolverDnSSgels, cusolverDnSSgels_bufferSize, cusolverDnSetStream, cusolverDnSgeqrf,
+    cusolverDnSgeqrf_bufferSize, cusolverDnSormqr, cusolverDnSormqr_bufferSize,
 };
 use baracuda_kernels_types::{
     ArchSku, BackendKind, Element, ElementKind, KernelSku, LinalgKind, MathPrecision, OpCategory,
@@ -255,11 +254,7 @@ impl<T: Element> LstSqPlan<T> {
         if !h.is_null() {
             return Ok(h);
         }
-        let mut handle: cusolverDnHandle_t = core::ptr::null_mut();
-        let status = unsafe { cusolverDnCreate(&mut handle as *mut _) };
-        if status != 0 {
-            return Err(Error::KernelInternal(-status));
-        }
+        let handle = super::handle_init::create_cusolver_dn_handle()?;
         self.handle.set(handle);
         Ok(handle)
     }
@@ -269,11 +264,7 @@ impl<T: Element> LstSqPlan<T> {
         if !h.is_null() {
             return Ok(h);
         }
-        let mut handle: cublasHandle_t = core::ptr::null_mut();
-        let status = unsafe { cublasCreate_v2(&mut handle as *mut _) };
-        if status != 0 {
-            return Err(Error::KernelInternal(-status));
-        }
+        let handle = super::handle_init::create_cublas_handle()?;
         self.cublas_handle.set(handle);
         Ok(handle)
     }

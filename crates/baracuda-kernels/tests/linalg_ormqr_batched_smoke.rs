@@ -19,11 +19,10 @@ use baracuda_kernels::{
 };
 use baracuda_kernels_sys::{
     CUBLAS_OP_C, CUBLAS_OP_N, CUBLAS_OP_T, CUBLAS_SIDE_LEFT, CUBLAS_SIDE_RIGHT, cuDoubleComplex,
-    cuFloatComplex, cusolverDnCgeqrf, cusolverDnCgeqrf_bufferSize, cusolverDnCreate,
-    cusolverDnCunmqr, cusolverDnCunmqr_bufferSize, cusolverDnDestroy, cusolverDnDormqr,
-    cusolverDnDormqr_bufferSize, cusolverDnHandle_t, cusolverDnSetStream, cusolverDnSormqr,
-    cusolverDnSormqr_bufferSize, cusolverDnZgeqrf, cusolverDnZgeqrf_bufferSize, cusolverDnZunmqr,
-    cusolverDnZunmqr_bufferSize,
+    cuFloatComplex, cusolverDnCgeqrf, cusolverDnCgeqrf_bufferSize, cusolverDnCunmqr,
+    cusolverDnCunmqr_bufferSize, cusolverDnDestroy, cusolverDnDormqr, cusolverDnDormqr_bufferSize,
+    cusolverDnSetStream, cusolverDnSormqr, cusolverDnSormqr_bufferSize, cusolverDnZgeqrf,
+    cusolverDnZgeqrf_bufferSize, cusolverDnZunmqr, cusolverDnZunmqr_bufferSize, handle_init,
 };
 
 fn setup() -> (Context, Stream) {
@@ -173,9 +172,7 @@ fn cusolver_ormqr_per_slot_f32(
     op: BatchedOrmqrOp,
 ) -> Vec<f32> {
     let stream_ptr = stream.as_raw();
-    let mut handle: cusolverDnHandle_t = core::ptr::null_mut();
-    let s = unsafe { cusolverDnCreate(&mut handle as *mut _) };
-    assert_eq!(s, 0);
+    let handle = handle_init::create_cusolver_dn().expect("cusolverDnCreate");
     let s = unsafe { cusolverDnSetStream(handle, stream_ptr) };
     assert_eq!(s, 0);
 
@@ -276,9 +273,7 @@ fn cusolver_ormqr_per_slot_f64(
     op: BatchedOrmqrOp,
 ) -> Vec<f64> {
     let stream_ptr = stream.as_raw();
-    let mut handle: cusolverDnHandle_t = core::ptr::null_mut();
-    let s = unsafe { cusolverDnCreate(&mut handle as *mut _) };
-    assert_eq!(s, 0);
+    let handle = handle_init::create_cusolver_dn().expect("cusolverDnCreate");
     let s = unsafe { cusolverDnSetStream(handle, stream_ptr) };
     assert_eq!(s, 0);
 
@@ -639,9 +634,7 @@ fn run_cusolver_geqrf_per_slot_complex32(
     n: i32,
 ) -> (Vec<Complex64>, Vec<Complex64>) {
     let stream_ptr = stream.as_raw();
-    let mut handle: cusolverDnHandle_t = core::ptr::null_mut();
-    let s = unsafe { cusolverDnCreate(&mut handle as *mut _) };
-    assert_eq!(s, 0);
+    let handle = handle_init::create_cusolver_dn().expect("cusolverDnCreate");
     let s = unsafe { cusolverDnSetStream(handle, stream_ptr) };
     assert_eq!(s, 0);
 
@@ -713,9 +706,7 @@ fn run_cusolver_geqrf_per_slot_complex64(
     n: i32,
 ) -> (Vec<Complex128>, Vec<Complex128>) {
     let stream_ptr = stream.as_raw();
-    let mut handle: cusolverDnHandle_t = core::ptr::null_mut();
-    let s = unsafe { cusolverDnCreate(&mut handle as *mut _) };
-    assert_eq!(s, 0);
+    let handle = handle_init::create_cusolver_dn().expect("cusolverDnCreate");
     let s = unsafe { cusolverDnSetStream(handle, stream_ptr) };
     assert_eq!(s, 0);
 
@@ -794,9 +785,7 @@ fn cusolver_unmqr_per_slot_complex32(
     op: BatchedOrmqrOp,
 ) -> Vec<Complex64> {
     let stream_ptr = stream.as_raw();
-    let mut handle: cusolverDnHandle_t = core::ptr::null_mut();
-    let s = unsafe { cusolverDnCreate(&mut handle as *mut _) };
-    assert_eq!(s, 0);
+    let handle = handle_init::create_cusolver_dn().expect("cusolverDnCreate");
     let s = unsafe { cusolverDnSetStream(handle, stream_ptr) };
     assert_eq!(s, 0);
 
@@ -887,9 +876,7 @@ fn cusolver_unmqr_per_slot_complex64(
     op: BatchedOrmqrOp,
 ) -> Vec<Complex128> {
     let stream_ptr = stream.as_raw();
-    let mut handle: cusolverDnHandle_t = core::ptr::null_mut();
-    let s = unsafe { cusolverDnCreate(&mut handle as *mut _) };
-    assert_eq!(s, 0);
+    let handle = handle_init::create_cusolver_dn().expect("cusolverDnCreate");
     let s = unsafe { cusolverDnSetStream(handle, stream_ptr) };
     assert_eq!(s, 0);
 

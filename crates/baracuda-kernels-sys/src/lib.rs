@@ -76119,6 +76119,10 @@ pub use conv_cudnn_facade::*;
 // gate — cuSOLVER ships with the CUDA toolkit (not a separate
 // download like cuDNN). See module docs for the handle-lifecycle +
 // identity-staging contract.
+// Process-wide lock around cuBLAS/cuSOLVER handle creation (shared by the
+// facades below and by baracuda-kernels).
+pub mod handle_init;
+
 mod cusolver_facade;
 pub use cusolver_facade::*;
 

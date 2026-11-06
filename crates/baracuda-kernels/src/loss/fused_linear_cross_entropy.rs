@@ -78,8 +78,8 @@ use baracuda_cutlass::{Error, Result};
 use baracuda_driver::{Context, DeviceBuffer, Stream};
 use baracuda_kernels_sys::{
     CUBLAS_COMPUTE_32F, CUBLAS_COMPUTE_64F, CUBLAS_GEMM_DEFAULT, CUBLAS_OP_N, CUBLAS_OP_T,
-    CUDA_R_16BF, CUDA_R_16F, CUDA_R_32F, CUDA_R_64F, cublasCreate_v2, cublasDestroy_v2,
-    cublasGemmEx, cublasHandle_t, cublasSetStream_v2,
+    CUDA_R_16BF, CUDA_R_16F, CUDA_R_32F, CUDA_R_64F, cublasDestroy_v2, cublasGemmEx,
+    cublasHandle_t, cublasSetStream_v2,
 };
 use baracuda_kernels_types::{
     ArchSku, BackendKind, Element, ElementKind, KernelSku, LossKind, LossReduction, MathPrecision,
@@ -301,24 +301,7 @@ impl<T: Element> FusedLinearCrossEntropyPlan<T> {
         if !h.is_null() {
             return Ok(h);
         }
-        let mut handle: cublasHandle_t = core::ptr::null_mut();
-        // 5x linear-backoff retry — see Phase 35 memory entry for the
-        // parallel-init race that motivated this in cuBLAS handle creation.
-        let mut last_status = 0;
-        for attempt in 0..5 {
-            let status = unsafe { cublasCreate_v2(&mut handle as *mut _) };
-            if status == 0 {
-                last_status = 0;
-                break;
-            }
-            last_status = status;
-            std::thread::sleep(std::time::Duration::from_millis(
-                10u64 * (attempt as u64 + 1),
-            ));
-        }
-        if last_status != 0 {
-            return Err(Error::KernelInternal(-last_status));
-        }
+        let handle = crate::linalg::handle_init::create_cublas_handle()?;
         self.handle.set(handle);
         Ok(handle)
     }

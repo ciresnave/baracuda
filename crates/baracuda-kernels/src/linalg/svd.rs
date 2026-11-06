@@ -21,8 +21,8 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_sys::{
-    cusolverDnCreate, cusolverDnDestroy, cusolverDnDgesvd, cusolverDnDgesvd_bufferSize,
-    cusolverDnHandle_t, cusolverDnSetStream, cusolverDnSgesvd, cusolverDnSgesvd_bufferSize,
+    cusolverDnDestroy, cusolverDnDgesvd, cusolverDnDgesvd_bufferSize, cusolverDnHandle_t,
+    cusolverDnSetStream, cusolverDnSgesvd, cusolverDnSgesvd_bufferSize,
 };
 use baracuda_kernels_types::{
     ArchSku, BackendKind, Element, ElementKind, KernelSku, LinalgKind, MathPrecision, OpCategory,
@@ -193,11 +193,7 @@ impl<T: Element> SvdPlan<T> {
         if !h.is_null() {
             return Ok(h);
         }
-        let mut handle: cusolverDnHandle_t = core::ptr::null_mut();
-        let status = unsafe { cusolverDnCreate(&mut handle as *mut _) };
-        if status != 0 {
-            return Err(Error::KernelInternal(-status));
-        }
+        let handle = super::handle_init::create_cusolver_dn_handle()?;
         self.handle.set(handle);
         Ok(handle)
     }

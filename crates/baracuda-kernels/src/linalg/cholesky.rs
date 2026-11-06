@@ -23,9 +23,9 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_sys::{
-    CUBLAS_FILL_MODE_LOWER, CUBLAS_FILL_MODE_UPPER, cusolverDnCreate, cusolverDnDestroy,
-    cusolverDnDpotrf, cusolverDnDpotrf_bufferSize, cusolverDnDpotrfBatched, cusolverDnHandle_t,
-    cusolverDnSetStream, cusolverDnSpotrf, cusolverDnSpotrf_bufferSize, cusolverDnSpotrfBatched,
+    CUBLAS_FILL_MODE_LOWER, CUBLAS_FILL_MODE_UPPER, cusolverDnDestroy, cusolverDnDpotrf,
+    cusolverDnDpotrf_bufferSize, cusolverDnDpotrfBatched, cusolverDnHandle_t, cusolverDnSetStream,
+    cusolverDnSpotrf, cusolverDnSpotrf_bufferSize, cusolverDnSpotrfBatched,
 };
 use baracuda_kernels_types::{
     ArchSku, BackendKind, Element, ElementKind, KernelSku, LinalgKind, MathPrecision, OpCategory,
@@ -252,11 +252,7 @@ impl<T: Element> CholeskyPlan<T> {
         if !h.is_null() {
             return Ok(h);
         }
-        let mut handle: cusolverDnHandle_t = core::ptr::null_mut();
-        let status = unsafe { cusolverDnCreate(&mut handle as *mut _) };
-        if status != 0 {
-            return Err(Error::KernelInternal(-status));
-        }
+        let handle = super::handle_init::create_cusolver_dn_handle()?;
         self.handle.set(handle);
         Ok(handle)
     }
