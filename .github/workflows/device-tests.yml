@@ -29,7 +29,10 @@ jobs:
     name: baracuda-driver on-device tests
     if: vars.DEVICE_RUNNER_ENABLED == 'true'
     runs-on: [self-hosted, windows, gpu, baracuda]
-    timeout-minutes: 360
+    # 720: the 360-minute limit was reached by runs 42303647250 (22:18Z to 04:18Z, inside
+    # baracuda-flashinfer) and 42318553376 (04:18Z to 10:19Z, inside marlin + awq) on 2026-11-07,
+    # so no run completed. The CUDA build and the heavy steps share one contended machine.
+    timeout-minutes: 720
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
