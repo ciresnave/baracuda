@@ -133,4 +133,6 @@ cp LICENSE <baracuda>/vendor/mhc/
 `dx = (dy - sum(dy * y)) / sum(x)`, so the upstream result is wrong (about `n` times too large for
 `K = exp(H)` near uniform). The vendored files stay byte-identical; baracuda's launcher
 (`kernels/attention/mhc_launcher.cu`, `mhc_sinkhorn_backward_exact_kernel`) uses its own adjoint, verified
-against central differences (`tests/hyper_connection_smoke.rs`). Not yet reported upstream.
+against central differences (`tests/hyper_connection_smoke.rs`). Reported upstream:
+AndreSlavescu/mHC.cu#11 (2026-11-06); details, repro and patch in `docs/mhc-upstream-backward-defects.md`. The C++
+`MHCLayer::backward` also leaves dL/dx split across `d_x_expanded` and `d_x_mixed` (the Python binding sums them).
