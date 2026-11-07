@@ -7,11 +7,11 @@
 //! backend ([`baracuda_cuda_emit::Cuda`]) + the NVRTC compiler into the neutral
 //! generator's native [`unpopped::synthesize`].
 //!
-//! **Not published.** This crate depends on `fuel-kernel-seam{,-types}` by git
-//! rev (fuel's board-#106 Step A `JitRequest::target` is not on crates.io), and
-//! crates.io rejects a git dependency even when it is optional — that is why
-//! it is split from `baracuda-cuda-emit`, which stays publishable. It becomes
-//! publishable the moment those two lines are plain registry versions.
+//! **Published** on crates.io (read 2026-11-07: `baracuda-cuda-seam` has 9 versions, newest
+//! `0.1.0-alpha.95`). It depends on `fuel-kernel-seam{,-types}` by registry
+//! version (`^0.43`, see `Cargo.toml` and `tests/seam_pin.rs`); it used to depend on them by
+//! git rev, which crates.io rejects even for an optional dependency, and that is why it was
+//! split from `baracuda-cuda-emit`.
 //!
 //! # The conversion lives HERE now, not in `unpopped`
 //!
