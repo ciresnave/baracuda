@@ -16,6 +16,10 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.102 - 2026-11-07
+
+- **CI: a failed device-tests step no longer skips the steps after it.** Each of the 34 `cargo gpu-test` steps in `device-tests.yml` now has `if: ${{ !cancelled() }}`. Run 42366907753 failed one kernels test and skipped the 33 later steps, so cutlass and the rest never reported. The job still concludes failure if any step fails, so the Device tests detector stays red until a full pass exists. A job timeout counts as cancelled, so later steps do not run then; the 720-minute limit is unchanged. Workflow only; no code or test change. Not verified: the workflow has not run with this change yet.
+
 ## 0.1.0-alpha.101 - 2026-11-07
 
 - **Diagnostics: the flash-SDPA launchers name which CUDA call failed.** The bespoke flash kernels returned `1000 + cudaError_t` both when the serialized `cudaFuncSetAttribute` failed and when `cudaGetLastError()` after the `<<<>>>` launch reported an error, so the intermittent `KernelInternal(1001)` (`cudaErrorMissingConfiguration`; CI runs 42260016489 and 42366907753, hdim96 fp16 `fa2_fanout_hdim96_f16_causal`) could not say which. The six post-launch checks (four in `baracuda_flash_sdpa.cuh`, two in `baracuda_flash_sdpa_sm89.cuh`) now return `2000 + cudaError_t` through `launch_failure_code`; the attribute-call sites keep `1000 + n`. So the next red reads `1001` = the attribute call or `2001` = the launch check. No behaviour change on success. Verified: the three translation units that include the headers (`flash_sdpa_fp.cu`, `flash_sdpa_sm89.cu`, `flash_sdpa_backward_fp.cu`) compile with nvcc for sm_89. Not verified: no test forces either failure, and the 1001 was not reproduced locally. A mutex across set + launch is deliberately not added until the evidence says the set.
