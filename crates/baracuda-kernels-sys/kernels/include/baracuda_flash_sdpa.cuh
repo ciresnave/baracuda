@@ -88,6 +88,20 @@ inline cudaError_t set_dynamic_smem_serialized(const void* func, size_t bytes) {
 }
 
 // -----------------------------------------------------------------------------
+// Which CUDA call failed? (evidence for the intermittent `KernelInternal(1001)`)
+//
+// The launchers return `1000 + cudaError_t` when `set_dynamic_smem_serialized` fails and
+// `2000 + cudaError_t` when the `cudaGetLastError()` after the `<<<>>>` launch reports an
+// error. Before this the two sites shared the `1000 +` encoding, so a bare `1001`
+// (`cudaErrorMissingConfiguration`, seen in CI runs 42260016489 and 42366907753 on the
+// hdim96 fp16 bespoke test) could not say which call failed: now `1001` = the attribute
+// call, `2001` = the launch check. Same convention as the CUTLASS wrappers' `1000 + n`.
+// -----------------------------------------------------------------------------
+inline int32_t launch_failure_code(cudaError_t err) {
+    return 2000 + (int32_t)err;
+}
+
+// -----------------------------------------------------------------------------
 // Does this device's opt-in dynamic-SMEM carveout hold `bytes`?
 //
 // ⚠️ The `d_k > kMaxD` gate below is DTYPE-BLIND, and the SMEM requirement is
@@ -549,7 +563,7 @@ __host__ inline int32_t launch_flash_sdpa_fp(
         q, k_in, v_in, y, lse, batch, heads, q_len, k_len,
         d_k, d_v, scale, is_causal);
     cudaError_t err = cudaGetLastError();
-    if (err != cudaSuccess) return 1000 + (int32_t)err;
+    if (err != cudaSuccess) return launch_failure_code(err);
     return 0;
 }
 
@@ -1110,7 +1124,7 @@ __host__ inline int32_t launch_flash_sdpa_backward_fp(
         flash_sdpa_bw_D_kernel<T><<<blocks, kBlock, 0, stream>>>(
             y, dy, D_ws, batch, heads, q_len, d_v);
         cudaError_t err = cudaGetLastError();
-        if (err != cudaSuccess) return 1000 + (int32_t)err;
+        if (err != cudaSuccess) return launch_failure_code(err);
     }
     // K2: dQ.
     {
@@ -1129,7 +1143,7 @@ __host__ inline int32_t launch_flash_sdpa_backward_fp(
                 q, k_in, v_in, dy, lse, D_ws, dQ,
                 batch, heads, q_len, k_len, d_k, d_v, scale, is_causal);
             cudaError_t err = cudaGetLastError();
-            if (err != cudaSuccess) return 1000 + (int32_t)err;
+            if (err != cudaSuccess) return launch_failure_code(err);
         }
     }
     // K3: dK, dV.
@@ -1149,7 +1163,7 @@ __host__ inline int32_t launch_flash_sdpa_backward_fp(
                 q, k_in, v_in, dy, lse, D_ws, dK, dV,
                 batch, heads, q_len, k_len, d_k, d_v, scale, is_causal);
             cudaError_t err = cudaGetLastError();
-            if (err != cudaSuccess) return 1000 + (int32_t)err;
+            if (err != cudaSuccess) return launch_failure_code(err);
         }
     }
     return 0;
