@@ -551,7 +551,7 @@ __host__ inline int32_t launch_flash_sdpa_sm89_fp(
         q, k_in, v_in, y, lse, batch, heads, q_len, k_len,
         d_k, d_v, scale, is_causal);
     cudaError_t err = cudaGetLastError();
-    if (err != cudaSuccess) return 1000 + (int32_t)err;
+    if (err != cudaSuccess) return baracuda::flash_sdpa::launch_failure_code(err);
     return 0;
 }
 
@@ -887,7 +887,7 @@ __host__ inline int32_t launch_flash_sdpa_sm89_fp_strided(
         sqb, sqh, sqs, skb, skh, sks, svb, svh, svs, syb, syh, sys,
         scale, is_causal);
     cudaError_t err = cudaGetLastError();
-    if (err != cudaSuccess) return 1000 + (int32_t)err;
+    if (err != cudaSuccess) return baracuda::flash_sdpa::launch_failure_code(err);
     return 0;
 }
 

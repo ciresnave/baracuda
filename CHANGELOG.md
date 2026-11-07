@@ -16,6 +16,10 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.101 - 2026-11-07
+
+- **Diagnostics: the flash-SDPA launchers name which CUDA call failed.** The bespoke flash kernels returned `1000 + cudaError_t` both when the serialized `cudaFuncSetAttribute` failed and when `cudaGetLastError()` after the `<<<>>>` launch reported an error, so the intermittent `KernelInternal(1001)` (`cudaErrorMissingConfiguration`; CI runs 42260016489 and 42366907753, hdim96 fp16 `fa2_fanout_hdim96_f16_causal`) could not say which. The six post-launch checks (four in `baracuda_flash_sdpa.cuh`, two in `baracuda_flash_sdpa_sm89.cuh`) now return `2000 + cudaError_t` through `launch_failure_code`; the attribute-call sites keep `1000 + n`. So the next red reads `1001` = the attribute call or `2001` = the launch check. No behaviour change on success. Verified: the three translation units that include the headers (`flash_sdpa_fp.cu`, `flash_sdpa_sm89.cu`, `flash_sdpa_backward_fp.cu`) compile with nvcc for sm_89. Not verified: no test forces either failure, and the 1001 was not reproduced locally. A mutex across set + launch is deliberately not added until the evidence says the set.
+
 ## 0.1.0-alpha.100 - 2026-11-07
 
 - **CI: the device-tests job limit goes from 360 to 720 minutes.** Two runs on 2026-11-07 (42303647250, 42318553376) each reached the 360-minute limit (6h00m42s and 6h00m44s) before the job finished, one inside `baracuda-flashinfer` and one inside `marlin + awq`, so no run has completed since the repository moved and the device-tests detector had no successful run to find. Workflow limit only; no code or test change. Splitting the heavy steps into separate jobs is separate, later work.
