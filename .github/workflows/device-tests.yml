@@ -39,12 +39,14 @@ jobs:
       # Takes the machine-wide gpu-run lock (shared with Fuel/Vulkane) and fails the step
       # if any test fails, if a required device resource is absent, or if 0 tests passed.
       - name: cargo gpu-test (baracuda-driver, device-tests)
+        if: ${{ !cancelled() }}
         shell: bash
         run: |
           WSVER="$(sed -n 's/^version = "\(.*\)"/\1/p' crates/baracuda-types/Cargo.toml | head -1)"
           [ -n "$WSVER" ] || { echo "cannot derive the workspace version"; exit 1; }
           cargo gpu-test -p baracuda-driver@$WSVER --features device-tests
       - name: cargo gpu-test (baracuda-kernels, device-tests)
+        if: ${{ !cancelled() }}
         shell: bash
         env:
           BARACUDA_RESULTS_FILE: device-test-results-kernels.json
@@ -52,161 +54,193 @@ jobs:
       # marlin / awq are off by default, so the step above compiles their tests to
       # empty binaries; this one enables them. Scoped to the quantised-GEMM tests.
       - name: cargo gpu-test (baracuda-kernels, marlin + awq, device-tests)
+        if: ${{ !cancelled() }}
         shell: bash
         env:
           BARACUDA_RESULTS_FILE: device-test-results-kernels-quant.json
         run: cargo gpu-test -p baracuda-kernels --features marlin,awq,device-tests --test marlin_reference --test awq_reference --test marlin_smoke --test awq_smoke --test gptq_to_marlin_smoke
       - name: cargo gpu-test (baracuda-cutlass, device-tests)
+        if: ${{ !cancelled() }}
         shell: bash
         env:
           BARACUDA_RESULTS_FILE: device-test-results-cutlass.json
         run: cargo gpu-test -p baracuda-cutlass --features device-tests,ozimmu
       - name: cargo gpu-test (baracuda-flashinfer, device-tests)
+        if: ${{ !cancelled() }}
         shell: bash
         env:
           BARACUDA_RESULTS_FILE: device-test-results-flashinfer.json
         run: cargo gpu-test -p baracuda-flashinfer --features flashinfer,device-tests
       - name: cargo gpu-test (baracuda-ozimmu, device-tests)
+        if: ${{ !cancelled() }}
         shell: bash
         env:
           BARACUDA_RESULTS_FILE: device-test-results-ozimmu.json
         run: cargo gpu-test -p baracuda-ozimmu --features device-tests
       - name: cargo gpu-test (baracuda-kernels-bench, device-tests)
+        if: ${{ !cancelled() }}
         shell: bash
         env:
           BARACUDA_RESULTS_FILE: device-test-results-kernels-bench.json
         run: cargo gpu-test -p baracuda-kernels-bench --features sm89,device-tests
       - name: cargo gpu-test (baracuda-cuda-emit, device-tests)
+        if: ${{ !cancelled() }}
         shell: bash
         env:
           BARACUDA_RESULTS_FILE: device-test-results-cuda-emit.json
         run: cargo gpu-test -p baracuda-cuda-emit --features nvrtc,device-tests,extern_asm_cuda
       - name: cargo gpu-test (baracuda-cuda-seam, device-tests)
+        if: ${{ !cancelled() }}
         shell: bash
         env:
           BARACUDA_RESULTS_FILE: device-test-results-cuda-seam.json
         run: cargo gpu-test -p baracuda-cuda-seam --features nvrtc,device-tests
       - name: cargo gpu-test (baracuda-runtime, device-tests)
+        if: ${{ !cancelled() }}
         shell: bash
         env:
           BARACUDA_RESULTS_FILE: device-test-results-runtime.json
         run: cargo gpu-test -p baracuda-runtime --features device-tests
       - name: cargo gpu-test (baracuda-cublas, device-tests)
+        if: ${{ !cancelled() }}
         shell: bash
         env:
           BARACUDA_RESULTS_FILE: device-test-results-cublas.json
         run: cargo gpu-test -p baracuda-cublas --features device-tests
       - name: cargo gpu-test (baracuda-transformer-engine, device-tests)
+        if: ${{ !cancelled() }}
         shell: bash
         env:
           BARACUDA_RESULTS_FILE: device-test-results-transformer-engine.json
         run: cargo gpu-test -p baracuda-transformer-engine --features sm89,device-tests
       - name: cargo gpu-test (baracuda-optim, device-tests)
+        if: ${{ !cancelled() }}
         shell: bash
         env:
           BARACUDA_RESULTS_FILE: device-test-results-optim.json
         run: cargo gpu-test -p baracuda-optim --features sm89,distributed_optim,device-tests
       - name: cargo gpu-test (baracuda-cudf, device-tests)
+        if: ${{ !cancelled() }}
         shell: bash
         env:
           BARACUDA_RESULTS_FILE: device-test-results-cudf.json
         run: cargo gpu-test -p baracuda-cudf --features device-tests
       - name: cargo gpu-test (baracuda-cudnn, device-tests)
+        if: ${{ !cancelled() }}
         shell: bash
         env:
           BARACUDA_RESULTS_FILE: device-test-results-cudnn.json
         run: cargo gpu-test -p baracuda-cudnn --features device-tests
       - name: cargo gpu-test (baracuda-cufft, device-tests)
+        if: ${{ !cancelled() }}
         shell: bash
         env:
           BARACUDA_RESULTS_FILE: device-test-results-cufft.json
         run: cargo gpu-test -p baracuda-cufft --features device-tests
       - name: cargo gpu-test (baracuda-cufile, device-tests)
+        if: ${{ !cancelled() }}
         shell: bash
         env:
           BARACUDA_RESULTS_FILE: device-test-results-cufile.json
         run: cargo gpu-test -p baracuda-cufile --features device-tests
       - name: cargo gpu-test (baracuda-curand, device-tests)
+        if: ${{ !cancelled() }}
         shell: bash
         env:
           BARACUDA_RESULTS_FILE: device-test-results-curand.json
         run: cargo gpu-test -p baracuda-curand --features device-tests
       - name: cargo gpu-test (baracuda-cusolver, device-tests)
+        if: ${{ !cancelled() }}
         shell: bash
         env:
           BARACUDA_RESULTS_FILE: device-test-results-cusolver.json
         run: cargo gpu-test -p baracuda-cusolver --features device-tests
       - name: cargo gpu-test (baracuda-cusparse, device-tests)
+        if: ${{ !cancelled() }}
         shell: bash
         env:
           BARACUDA_RESULTS_FILE: device-test-results-cusparse.json
         run: cargo gpu-test -p baracuda-cusparse --features device-tests
       - name: cargo gpu-test (baracuda-cutensor, device-tests)
+        if: ${{ !cancelled() }}
         shell: bash
         env:
           BARACUDA_RESULTS_FILE: device-test-results-cutensor.json
         run: cargo gpu-test -p baracuda-cutensor --features device-tests
       - name: cargo gpu-test (baracuda-cuvs, device-tests)
+        if: ${{ !cancelled() }}
         shell: bash
         env:
           BARACUDA_RESULTS_FILE: device-test-results-cuvs.json
         run: cargo gpu-test -p baracuda-cuvs --features cuvs,device-tests
       - name: cargo gpu-test (baracuda-cvcuda, device-tests)
+        if: ${{ !cancelled() }}
         shell: bash
         env:
           BARACUDA_RESULTS_FILE: device-test-results-cvcuda.json
         run: cargo gpu-test -p baracuda-cvcuda --features device-tests
       - name: cargo gpu-test (baracuda-megatron, device-tests)
+        if: ${{ !cancelled() }}
         shell: bash
         env:
           BARACUDA_RESULTS_FILE: device-test-results-megatron.json
         run: cargo gpu-test -p baracuda-megatron --features device-tests
       - name: cargo gpu-test (baracuda-nccl, device-tests)
+        if: ${{ !cancelled() }}
         shell: bash
         env:
           BARACUDA_RESULTS_FILE: device-test-results-nccl.json
         run: cargo gpu-test -p baracuda-nccl --features device-tests
       - name: cargo gpu-test (baracuda-npp, device-tests)
+        if: ${{ !cancelled() }}
         shell: bash
         env:
           BARACUDA_RESULTS_FILE: device-test-results-npp.json
         run: cargo gpu-test -p baracuda-npp --features device-tests
       - name: cargo gpu-test (baracuda-nvcomp, device-tests)
+        if: ${{ !cancelled() }}
         shell: bash
         env:
           BARACUDA_RESULTS_FILE: device-test-results-nvcomp.json
         run: cargo gpu-test -p baracuda-nvcomp --features device-tests
       - name: cargo gpu-test (baracuda-nvimagecodec, device-tests)
+        if: ${{ !cancelled() }}
         shell: bash
         env:
           BARACUDA_RESULTS_FILE: device-test-results-nvimagecodec.json
         run: cargo gpu-test -p baracuda-nvimagecodec --features device-tests
       - name: cargo gpu-test (baracuda-nvjitlink, device-tests)
+        if: ${{ !cancelled() }}
         shell: bash
         env:
           BARACUDA_RESULTS_FILE: device-test-results-nvjitlink.json
         run: cargo gpu-test -p baracuda-nvjitlink --features device-tests
       - name: cargo gpu-test (baracuda-nvjpeg, device-tests)
+        if: ${{ !cancelled() }}
         shell: bash
         env:
           BARACUDA_RESULTS_FILE: device-test-results-nvjpeg.json
         run: cargo gpu-test -p baracuda-nvjpeg --features device-tests
       - name: cargo gpu-test (baracuda-nvml, device-tests)
+        if: ${{ !cancelled() }}
         shell: bash
         env:
           BARACUDA_RESULTS_FILE: device-test-results-nvml.json
         run: cargo gpu-test -p baracuda-nvml --features device-tests
       - name: cargo gpu-test (baracuda-nvrtc, device-tests)
+        if: ${{ !cancelled() }}
         shell: bash
         env:
           BARACUDA_RESULTS_FILE: device-test-results-nvrtc.json
         run: cargo gpu-test -p baracuda-nvrtc --features device-tests
       - name: cargo gpu-test (baracuda-nvshmem, device-tests)
+        if: ${{ !cancelled() }}
         shell: bash
         env:
           BARACUDA_RESULTS_FILE: device-test-results-nvshmem.json
         run: cargo gpu-test -p baracuda-nvshmem --features device-tests
       - name: cargo gpu-test (baracuda-tensorrt, device-tests)
+        if: ${{ !cancelled() }}
         shell: bash
         env:
           BARACUDA_RESULTS_FILE: device-test-results-tensorrt.json
