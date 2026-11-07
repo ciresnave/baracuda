@@ -16,6 +16,10 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.1.0-alpha.100 - 2026-11-07
+
+- **CI: the device-tests job limit goes from 360 to 720 minutes.** Two runs on 2026-11-07 (42303647250, 42318553376) each reached the 360-minute limit (6h00m42s and 6h00m44s) before the job finished, one inside `baracuda-flashinfer` and one inside `marlin + awq`, so no run has completed since the repository moved and the device-tests detector had no successful run to find. Workflow limit only; no code or test change. Splitting the heavy steps into separate jobs is separate, later work.
+
 ## 0.1.0-alpha.99 - 2026-11-07
 
 - **Docs: `baracuda-cuda-seam`'s crate doc no longer says "Not published".** It is on crates.io (9 versions, newest alpha.95) and depends on `fuel-kernel-seam{,-types}` by registry version; the doc described the earlier git-rev dependency. Doc comment only, no code change.
